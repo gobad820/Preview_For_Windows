@@ -320,6 +320,22 @@ export function yForDocPoint(layout: Layout, point: DocPoint): number {
   return page.top + fraction * page.height;
 }
 
+/**
+ * The scrollLeft that shows page `index` (with the layout padding around it) by scrolling as
+ * little as possible: unchanged when it is in view, or when it is wider than the viewport
+ * and covers it.
+ */
+export function scrollLeftToReveal(layout: Layout, index: number, scrollLeft: number, viewportWidth: number): number {
+  if (layout.pages.length === 0) return scrollLeft;
+  const page = layout.pages[clampIndex(layout, index)]!;
+  const left = Math.max(0, page.left - layout.padding);
+  const right = Math.min(layout.contentWidth, page.left + page.width + layout.padding);
+  const fits = right - left <= viewportWidth;
+  if (fits ? left < scrollLeft : left > scrollLeft) return left;
+  if (fits ? right > scrollLeft + viewportWidth : right < scrollLeft + viewportWidth) return Math.max(0, right - viewportWidth);
+  return scrollLeft;
+}
+
 export function anchoredScrollTop(
   oldLayout: Layout,
   newLayout: Layout,
@@ -331,8 +347,9 @@ export function anchoredScrollTop(
 }
 
 /**
- * Scroll position for `newLayout` that keeps the page point under `anchor` (viewport-relative)
- * where it was: same page, same fraction of its height and of its width.
+ * Scroll position for `newLayout` that keeps the point under `anchor` (viewport-relative) where
+ * it was relative to its page: same page, same multiple of its width and height from its
+ * corner, also for points in the margins, gaps and the blank space beside a shorter page.
  */
 export function anchoredScroll(
   oldLayout: Layout,
@@ -340,12 +357,16 @@ export function anchoredScroll(
   scroll: { top: number; left: number },
   anchor: { x: number; y: number },
 ): { top: number; left: number } {
-  const point = docPointAt(oldLayout, scroll.top + anchor.y, scroll.left + anchor.x);
-  if (point.index < 0 || newLayout.pages.length === 0) return { top: 0, left: 0 };
-  const top = Math.max(0, yForDocPoint(newLayout, point) - anchor.y);
-  const from = oldLayout.pages[point.index]!;
-  const to = newLayout.pages[clampIndex(newLayout, point.index)]!;
-  const fx = from.width > 0 ? (scroll.left + anchor.x - from.left) / from.width : 0.5;
-  const left = Math.max(0, to.left + fx * to.width - anchor.x);
-  return { top, left };
+  const x = scroll.left + anchor.x;
+  const y = scroll.top + anchor.y;
+  const { index } = docPointAt(oldLayout, y, x);
+  if (index < 0 || newLayout.pages.length === 0) return { top: 0, left: 0 };
+  const from = oldLayout.pages[index]!;
+  const to = newLayout.pages[clampIndex(newLayout, index)]!;
+  const fx = from.width > 0 ? (x - from.left) / from.width : 0.5;
+  const fy = from.height > 0 ? (y - from.top) / from.height : 0;
+  return {
+    top: Math.max(0, to.top + fy * to.height - anchor.y),
+    left: Math.max(0, to.left + fx * to.width - anchor.x),
+  };
 }

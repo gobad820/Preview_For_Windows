@@ -513,8 +513,18 @@ export class App {
       checked: s.displayMode === mode,
       action: () => this.store.set({ displayMode: mode }),
     });
+    // The toolbar anchors the menu on the sidebar button; the press-to-close area covers the chevron too.
+    const chevron = this.root.querySelector('[data-action="view-menu"]')?.getBoundingClientRect();
+    const at = chevron
+      ? new DOMRect(
+          anchor.left,
+          anchor.top,
+          Math.max(anchor.right, chevron.right) - anchor.left,
+          Math.max(anchor.bottom, chevron.bottom) - anchor.top,
+        )
+      : anchor;
     this.toolbar.setViewMenuOpen(true);
-    void showMenu(anchor, [
+    void showMenu(at, [
       {
         label: s.sidebarOpen ? 'Hide Sidebar' : 'Show Sidebar',
         shortcut: 'Ctrl+Alt+S',

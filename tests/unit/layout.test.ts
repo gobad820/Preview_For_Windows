@@ -10,6 +10,7 @@ import {
   fitWidthScale,
   rotatedSize,
   rowOfPage,
+  scrollLeftToReveal,
   scrollTopForPage,
   stepRow,
   visibleRange,
@@ -492,6 +493,50 @@ describe('two-page rows', () => {
     const oldLayout = threeA4();
     const small = computeLayout([A4, A4, A4], opts({ scale: 0.5 }));
     expect(anchoredScroll(oldLayout, small, { top: 0, left: 0 }, { x: 500, y: 400 }).top).toBe(0);
+  });
+});
+
+describe('scrollLeftToReveal', () => {
+  const PAGE: PageSize = { width: 600, height: 800 }; // 800 × 1066.67 px
+  const pairs = computeLayout([PAGE, PAGE], opts({ spread: 'pairs', spineGap: 8 })); // pages at 24 and 832
+  const VW = 1000;
+
+  test('scrolls the least that shows a page that fits, padding included', () => {
+    // Page 1 spans [832, 1632]: its right edge plus padding ends the viewport.
+    expect(scrollLeftToReveal(pairs, 1, 0, VW)).toBeCloseTo(1632 + PADDING - VW, 6);
+    // Page 0 spans [24, 824]: from the right it is revealed at its left edge minus padding.
+    expect(scrollLeftToReveal(pairs, 0, 656, VW)).toBeCloseTo(0, 6);
+  });
+
+  test('leaves the scroll alone when the page is already in view', () => {
+    expect(scrollLeftToReveal(pairs, 0, 0, VW)).toBe(0);
+    expect(scrollLeftToReveal(pairs, 1, 656, VW)).toBe(656);
+  });
+
+  test('leaves the scroll alone when a page wider than the viewport covers it', () => {
+    const wide = computeLayout([A4, A4], opts({ scale: 3 })); // 2380 px wide, one column
+    expect(scrollLeftToReveal(wide, 1, 700, VW)).toBe(700);
+  });
+
+  test('aligns the near edge of a wide page that does not cover the viewport', () => {
+    const wide = computeLayout([PAGE, PAGE], opts({ scale: 2, spread: 'pairs', spineGap: 8 }));
+    const p1 = wide.pages[1]!; // 1600 px wide, right of the spine
+    expect(scrollLeftToReveal(wide, 1, 0, VW)).toBeCloseTo(p1.left - PADDING, 6);
+  });
+});
+
+describe('anchoredScroll beside a shorter page', () => {
+  test('keeps a point above the shorter page of a row at its distance from that page', () => {
+    const oldLayout = computeLayout([A4, LANDSCAPE], opts({ spread: 'pairs', spineGap: 8 }));
+    const newLayout = computeLayout([A4, LANDSCAPE], opts({ scale: 2, spread: 'pairs', spineGap: 8 }));
+    const from = oldLayout.pages[1]!; // landscape, vertically centered: blank space above it
+    const anchor = { x: 500, y: 100 };
+    const scroll = { top: 0, left: from.left + from.width / 2 - anchor.x };
+    const docY = scroll.top + anchor.y;
+    expect(docY).toBeLessThan(from.top); // over the blank space, right column
+    const next = anchoredScroll(oldLayout, newLayout, scroll, anchor);
+    const to = newLayout.pages[1]!;
+    expect(next.top + anchor.y - to.top).toBeCloseTo(((docY - from.top) * to.height) / from.height, 6);
   });
 });
 

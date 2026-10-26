@@ -297,3 +297,78 @@ test.describe('View menu', () => {
     await expect(item(page, 'Table of Contents')).toHaveAttribute('aria-disabled', 'true');
   });
 });
+
+test.describe('two pages: review fixes', () => {
+  const visibleIn = (page: Page, n: number) =>
+    page.evaluate((num) => {
+      const v = document.getElementById('viewer')!.getBoundingClientRect();
+      const el = document.querySelector(`#viewer .page[data-page="${num}"]`);
+      if (!el) return 'unmounted';
+      const r = el.getBoundingClientRect();
+      if (r.left >= v.left - 1 && r.right <= v.right + 1) return 'full';
+      return r.right > v.left && r.left < v.right ? 'partial' : 'off';
+    }, n);
+
+  test('going to the right page of a zoomed row scrolls it into view sideways', async ({ page }) => {
+    await open(page, 'simple.pdf');
+    await twoPages(page);
+    await waitForPairs(page);
+    await page.evaluate(() => (window as any).__pfw.viewer.setZoom('custom', 1.25));
+    await expect.poll(() => page.evaluate(() => (window as any).__pfw.viewer.overflowsHorizontally())).toBe(true);
+    await page.evaluate(() => {
+      document.getElementById('viewer')!.scrollLeft = 0;
+    });
+    const input = page.locator('input[data-page-input]');
+    await input.focus();
+    await input.fill('2');
+    await input.press('Enter');
+    await expect.poll(() => visibleIn(page, 2)).toBe('full');
+    expect((await state(page)).currentPage).toBe(2);
+  });
+
+  test('switching the layout keeps a right-hand current page', async ({ page }) => {
+    await open(page, 'long300.pdf');
+    await twoPages(page);
+    await waitForPairs(page);
+    await page.evaluate(() => (window as any).__pfw.viewer.goToPage(11));
+    await expect.poll(async () => (await state(page)).currentPage).toBe(12);
+    await page.evaluate(() => (window as any).__pfw.store.set({ displayMode: 'continuous' }));
+    await expect.poll(() => page.evaluate(() => (window as any).__pfw.viewer.getLayout().rows[0]?.last)).toBe(0);
+    await expect.poll(async () => (await state(page)).currentPage).toBe(12);
+    expect(await visibleIn(page, 12)).not.toMatch(/off|unmounted/);
+  });
+
+  test('turning on Book Mode keeps a right-hand current page', async ({ page }) => {
+    await open(page, 'long300.pdf');
+    await twoPages(page);
+    await waitForPairs(page);
+    await page.evaluate(() => (window as any).__pfw.viewer.goToPage(149));
+    await expect.poll(async () => (await state(page)).currentPage).toBe(150);
+    await page.evaluate(() => (window as any).__pfw.store.set({ bookMode: true }));
+    await expect.poll(() => page.evaluate(() => (window as any).__pfw.viewer.getLayout().rows[0]?.last)).toBe(0);
+    await expect.poll(async () => (await state(page)).currentPage).toBe(150);
+    expect(await visibleIn(page, 150)).not.toMatch(/off|unmounted/);
+  });
+
+  test('→ on the last row stays on the last page', async ({ page }) => {
+    await open(page, 'long300.pdf');
+    await twoPages(page);
+    await waitForPairs(page);
+    await page.keyboard.press('End');
+    await expect.poll(async () => (await state(page)).currentPage).toBe(300);
+    await page.keyboard.press('ArrowRight');
+    await page.waitForTimeout(200);
+    expect((await state(page)).currentPage).toBe(300);
+  });
+
+  test('clicking the View chevron again closes its menu', async ({ page }) => {
+    await open(page, 'simple.pdf');
+    const chevron = page.locator('[data-action="view-menu"]');
+    await chevron.click();
+    await expect(page.locator('.menu')).toHaveCount(1);
+    await chevron.click();
+    await page.waitForTimeout(100);
+    await expect(page.locator('.menu')).toHaveCount(0);
+    await expect(chevron).toHaveAttribute('aria-expanded', 'false');
+  });
+});

@@ -13,6 +13,7 @@ import {
   fitPageScale,
   fitWidthScale,
   rowOfPage,
+  scrollLeftToReveal,
   scrollTopForPage,
   stepRow,
   visibleRange,
@@ -235,6 +236,8 @@ export class PdfViewer {
       y = Math.max(0, this.layout.pages[i]!.top + top * this.scale * CSS_UNITS - PAGE_PADDING);
     }
     this.container.scrollTop = y;
+    // In a zoomed Two Pages row the page may sit beside the viewport.
+    this.container.scrollLeft = scrollLeftToReveal(this.layout, i, this.container.scrollLeft, this.container.clientWidth);
     this.navTarget = { index: i, scrollTop: this.container.scrollTop };
     this.syncCurrentPage();
     this.updateMounted();
@@ -243,7 +246,10 @@ export class PdfViewer {
   /** Goes to the first page of the next (1) or previous (-1) row. */
   stepPage(dir: 1 | -1): void {
     if (!this.doc || this.layout.pages.length === 0) return;
-    this.goToPage(stepRow(this.layout, Math.max(0, this.store.get().currentPage - 1), dir));
+    const current = Math.max(0, this.store.get().currentPage - 1);
+    const target = stepRow(this.layout, current, dir);
+    if (dir === 1 && target < current) return; // the right page of the last row: → would go back
+    this.goToPage(target);
   }
 
   /** True when the layout is wider than the viewport (arrow keys pan instead of paging). */
@@ -281,7 +287,7 @@ export class PdfViewer {
     this.spread = spread;
     if (!this.doc) return;
     if (this.zoomMode !== 'custom') this.scale = this.computeScale(this.zoomMode, this.scale);
-    this.relayout(this.center());
+    this.relayout(this.currentPagePoint() ?? this.center());
     if (this.store.get().scale !== this.scale) this.store.set({ scale: this.scale });
     this.syncCurrentPage();
   }
@@ -362,6 +368,23 @@ export class PdfViewer {
 
   private center(): { x: number; y: number } {
     return { x: this.container.clientWidth / 2, y: this.container.clientHeight / 2 };
+  }
+
+  /**
+   * A viewport point on the current page, as near the viewport center as it allows; null when
+   * the page is off screen. Anchoring on it keeps a right-hand current page through a layout change.
+   */
+  private currentPagePoint(): { x: number; y: number } | null {
+    const page = this.layout.pages[this.store.get().currentPage - 1];
+    if (!page) return null;
+    const { scrollTop, scrollLeft, clientWidth, clientHeight } = this.container;
+    const left = Math.max(0, page.left - scrollLeft);
+    const right = Math.min(clientWidth, page.left + page.width - scrollLeft);
+    const top = Math.max(0, page.top - scrollTop);
+    const bottom = Math.min(clientHeight, page.top + page.height - scrollTop);
+    if (left >= right || top >= bottom) return null;
+    const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
+    return { x: clamp(clientWidth / 2, left, right), y: clamp(clientHeight / 2, top, bottom) };
   }
 
   private computeScale(mode: ZoomMode, fallback: number): number {
