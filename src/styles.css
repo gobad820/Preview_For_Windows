@@ -1015,3 +1015,15 @@ button, input { font: inherit; color: inherit; letter-spacing: inherit; }
 .textLayer[data-main-rotation="90"] { transform: rotate(90deg) translateY(-100%); }
 .textLayer[data-main-rotation="180"] { transform: rotate(180deg) translate(-100%, -100%); }
 .textLayer[data-main-rotation="270"] { transform: rotate(270deg) translateX(-100%); }
+
+/* selection handles and hover cursor */
+.markup-overlay .mk-handles [data-handle] { pointer-events: all; }
+.mk-handle-hit { fill: transparent; stroke: none; }
+.mk-handle-dot { fill: #ffffff; stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0.5px 1px rgba(0, 0, 0, 0.3)); }
+.mk-handles [data-handle="nw"], .mk-handles [data-handle="se"] { cursor: nwse-resize; }
+.mk-handles [data-handle="ne"], .mk-handles [data-handle="sw"] { cursor: nesw-resize; }
+.mk-handles [data-handle="n"], .mk-handles [data-handle="s"] { cursor: ns-resize; }
+.mk-handles [data-handle="e"], .mk-handles [data-handle="w"] { cursor: ew-resize; }
+.mk-handles [data-handle="from"], .mk-handles [data-handle="to"] { cursor: move; }
+.viewer[data-hover="move"] .page,
+.viewer[data-hover="move"] .textLayer :is(span, br) { cursor: move; }

@@ -268,7 +268,10 @@ export class App {
         this.store.set({ markupOpen: !s.markupOpen });
         break;
       case 'delete-annotation':
+        this.markupController.deleteSelected();
+        break;
       case 'duplicate-annotation':
+        this.markupController.duplicateSelected();
         break;
       case 'zoom-in':
         this.viewer.setZoom('custom', zoomIn(s.scale));
@@ -514,15 +517,17 @@ export class App {
     else this.markup.setHighlightMode(!this.markup.highlightMode);
   }
 
-  /** A color or kind picked from a highlight menu becomes the mark style, turns highlight mode on and marks selected text. */
+  /** A color or kind picked from a highlight menu becomes the mark style and restyles selected markup, or turns highlight mode on and marks selected text. */
   private pickMark(kind: MarkKind, color?: Color): void {
     this.markup.setMark(kind, color);
+    // With text markup selected, the pick restyles it; otherwise it arms highlight mode.
+    if (this.markupController.restyleSelectedMark(kind, color)) return;
     this.markup.setHighlightMode(true);
     this.markupController.markSelection();
   }
 
   private applyStyles(patch: Partial<Styles>): void {
-    this.markup.setStyles(patch);
+    this.markupController.applyStyles(patch);
   }
 
   /** Right-click on a thumbnail. */

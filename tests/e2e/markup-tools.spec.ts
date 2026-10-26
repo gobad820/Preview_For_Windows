@@ -458,8 +458,11 @@ test.describe('creation tools', () => {
     expect(await page.evaluate(() => getSelection()?.toString() ?? '')).toBe('');
     expect(await annots(page)).toHaveLength(1);
     await page.keyboard.press('Escape');
-    await drag(page, { x: span.x + 2, y: span.y + span.height / 2 }, { x: span.x + span.width - 2, y: span.y + span.height / 2 });
+    // The stroke now lies on that line (a press there picks it up); select the next line.
+    const ink = (await annots(page))[0];
+    const next = (await page.locator('#viewer .page[data-page="1"] .textLayer span').nth(2).boundingBox())!;
+    await drag(page, { x: next.x + 2, y: next.y + next.height / 2 }, { x: next.x + next.width - 2, y: next.y + next.height / 2 });
     expect((await page.evaluate(() => getSelection()?.toString() ?? '')).length).toBeGreaterThan(3);
-    expect(await annots(page)).toHaveLength(1);
+    expect(await annots(page)).toEqual([ink]);
   });
 });

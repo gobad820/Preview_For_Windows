@@ -5,7 +5,7 @@
  * breaks never depend on the zoom. Nothing here takes pointer events except selection handles.
  */
 import type { PageViewport } from 'pdfjs-dist/types/src/display/page_viewport';
-import { annotBox, arrowHead, quadPolygon } from '../annot/geometry';
+import { annotBounds, annotBox, arrowHead, quadPolygon } from '../annot/geometry';
 import type { Annot, PdfPoint, PdfRect, Quad, TextAngle } from '../annot/types';
 import type { EditableDocument } from '../edit/document';
 import type { PageGoneListener, PageView, PageViewListener } from '../viewer/viewer';
@@ -199,6 +199,13 @@ function drawHtml(a: Annot, vp: PageViewport): HTMLElement | null {
   return null;
 }
 
+/** A selection handle: a small dot with a larger invisible grab area. */
+function handle(name: string, x: number, y: number): SVGGElement {
+  const g = svgEl('g', { 'data-handle': name, class: 'mk-handle' });
+  g.append(svgEl('circle', { class: 'mk-handle-hit', cx: fmt(x), cy: fmt(y), r: 8 }), svgEl('circle', { class: 'mk-handle-dot', cx: fmt(x), cy: fmt(y), r: 4 }));
+  return g;
+}
+
 const isMark = (a: Annot) => a.kind === 'highlight' || a.kind === 'underline' || a.kind === 'strikeout';
 
 /** One page's annotation drawing, appended to `PageView.el`. */
@@ -260,22 +267,49 @@ export class PageOverlay {
     this.last = null;
   }
 
-  /** Selection outline; handles come with the select tool. */
+  /**
+   * Selection: an outline, plus corner and edge handles for boxes (shapes, text boxes,
+   * drawings) or two endpoint handles for lines; text markup and notes only get the outline.
+   */
   private drawSelection(view: PageView, annots: readonly Annot[] | null, selected: string | null, editing: string | null): void {
     this.handles.replaceChildren();
     if (!view.interactive || !selected || selected === editing) return;
     const a = annots?.find((x) => x.id === selected);
     if (!a) return;
-    const r = viewRect(view.viewport, annotBox(a));
+    const vp = view.viewport;
+    if (a.kind === 'line' || a.kind === 'arrow') {
+      for (const [name, p] of [['from', a.from], ['to', a.to]] as const) {
+        const [x, y] = vp.convertToViewportPoint(p.x, p.y) as [number, number];
+        this.handles.append(handle(name, x, y));
+      }
+      return;
+    }
+    const boxed = a.kind === 'rect' || a.kind === 'oval' || a.kind === 'text' || a.kind === 'ink';
+    const r = viewRect(vp, boxed ? annotBox(a) : annotBounds(a));
+    const pad = boxed ? 0 : 2;
     this.handles.append(
       svgEl('rect', {
         class: 'mk-outline',
-        x: fmt(r.left),
-        y: fmt(r.top),
-        width: fmt(r.right - r.left),
-        height: fmt(r.bottom - r.top),
+        x: fmt(r.left - pad),
+        y: fmt(r.top - pad),
+        width: fmt(r.right - r.left + 2 * pad),
+        height: fmt(r.bottom - r.top + 2 * pad),
       }),
     );
+    if (!boxed) return;
+    const cx = (r.left + r.right) / 2;
+    const cy = (r.top + r.bottom) / 2;
+    const spots: Array<[string, number, number]> = [
+      ['nw', r.left, r.top],
+      ['n', cx, r.top],
+      ['ne', r.right, r.top],
+      ['e', r.right, cy],
+      ['se', r.right, r.bottom],
+      ['s', cx, r.bottom],
+      ['sw', r.left, r.bottom],
+      ['w', r.left, cy],
+    ];
+    for (const [name, x, y] of spots) this.handles.append(handle(name, x, y));
   }
 }
 
