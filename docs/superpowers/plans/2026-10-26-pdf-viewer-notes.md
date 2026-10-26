@@ -10,7 +10,7 @@ What was verified, where, and what is still unverified. Companion to
 | Pure modules (store, layout, zoom, shortcuts, search, file state, pdf wrapper) | `npm test` (Vitest, Node) | 149 tests green |
 | Viewer, toolbar, sidebar, find bar, shortcuts, state restore, error handling | `npm run e2e` (Playwright, headless Chromium, 1× and 2× DPR projects) | 46 tests green |
 | First paint budget | e2e asserts `firstPaint - openStart < 1000 ms` for `simple.pdf` and `long300.pdf` | passes (typically < 300 ms in Chromium) |
-| Cross-build from WSL | `scripts/build-windows.sh --bundle` (cargo-xwin, clang-cl/lld-link, makensis) | `Preview.exe` 3.3 MB, `Preview_0.1.0_x64-setup.exe` 3.6 MB |
+| Cross-build from WSL | `scripts/build-windows.sh --bundle` (cargo-xwin, clang-cl/lld-link, makensis) | `Preview.exe` 5.8 MB (1.7 MB app bundle + 4 MB pdf.js CMaps, fonts and wasm), `Preview_0.1.0_x64-setup.exe` 3.6 MB |
 | Real Windows host | `scripts/smoke-windows.sh` launches the exe with a fixture and captures its window with `PrintWindow` | Window titled with the file name; toolbar rendered; page 1 of `long300.pdf` painted 1.6 s after process start (WebView2 startup included); `한글 문서.pdf` renders both the embedded Noto Sans KR page and the non-embedded CID-font page |
 | Non-ASCII path on Windows | smoke launch with `C:\Users\Public\pfw-smoke\한글 문서.pdf` | opened, title correct |
 
