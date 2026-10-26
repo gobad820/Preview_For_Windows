@@ -67,7 +67,7 @@ export class App {
       zoomOut: () => this.viewer.setZoom('custom', zoomOut(this.store.get().scale)),
       setZoom: (mode, scale) => this.viewer.setZoom(mode, scale),
       rotate: () => this.rotate(90),
-      toggleFind: () => this.store.set({ findOpen: !this.store.get().findOpen }),
+      toggleFind: () => this.findBar.toggle(),
       open: () => void this.open(),
     });
 
@@ -122,10 +122,10 @@ export class App {
         void this.open();
         return;
       case 'find':
-        if (hasDoc) this.store.set({ findOpen: true });
+        if (hasDoc) this.findBar.open();
         return;
       case 'close-find':
-        if (s.findOpen) this.store.set({ findOpen: false });
+        if (s.findOpen) this.findBar.close();
         return;
       case 'find-next':
       case 'find-prev':
@@ -250,7 +250,9 @@ export class App {
     if (old) void old.destroy();
     if (restored && restored.page > 1) this.viewer.goToPage(restored.page - 1);
     void doc.loadSizes(() => {
-      if (this.doc === doc) this.viewer.sizesChanged();
+      if (this.doc !== doc) return;
+      this.viewer.sizesChanged();
+      this.sidebar.sizesChanged();
     });
   }
 
