@@ -640,3 +640,16 @@ kbd {
   border-radius: 11px; background: #ff3b30; color: #fff; font-size: 12px; font-weight: 600;
   line-height: 22px; text-align: center; z-index: 1;
 }
+
+/* ---- text selection (pdf.js text layer) ----------------------------------
+   One even Mac-style tint: the layer multiplies onto the page, so the highlight never hides
+   glyphs and overlapping text boxes do not stack into darker patches. Line breaks pdf.js
+   inserts are invisible boxes at the layer's edge; their selection must not show. */
+.textLayer { mix-blend-mode: multiply; }
+.textLayer ::selection { background: rgb(179, 215, 255); color: transparent; }
+.textLayer br::selection { background: transparent; }
+.textLayer .endOfContent {
+  display: block; position: absolute; inset: 100% 0 0; z-index: 0;
+  cursor: default; -webkit-user-select: none; user-select: none;
+}
+.textLayer.selecting .endOfContent { top: 0; }

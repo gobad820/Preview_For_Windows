@@ -20,6 +20,14 @@ const keys = (page: Page): Promise<string[]> =>
 const selected = (page: Page): Promise<string[]> =>
   page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#sidebar .thumb.selected')].map((t) => t.dataset['page']!));
 const thumb = (page: Page, n: number) => page.locator(`#sidebar .thumb[data-page="${n}"]`);
+/** Page elements in the viewer, failing on duplicates (stale elements left behind by an edit). */
+async function expectCleanPages(page: Page) {
+  const pages = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#viewer .page')].map((p) => p.dataset['page']!));
+  expect(new Set(pages).size).toBe(pages.length);
+  await expect
+    .poll(() => page.evaluate(() => document.querySelectorAll('#viewer .page.loading').length), { timeout: 5000 })
+    .toBe(0);
+}
 
 async function center(page: Page, n: number) {
   const box = (await thumb(page, n).boundingBox())!;
@@ -94,6 +102,7 @@ test.describe('page editing', () => {
     await expect(page.locator('#sidebar .drop-indicator')).toBeVisible();
     await page.mouse.up();
     expect(await keys(page)).toEqual(['0:2', '0:0', '0:1']);
+    await expectCleanPages(page);
     await expect(page.locator('.drag-ghost')).toHaveCount(0);
     expect((await state(page)).dirty).toBe(true);
     await expect(page).toHaveTitle('simple.pdf — Edited');
@@ -106,6 +115,7 @@ test.describe('page editing', () => {
     await thumb(page, 5).click({ modifiers: ['Control'] });
     await dragThumb(page, 5, 6, 'after');
     expect(await keys(page)).toEqual(['0:0', '0:2', '0:3', '0:5', '0:1', '0:4']);
+    await expectCleanPages(page);
     expect(await selected(page)).toEqual(['5', '6']);
   });
 
@@ -173,6 +183,7 @@ test.describe('page editing', () => {
     await thumb(page, 2).click();
     await page.keyboard.press('Control+v');
     await expect.poll(() => keys(page)).toEqual(['0:1', '0:2', '0:0']);
+    await expectCleanPages(page);
   });
 
   test('pastes pages copied in another window', async ({ page }) => {
@@ -191,6 +202,7 @@ test.describe('page editing', () => {
     await open(page, 'simple.pdf');
     await dropFixture(page, 'mixed.pdf', 2, 'before');
     await expect.poll(() => keys(page)).toEqual(['0:0', '1:0', '1:1', '1:2', '0:1', '0:2']);
+    await expectCleanPages(page);
     expect(await selected(page)).toEqual(['2', '3', '4']);
     await expect.poll(async () => (await state(page)).currentPage).toBe(2);
     expect((await state(page)).dirty).toBe(true);
@@ -351,5 +363,6 @@ test.describe('page editing', () => {
     expect(await page.evaluate(() => document.querySelector('.page[data-page="155"] canvas') === (window as any).__marked)).toBe(true);
     expect((await state(page)).currentPage).toBe(155);
     expect(await page.locator('.page').count()).toBeLessThanOrEqual(10);
+    await expectCleanPages(page);
   });
 });

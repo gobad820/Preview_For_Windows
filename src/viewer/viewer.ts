@@ -123,7 +123,7 @@ export class PdfViewer {
     }
     this.mounted = new Map();
     if (this.zoomMode !== 'custom') this.scale = this.computeScale(this.zoomMode, this.scale);
-    this.relayout(null);
+    this.relayout(null, false);
     if (anchor && this.layout.pages.length > 0) {
       this.container.scrollTop = Math.max(0, yForDocPoint(this.layout, anchor));
     }
@@ -286,7 +286,8 @@ export class PdfViewer {
   }
 
   /** Recomputes the layout; keeps the document point under `anchor` fixed when given. */
-  private relayout(anchor: { x: number; y: number } | null): void {
+  /** `mount: false` leaves mounting to the caller (structure changes reuse elements first). */
+  private relayout(anchor: { x: number; y: number } | null, mount = true): void {
     if (!this.doc) return;
     const old = this.layout;
     const next = computeLayout(this.doc.sizes, {
@@ -307,7 +308,7 @@ export class PdfViewer {
       this.container.scrollLeft = left;
     }
     for (const [i, mp] of this.mounted) this.position(mp, i);
-    this.updateMounted();
+    if (mount) this.updateMounted();
   }
 
   private position(mp: MountedPage, index: number): void {
