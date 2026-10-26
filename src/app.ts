@@ -2,7 +2,10 @@ import { PdfDocument, PdfOpenError } from './pdf/document';
 import type { Platform } from './platform/types';
 import { loadFileState } from './state/fileState';
 import { createStore, initialState, type Store, type ViewerState } from './store';
+import { Toolbar } from './toolbar/toolbar';
+import type { Rotation } from './types';
 import { PdfViewer } from './viewer/viewer';
+import { zoomIn, zoomOut } from './viewer/zoom';
 
 export interface AppMetrics {
   openStart: number;
@@ -12,6 +15,7 @@ export interface AppMetrics {
 export class App {
   readonly store: Store<ViewerState> = createStore(initialState);
   readonly viewer: PdfViewer;
+  readonly toolbar: Toolbar;
   readonly metrics: AppMetrics = { openStart: 0, firstPaint: 0 };
   private doc: PdfDocument | null = null;
   private openSeq = 0;
@@ -44,13 +48,26 @@ export class App {
     this.platform.onDragState((over) => {
       overlay.hidden = !over;
     });
-    for (const b of root.querySelectorAll<HTMLElement>('[data-action="open"]')) {
+    for (const b of root.querySelectorAll<HTMLElement>('.empty-state [data-action="open"]')) {
       b.addEventListener('click', () => void this.open());
     }
+
+    // ---- toolbar ----
+    this.toolbar = new Toolbar(this.el('toolbar'), this.store, {
+      toggleSidebar: () => this.store.set({ sidebarOpen: !this.store.get().sidebarOpen }),
+      gotoPage: (page) => this.viewer.goToPage(page - 1),
+      zoomIn: () => this.viewer.setZoom('custom', zoomIn(this.store.get().scale)),
+      zoomOut: () => this.viewer.setZoom('custom', zoomOut(this.store.get().scale)),
+      setZoom: (mode, scale) => this.viewer.setZoom(mode, scale),
+      rotate: () => this.rotate(90),
+      toggleFind: () => this.store.set({ findOpen: !this.store.get().findOpen }),
+      open: () => void this.open(),
+    });
 
     (window as unknown as { __pfw: unknown }).__pfw = {
       store: this.store,
       viewer: this.viewer,
+      toolbar: this.toolbar,
       metrics: this.metrics,
     };
   }
@@ -58,6 +75,11 @@ export class App {
   async start(): Promise<void> {
     const file = await this.platform.startupFile();
     if (file) await this.openPath(file);
+  }
+
+  rotate(delta: 90 | -90): void {
+    const next = (((this.store.get().rotation + delta) % 360) + 360) % 360;
+    this.viewer.setRotation(next as Rotation);
   }
 
   async open(): Promise<void> {
