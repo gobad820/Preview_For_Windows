@@ -8,7 +8,7 @@ import { PDFArray, PDFDict, PDFDocument, PDFHexString, PDFName, PDFNumber, PDFRe
 import * as pdfjs from 'pdfjs-dist';
 import { describe, expect, test } from 'vitest';
 import { annotBounds } from '../../src/annot/geometry';
-import type { Annot } from '../../src/annot/types';
+import type { Annot, ShapeAnnot } from '../../src/annot/types';
 import { readOwnAnnotations } from '../../src/annot/reader';
 import { writePdf, type WriterSource } from '../../src/edit/writer';
 import { base, sample } from './annotSamples';
@@ -37,6 +37,19 @@ const text = (d: PDFDict, key: string) => {
   return v instanceof PDFString || v instanceof PDFHexString ? v.decodeText() : undefined;
 };
 const own = (d: PDFDict) => d.has(PDFName.of('PFW'));
+
+
+/** Loads `bytes`, lets `edit` change page 1's annotation dictionaries, and saves (object streams off). */
+async function tamper(bytes: Uint8Array, edit: (doc: PDFDocument, arr: PDFArray, dict: (nm: string) => PDFDict) => void): Promise<Uint8Array> {
+  const doc = await PDFDocument.load(bytes);
+  const arr = doc.getPages()[0]!.node.lookup(PDFName.of('Annots'), PDFArray);
+  const dict = (nm: string) =>
+    arr.asArray().map((e) => doc.context.lookup(e) as PDFDict).find((d) => text(d, 'NM') === nm)!;
+  edit(doc, arr, dict);
+  return doc.save({ useObjectStreams: false });
+}
+
+const nms = async (bytes: Uint8Array, page = 0) => (await annotsOf(bytes, page)).map((d) => text(d, 'NM'));
 
 describe('writing annotations', () => {
   test('every kind is written as a standard annotation with an appearance stream and its model', async () => {
@@ -143,7 +156,78 @@ describe('writing annotations', () => {
     const raw = new TextDecoder('latin1').decode(await PDFDocument.load(without).then((d) => d.save({ useObjectStreams: false })));
     expect(raw).not.toContain('SECRET-REPLY');
     expect(raw).not.toContain('SECRET-NESTED');
+    // Our strings are UTF-16 hex strings in the file; search for that form too.
     expect(raw).not.toContain('A note');
+    expect(raw.toUpperCase()).not.toContain(PDFHexString.fromText('A note').toString().slice(1, -1).toUpperCase());
+    expect(raw.toUpperCase()).toContain(PDFHexString.fromText('Typed comment').toString().slice(1, -1).toUpperCase());
+  });
+
+
+  test('our-looking annotations this version cannot read are kept, not deleted, when the page is saved', async () => {
+    const [hl, rc] = [sample()[0]!, sample()[3]!];
+    const once = await write(await fx('simple.pdf'), [{ src: 0, index: 0, annots: [hl, rc] }]);
+    // A newer version wrote a kind this one does not know.
+    const future = await tamper(once, (_doc, _arr, dict) => dict('rc').set(PDFName.of('PFW'), PDFHexString.fromText(JSON.stringify({ ...rc, kind: 'polygon' }))));
+    expect((await readOwnAnnotations(future))[0]!.map((o) => o.annot.id)).toEqual(['hl']);
+    const extra = sample()[5]!;
+    expect(await nms(await write(future, [{ src: 0, index: 0, annots: [hl, extra] }]))).toEqual(['hl', 'rc', 'ln']);
+    // Another tool inlined the dictionaries into /Annots.
+    const inlined = await tamper(once, (doc, arr) => {
+      const dicts = arr.asArray().map((e) => doc.context.lookup(e));
+      doc.getPages()[0]!.node.set(PDFName.of('Annots'), doc.context.obj(dicts));
+    });
+    expect((await readOwnAnnotations(inlined))[0]).toEqual([]);
+    expect((await nms(await write(inlined, [{ src: 0, index: 0, annots: [extra] }]))).sort()).toEqual(['hl', 'ln', 'rc']);
+  });
+
+  test('an annotation another app edited without redrawing it is left as that app left it', async () => {
+    const note = sample()[9]! as Extract<Annot, { kind: 'note' }>;
+    const rc = sample()[3]!;
+    const once = await write(await fx('simple.pdf'), [{ src: 0, index: 0, annots: [note, rc] }]);
+    const edited = await tamper(once, (doc, _arr, dict) => {
+      dict('nt').set(PDFName.of('Contents'), PDFHexString.fromText('Edited in Acrobat'));
+      dict('rc').set(PDFName.of('Rect'), doc.context.obj([10, 10, 50, 50]));
+    });
+    expect((await readOwnAnnotations(edited))[0]).toEqual([]);
+    const out = await annotsOf(await write(edited, [{ src: 0, index: 0, annots: [sample()[5]!] }]));
+    expect(out.map((d) => text(d, 'NM'))).toEqual(['nt', 'rc', 'ln']);
+    expect(text(out[0]!, 'Contents')).toBe('Edited in Acrobat');
+    expect(nums(out[1]!, 'Rect')).toEqual([10, 10, 50, 50]);
+  });
+
+  test('a kept annotation stays even when listed twice or replying to one that was deleted', async () => {
+    const [hl, ul, so] = sample();
+    const once = await write(await fx('simple.pdf'), [{ src: 0, index: 0, annots: [hl!, ul!, so!] }]);
+    const twice = await tamper(once, (_doc, arr) => arr.push(arr.get(0)));
+    expect(await nms(await write(twice, [{ src: 0, index: 0, annots: [hl!, so!] }]))).toContain('hl');
+    const grouped = await tamper(once, (doc, arr, dict) => dict('so').set(PDFName.of('IRT'), arr.get(1)));
+    expect(await nms(await write(grouped, [{ src: 0, index: 0, annots: [hl!, so!] }]))).toEqual(['hl', 'so']);
+  });
+
+  test('ours are matched by their model id, so a changed /NM keeps replies attached', async () => {
+    const note = sample()[9]!;
+    const once = await write(await fx('simple.pdf'), [{ src: 0, index: 0, annots: [note] }]);
+    const renamed = await tamper(once, (doc, arr, dict) => {
+      dict('nt').set(PDFName.of('NM'), PDFString.of('renamed-by-tool'));
+      arr.push(doc.context.register(doc.context.obj({ Type: 'Annot', Subtype: 'Text', Rect: [1, 1, 2, 2], IRT: arr.get(0), Contents: PDFString.of('reply') })));
+    });
+    const out = await annotsOf(await write(renamed, [{ src: 0, index: 0, annots: [{ ...note, text: 'changed' } as Annot] }]));
+    expect(out.map((d) => text(d, 'Contents'))).toEqual(['changed', 'reply']);
+  });
+
+  test('an annotation shared by two pages changes only on the page that was edited', async () => {
+    const rc = sample()[3]! as ShapeAnnot;
+    const once = await write(await fx('simple.pdf'), [{ src: 0, index: 0, annots: [rc] }, { src: 0, index: 1 }]);
+    const shared = await (async () => {
+      const doc = await PDFDocument.load(once);
+      const [p1, p2] = doc.getPages();
+      p2!.node.set(PDFName.of('Annots'), doc.context.obj([p1!.node.lookup(PDFName.of('Annots'), PDFArray).get(0)]));
+      return doc.save();
+    })();
+    const moved = { ...rc, rect: { x0: 0, y0: 0, x1: 40, y1: 40 } };
+    const out = await write(shared, [{ src: 0, index: 0, annots: [moved] }, { src: 0, index: 1 }]);
+    expect(nums((await annotsOf(out, 0))[0]!, 'Rect')).toEqual([-1.5, -1.5, 41.5, 41.5]);
+    expect(nums((await annotsOf(out, 1))[0]!, 'Rect')).toEqual([98.5, 498.5, 251.5, 601.5]);
   });
 
   test('an annotation another app regenerated (no marker in its appearance) is treated as foreign', async () => {

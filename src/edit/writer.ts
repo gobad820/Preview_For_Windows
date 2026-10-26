@@ -189,8 +189,15 @@ export async function writePdf(
   });
 
   const fonts = new AnnotFonts(out, opts.font);
+  // Annotation objects listed by more than one output page must not be rewritten in place.
+  const pagesUsing = new Map<string, number>();
+  for (const page of outPages) {
+    const tags = new Set((page.node.lookupMaybe(N.Annots, PDFArray)?.asArray() ?? []).filter((e) => e instanceof PDFRef).map((e) => (e as PDFRef).tag));
+    for (const tag of tags) pagesUsing.set(tag, (pagesUsing.get(tag) ?? 0) + 1);
+  }
+  const shared = new Set([...pagesUsing].filter(([, n]) => n > 1).map(([tag]) => tag));
   for (const [i, p] of pages.entries()) {
-    if (p.annots) await writePageAnnotations(out, outPages[i]!, p.annots, fonts);
+    if (p.annots) await writePageAnnotations(out, outPages[i]!, p.annots, fonts, shared);
   }
 
   writeOutline(out, outPages, opts.outline);

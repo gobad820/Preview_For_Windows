@@ -144,6 +144,9 @@ describe('text boxes', () => {
     expect(wrapText('가나다 라마바사', 26, 10, font)).toEqual(['가나다', '라마바사']);
     expect(wrapText('가나다라마바사아자차카타', 56, 10, font)).toEqual(['가나다라마바사아자차카', '타']);
     expect(wrapText('one\n\ntwo', 56, 10, font)).toEqual(['one', '', 'two']);
+    // No break at a no-break space; a break after a hyphen.
+    expect(wrapText('aaa 10\u00a0km', 26, 10, font)).toEqual(['aaa', '10\u00a0km']);
+    expect(wrapText('well-known', 30, 10, font)).toEqual(['well-', 'known']);
     expect(wrapText('abcdefghijklmnop', 56, 10, font)).toEqual(['abcdefghijk', 'lmnop']);
   });
 
@@ -154,6 +157,13 @@ describe('text boxes', () => {
     expect(ap.content).toContain('100 100 60 40 re W n');
     expect(count(ap.content, /Tj/g)).toBe(2);
     expect(ap.content).toContain(font.encode('ddd')!);
+  });
+
+  it('keeps the text inside a border, like the overlay (border-box with 2 pt padding)', () => {
+    const ap = buildAppearance(textBox({ border: '#000000', borderWidth: 8, text: 'aaaa bbbb' }), font)!;
+    expect(ap.content).toContain('1 0 0 1 10 ');
+    // Text area: 60 − 2 × (2 + 8) = 40 pt → 8 characters, so the two words wrap.
+    expect((ap.content.match(/Tj/g) ?? []).length).toBe(2);
   });
 
   it('draws fill and border when set', () => {

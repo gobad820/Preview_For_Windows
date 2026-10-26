@@ -11,7 +11,6 @@ import {
   PDFName,
   PDFNumber,
   PDFRef,
-  PDFStream,
   PDFString,
   StandardFonts,
   type PDFDocument,
@@ -20,6 +19,7 @@ import {
   type PDFPage,
 } from '@cantoo/pdf-lib';
 import { buildAppearance, hexToRgb, type Appearance, type AppearanceFont } from './appearance';
+import { ownModel } from './own';
 import type { Annot, TextBoxAnnot } from './types';
 
 /** Supplies the bytes of the font text boxes are set in (Malgun Gothic), or null. */
@@ -45,14 +45,6 @@ const CARRIED = [N.Popup, N.StructParent, N.OC, N.IRT];
 interface Embedded {
   font: AppearanceFont;
   ref: PDFRef;
-}
-
-/** True when `dict` is one of ours: it has the model and its current appearance has the marker. */
-export function isOwnAnnotation(dict: PDFDict): boolean {
-  if (!dict.has(N.PFW)) return false;
-  const ap = dict.lookupMaybe(N.AP, PDFDict);
-  const normal = ap?.lookup(N.N);
-  return normal instanceof PDFStream && normal.dict.get(N.PFWAnnot) === PDFBool.True;
 }
 
 /** The fonts text boxes can use in one output document, embedded on first use. */
@@ -222,30 +214,37 @@ async function annotDict(out: PDFDocument, page: PDFPage, a: Annot, fonts: Annot
 
 /**
  * Makes this app's annotations on `page` exactly `annots`. Ours that stay are rewritten in
- * place (same object, so popups and replies other apps attached keep pointing at them); ours
- * that are gone are removed together with every annotation whose /Parent or /IRT chain leads
- * to them; new ones are appended. Foreign annotations are left as they are.
+ * place (same object, so popups and replies other apps attached keep pointing at them), unless
+ * another output page shares the object; ours that are gone are removed together with every
+ * annotation whose /Parent or /IRT chain leads to them; new ones are appended. Everything the
+ * reader did not hand to the user (foreign, unreadable or changed elsewhere) is left alone.
+ * `shared` holds the refs (tags) that other output pages also list.
  */
 export async function writePageAnnotations(
   out: PDFDocument,
   page: PDFPage,
   annots: readonly Annot[],
   fonts: AnnotFonts,
+  shared: ReadonlySet<string> = new Set(),
 ): Promise<void> {
   const ctx = out.context;
   const entries = page.node.lookupMaybe(N.Annots, PDFArray)?.asArray() ?? [];
   const dictOf = (e: PDFObject) => (e instanceof PDFRef ? ctx.lookupMaybe(e, PDFDict) : e instanceof PDFDict ? e : undefined);
   const wanted = new Set(annots.map((a) => a.id));
   const ownById = new Map<string, { ref: PDFRef; dict: PDFDict }>();
+  const kept = new Set<string>();
   const removed = new Set<string>();
   for (const e of entries) {
-    const dict = dictOf(e);
-    if (!dict || !isOwnAnnotation(dict)) continue;
-    const id = dict.lookupMaybe(N.NM, PDFString, PDFHexString)?.decodeText();
-    if (e instanceof PDFRef && id !== undefined && wanted.has(id) && !ownById.has(id)) ownById.set(id, { ref: e, dict });
-    else if (e instanceof PDFRef) removed.add(e.tag);
+    const model = ownModel(e, ctx);
+    if (!model || !(e instanceof PDFRef) || kept.has(e.tag)) continue;
+    if (wanted.has(model.id) && !ownById.has(model.id) && !shared.has(e.tag)) {
+      ownById.set(model.id, { ref: e, dict: ctx.lookup(e, PDFDict) });
+      kept.add(e.tag);
+    } else {
+      removed.add(e.tag);
+    }
   }
-  // Popups and replies of removed annotations go too, transitively.
+  // Popups and replies of removed annotations go too, transitively; kept ones never do.
   const linksTo = (dict: PDFDict) =>
     [N.Parent, N.IRT].some((k) => {
       const v = dict.get(k);
@@ -254,7 +253,7 @@ export async function writePageAnnotations(
   for (let changed = removed.size > 0; changed; ) {
     changed = false;
     for (const e of entries) {
-      if (!(e instanceof PDFRef) || removed.has(e.tag)) continue;
+      if (!(e instanceof PDFRef) || removed.has(e.tag) || kept.has(e.tag)) continue;
       const dict = dictOf(e);
       if (dict && linksTo(dict)) {
         removed.add(e.tag);
@@ -265,7 +264,7 @@ export async function writePageAnnotations(
   const keep: PDFObject[] = entries.filter((e) => {
     if (e instanceof PDFRef) return !removed.has(e.tag);
     const dict = dictOf(e);
-    return !(dict && (isOwnAnnotation(dict) || linksTo(dict)));
+    return !(dict && linksTo(dict));
   });
   for (const a of annots) {
     const dict = await annotDict(out, page, a, fonts);

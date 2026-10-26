@@ -74,8 +74,16 @@ export function tauriPlatform(material: 'mica' | 'none' = 'none'): Platform {
 
   return {
     loadAnnotationFont() {
-      // Malgun Gothic ships with every Windows 10/11 and allows editable embedding.
-      annotationFont ??= this.readFile('C:\\Windows\\Fonts\\malgun.ttf').catch(() => null);
+      // Malgun Gothic ships with every Windows 10/11 and allows editable embedding. A failed
+      // read is not remembered, so the next save tries again.
+      annotationFont ??= invoke<ArrayBuffer>('system_font', { name: 'malgun.ttf' }).then(
+        (buf) => new Uint8Array(buf),
+        (e: unknown) => {
+          console.warn('Malgun Gothic could not be read', e);
+          annotationFont = null;
+          return null;
+        },
+      );
       return annotationFont;
     },
     async readFile(path) {

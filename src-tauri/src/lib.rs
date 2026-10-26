@@ -23,6 +23,24 @@ async fn read_file(path: String) -> Result<tauri::ipc::Response, String> {
     Ok(tauri::ipc::Response::new(bytes))
 }
 
+/// Reads a font file from the Windows fonts folder (`%WINDIR%\\Fonts`), e.g. `malgun.ttf`,
+/// for embedding in saved text box annotations.
+#[tauri::command]
+async fn system_font(name: String) -> Result<tauri::ipc::Response, String> {
+    if name.is_empty() || name.contains(['/', '\\', ':']) || name.contains("..") {
+        return Err(format!("invalid font name: {name}"));
+    }
+    let dir = std::env::var_os("WINDIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("C:\\Windows"));
+    let path = dir.join("Fonts").join(name);
+    let bytes = tauri::async_runtime::spawn_blocking(move || std::fs::read(path))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
 /// Writes the raw request body to the URI-encoded path in the `x-path` header, atomically:
 /// the bytes go to a temporary file next to the target, which then replaces it.
 #[tauri::command]
@@ -298,7 +316,8 @@ pub fn run() {
             open_window,
             file_stamp,
             window_material,
-            startup_file
+            startup_file,
+            system_font
         ])
         .run(tauri::generate_context!())
         .expect("error while running Preview");

@@ -192,15 +192,16 @@ export function textFrameWidth(r: PdfRect, angle: TextAngle): number {
 /**
  * Breaks `text` into lines no wider than `width`, like the overlay's CSS (`white-space:
  * pre-wrap; word-break: keep-all; overflow-wrap: anywhere`): hard breaks at newlines, soft
- * breaks at spaces only (Hangul words stay whole), a word longer than a line split by
- * character, trailing spaces hang.
+ * breaks at spaces and tabs (not no-break spaces) and after hyphens, Hangul words stay whole,
+ * a word longer than a line is split by character, trailing spaces hang.
  */
 export function wrapText(text: string, width: number, size: number, font: Pick<AppearanceFont, 'widthOf'>): string[] {
   const out: string[] = [];
   for (const para of text.replace(/\r\n?/g, '\n').split('\n')) {
     let line = '';
-    for (const t of para.match(/\s+|\S+/gu) ?? []) {
-      if (/^\s+$/u.test(t)) {
+    const tokens = (para.match(/[ \t]+|[^ \t]+/gu) ?? []).flatMap((t) => (/^[ \t]/.test(t) ? [t] : t.split(/(?<=-)(?=\D)/u)));
+    for (const t of tokens) {
+      if (/^[ \t]+$/u.test(t)) {
         line += t;
         continue;
       }
@@ -234,7 +235,9 @@ export function wrapText(text: string, width: number, size: number, font: Pick<A
 function textBox(a: TextBoxAnnot, font: AppearanceFont | null): { content: string; usesFont: boolean } {
   const r = a.rect;
   const size = a.fontSize;
-  let lines = font && a.text.trim() !== '' ? wrapText(a.text, textFrameWidth(r, a.angle) - 2 * TEXT_PADDING, size, font) : [];
+  // Like the overlay's border-box: the text sits inside the border and the padding.
+  const inset = TEXT_PADDING + (a.border !== null && a.borderWidth > 0 ? a.borderWidth : 0);
+  let lines = font && a.text.trim() !== '' ? wrapText(a.text, textFrameWidth(r, a.angle) - 2 * inset, size, font) : [];
   let encoded = lines.map((l) => font?.encode(l) ?? null);
   if (encoded.some((e) => e === null)) {
     lines = [];
@@ -260,8 +263,8 @@ function textBox(a: TextBoxAnnot, font: AppearanceFont | null): { content: strin
     const halfLeading = (lineH - (font.ascent - font.descent) * size) / 2;
     encoded.forEach((hex, i) => {
       if (lines[i] === '') return;
-      const y = -(TEXT_PADDING + i * lineH + halfLeading + font.ascent * size);
-      ops.push(`1 0 0 1 ${n(TEXT_PADDING)} ${n(y)} Tm ${hex} Tj`);
+      const y = -(inset + i * lineH + halfLeading + font.ascent * size);
+      ops.push(`1 0 0 1 ${n(inset)} ${n(y)} Tm ${hex} Tj`);
     });
     ops.push('ET');
   }
