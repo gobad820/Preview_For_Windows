@@ -59,6 +59,19 @@ async fn clipboard_read_pdf_paths(
         .map_err(|e| e.to_string())?
 }
 
+/// Size and modification time of `path`, so the app can tell when another program changed it.
+#[tauri::command]
+fn file_stamp(path: String) -> Option<String> {
+    let meta = std::fs::metadata(&path).ok()?;
+    let modified = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    Some(format!("{}:{}", meta.len(), modified))
+}
+
 /// Opens `path` in a new Preview window (a new process, like double-clicking the file).
 #[tauri::command]
 fn open_window(path: String) -> Result<(), String> {
@@ -140,13 +153,25 @@ fn percent_decode(s: &str) -> Result<String, String> {
 }
 
 fn atomic_write(path: &Path, data: &[u8]) -> Result<(), String> {
+    use std::io::Write;
     let name = path
         .file_name()
         .ok_or_else(|| format!("not a file path: {}", path.display()))?;
+    // Unique per process and call, so two windows saving at once never share a temp file.
+    static COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let mut tmp_name = name.to_os_string();
-    tmp_name.push(".preview-tmp");
+    tmp_name.push(format!(".{}-{}.preview-tmp", std::process::id(), n));
     let tmp = path.with_file_name(tmp_name);
-    std::fs::write(&tmp, data).map_err(|e| e.to_string())?;
+    let written = (|| -> std::io::Result<()> {
+        let mut f = std::fs::File::create(&tmp)?;
+        f.write_all(data)?;
+        f.sync_all() // the bytes are on disk before they replace the original
+    })();
+    if let Err(e) = written {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(e.to_string());
+    }
     // std::fs::rename replaces an existing target on Windows (MoveFileExW + REPLACE_EXISTING).
     std::fs::rename(&tmp, path).map_err(|e| {
         let _ = std::fs::remove_file(&tmp);
@@ -246,7 +271,15 @@ fn apply_backdrop(window: &tauri::WebviewWindow) -> &'static str {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        // Never restore decorations: v0.1 saved a native title bar, v0.2 draws its own.
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::all()
+                        - tauri_plugin_window_state::StateFlags::DECORATIONS,
+                )
+                .build(),
+        )
         .manage(Shell::default())
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
@@ -263,6 +296,7 @@ pub fn run() {
             clipboard_write_pdf,
             clipboard_read_pdf_paths,
             open_window,
+            file_stamp,
             window_material,
             startup_file
         ])
@@ -292,7 +326,8 @@ mod tests {
         std::fs::write(&file, b"old").unwrap();
         atomic_write(&file, b"new contents").unwrap();
         assert_eq!(std::fs::read(&file).unwrap(), b"new contents");
-        assert!(!dir.join("doc.pdf.preview-tmp").exists());
+        let leftovers = std::fs::read_dir(&dir).unwrap().count();
+        assert_eq!(leftovers, 1, "only doc.pdf remains");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

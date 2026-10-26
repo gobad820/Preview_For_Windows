@@ -150,7 +150,8 @@ function isFindInput(el: ElementLike | null): boolean {
 }
 
 function isInSidebar(el: ElementLike | null): boolean {
-  return typeof el?.closest === 'function' && el.closest('#sidebar') != null;
+  // Only the thumbnail list edits pages; the Contents tab and the tab strip do not.
+  return typeof el?.closest === 'function' && el.closest('#sidebar [role="listbox"]') != null;
 }
 
 export function keyLikeFromEvent(e: KeyboardEvent): KeyLike {

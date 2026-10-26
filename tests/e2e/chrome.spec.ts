@@ -427,21 +427,21 @@ test.describe('window states', () => {
 
   test('the password prompt looks like a Mac alert', async ({ page }) => {
     await page.goto('/?file=fixtures/encrypted.pdf');
-    const panel = page.locator('.password-panel');
-    await expect(panel).toBeVisible();
+    const alert = page.getByRole('alertdialog');
+    await expect(alert).toBeVisible();
     await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished)));
-    const p = (await panel.boundingBox())!;
-    expect(p.width).toBe(260);
-    expect(Math.abs(p.x + p.width / 2 - 600)).toBeLessThanOrEqual(1);
-    expect(await style(page, '.password-panel', 'border-top-left-radius')).toBe('12px');
-    expect(await panel.evaluate((el) => getComputedStyle(el, '::before').backgroundImage)).toMatch(/^url\(/);
-    const input = (await page.locator('[data-password-input]').boundingBox())!;
-    const open = (await page.locator('.password-panel button[type="submit"]').boundingBox())!;
-    const cancel = (await page.locator('[data-password-cancel]').boundingBox())!;
-    expect(input.y + input.height).toBeLessThan(open.y);
-    expect(Math.round(open.y)).toBe(Math.round(cancel.y));
-    expect(open.x).toBeGreaterThan(cancel.x);
-    expect(Math.round(open.width)).toBe(Math.round(cancel.width));
-    expect(Math.round(input.width)).toBe(Math.round(open.x + open.width - cancel.x));
+    const box = (await alert.boundingBox())!;
+    expect(Math.abs(box.x + box.width / 2 - 600)).toBeLessThanOrEqual(1);
+    expect(await style(page, '.alert', 'border-top-left-radius')).toBe('12px');
+    await expect(alert.locator('.alert-icon')).toBeVisible();
+    const input = alert.locator('input.alert-input');
+    await expect(input).toBeFocused();
+    expect(await input.getAttribute('type')).toBe('password');
+    const open = (await alert.getByRole('button', { name: 'Open' }).boundingBox())!;
+    const cancel = (await alert.getByRole('button', { name: 'Cancel' }).boundingBox())!;
+    const field = (await input.boundingBox())!;
+    expect(field.y + field.height).toBeLessThan(open.y);
+    expect(Math.round(open.y)).toBe(Math.round(cancel.y)); // two buttons side by side
+    expect(open.x).toBeGreaterThan(cancel.x); // primary on the right, as on macOS
   });
 });

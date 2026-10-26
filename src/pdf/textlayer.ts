@@ -19,6 +19,7 @@ export interface TextLayerHandle {
  */
 /** Text layers on screen, each with its end-of-content guard (see `bindSelection`). */
 const layers = new Map<HTMLElement, HTMLElement>();
+const bound = new WeakSet<HTMLElement>();
 let listening = false;
 
 /**
@@ -31,7 +32,10 @@ function bindSelection(host: HTMLElement): void {
   end.className = 'endOfContent';
   host.append(end);
   layers.set(host, end);
-  host.addEventListener('mousedown', () => host.classList.add('selecting'));
+  if (!bound.has(host)) {
+    bound.add(host);
+    host.addEventListener('mousedown', () => host.classList.add('selecting'));
+  }
   if (listening) return;
   listening = true;
   let pointerDown = false;

@@ -7,7 +7,15 @@ interface TestHooks {
   __pfwNextOpenPaths: string[] | null;
   __pfwExternalClipboard: string[] | null;
   __pfwRequestClose: () => Promise<boolean>;
+  /** Simulated latency of a disk write, so tests can act while a save is running. */
+  __pfwWriteDelayMs?: number;
+  /** Simulated latency of putting pages on the system clipboard. */
+  __pfwClipboardDelayMs?: number;
+  /** Makes the system clipboard write fail, as it can on Windows. */
+  __pfwClipboardFail?: boolean;
 }
+
+const sleep = (ms: number | undefined) => new Promise((r) => setTimeout(r, ms ?? 0));
 
 /**
  * Browser shim used by the Playwright suite and `npm run dev` outside Tauri.
@@ -116,12 +124,23 @@ export function browserPlatform(): Platform {
       return next;
     },
     async writeFile(path, data) {
-      hooks.__pfwFiles.set(path, data.slice());
+      const copy = data.slice();
+      await sleep(hooks.__pfwWriteDelayMs);
+      hooks.__pfwFiles.set(path, copy);
+    },
+    async fileStamp(path) {
+      const bytes = hooks.__pfwFiles.get(path);
+      if (!bytes) return blobs.has(path) || !path.startsWith('blob:') ? 'original' : null;
+      let h = 0x811c9dc5;
+      for (const b of bytes) h = Math.imul(h ^ b, 0x01000193) >>> 0;
+      return `${bytes.length}:${h.toString(16)}`;
     },
     async openInNewWindow() {
       return false;
     },
     async clipboardWritePdf(data) {
+      await sleep(hooks.__pfwClipboardDelayMs);
+      if (hooks.__pfwClipboardFail) throw new Error('clipboard is busy');
       clipboardSeq++;
       hooks.__pfwFiles.set(`clipboard-${clipboardSeq}.pdf`, data.slice());
       hooks.__pfwExternalClipboard = null;

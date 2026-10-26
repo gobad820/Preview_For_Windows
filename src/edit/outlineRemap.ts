@@ -41,7 +41,7 @@ export function remapOutline(outlines: SourceOutline[], pages: Composition): Out
   const remap = (src: number, nodes: OutlineNode[]): OutlineNode[] =>
     nodes.flatMap((n) => {
       const children = remap(src, n.children);
-      if (n.pageIndex === null) return children.length > 0 ? [{ ...n, children }] : [];
+      if (n.pageIndex === null) return children.length > 0 || n.url ? [{ ...n, children }] : [];
       const pageIndex = position.get(keyOf(src, n.pageIndex));
       if (pageIndex !== undefined) return [{ ...n, pageIndex, children }];
       if (children.length === 0) return [];

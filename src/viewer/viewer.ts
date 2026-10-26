@@ -110,7 +110,7 @@ export class PdfViewer {
    * the viewport are reused (no re-render); `anchor` is the document point to keep at the
    * top of the viewport, in new positions.
    */
-  structureChanged(anchor?: DocPoint): void {
+  structureChanged(anchor?: DocPoint, where: 'top' | 'center' = 'top'): void {
     const doc = this.doc;
     if (!doc) return;
     const old = [...this.mounted.values()];
@@ -125,7 +125,8 @@ export class PdfViewer {
     if (this.zoomMode !== 'custom') this.scale = this.computeScale(this.zoomMode, this.scale);
     this.relayout(null, false);
     if (anchor && this.layout.pages.length > 0) {
-      this.container.scrollTop = Math.max(0, yForDocPoint(this.layout, anchor));
+      const offset = where === 'center' ? this.container.clientHeight / 2 : 0;
+      this.container.scrollTop = Math.max(0, yForDocPoint(this.layout, anchor) - offset);
     }
     const spare = new Map<string, MountedPage[]>();
     for (const mp of old) {
@@ -155,6 +156,11 @@ export class PdfViewer {
     if (this.store.get().scale !== this.scale) this.store.set({ scale: this.scale });
     this.updateMounted();
     this.syncCurrentPage();
+  }
+
+  /** The document point at the middle of the viewport (normally on the current page). */
+  centerAnchor(): DocPoint {
+    return docPointAt(this.layout, this.container.scrollTop + this.container.clientHeight / 2);
   }
 
   /** The document point at the top edge of the viewport. */

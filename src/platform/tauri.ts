@@ -92,6 +92,9 @@ export function tauriPlatform(material: 'mica' | 'none' = 'none'): Platform {
     async writeFile(path, data) {
       await invoke('write_file', data, { headers: { 'x-path': encodeURIComponent(path) } });
     },
+    fileStamp(path) {
+      return invoke<string | null>('file_stamp', { path });
+    },
     async openInNewWindow(path) {
       await invoke('open_window', { path });
       return true;

@@ -218,13 +218,16 @@ describe('bindShortcuts', () => {
     expect(e.preventDefault).toHaveBeenCalledTimes(1);
   });
 
-  it('recognises targets inside #sidebar', () => {
+  it('treats only the thumbnail list as the page editor', () => {
     const { win, dispatch } = fakeWindow();
     const handler = vi.fn();
     bindShortcuts(win, handler);
     dispatch(fakeEvent({ key: 'Delete' }, { tagName: 'DIV' }));
     expect(handler).not.toHaveBeenCalled();
-    const e = fakeEvent({ key: 'Delete' }, { tagName: 'BUTTON', within: ['#sidebar'] });
+    // The Contents tab and the tab strip are in #sidebar but must not delete pages.
+    dispatch(fakeEvent({ key: 'Delete' }, { tagName: 'BUTTON', within: ['#sidebar'] }));
+    expect(handler).not.toHaveBeenCalled();
+    const e = fakeEvent({ key: 'Delete' }, { tagName: 'DIV', within: ['#sidebar', '#sidebar [role="listbox"]'] });
     dispatch(e);
     expect(handler).toHaveBeenCalledWith('delete-pages', e);
   });

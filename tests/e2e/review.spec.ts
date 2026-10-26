@@ -14,10 +14,10 @@ const waitForCanvas = (page: Page, n: number) =>
 test.describe('review fixes', () => {
   test('encrypted files prompt for a password and open with the right one', async ({ page }) => {
     await open(page, 'encrypted.pdf');
-    const panel = page.locator('.password-panel');
+    const panel = page.getByRole('alertdialog');
     await expect(panel).toBeVisible();
     await expect(panel).toContainText(/password/i);
-    const input = page.locator('input[data-password-input]');
+    const input = panel.locator('input.alert-input');
     await expect(input).toBeFocused();
     await input.fill('nope');
     await input.press('Enter');

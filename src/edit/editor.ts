@@ -30,7 +30,11 @@ export class Editor {
   readonly selection = new Selection();
   private readonly listeners = new Set<() => void>();
   private clipboard: PageSpec[] | null = null;
+  /** The system clipboard write of the last copy; resolves false when it failed. */
+  private pendingCopy: Promise<boolean> | null = null;
   private busy = false;
+  /** True while this editor changes the structure, so the selection does not chase the view. */
+  private editing = false;
 
   constructor(private readonly host: EditorHost) {
     host.store.select('currentPage', (page) => this.followCurrentPage(page));
@@ -88,7 +92,7 @@ export class Editor {
     this.emit();
   }
 
-  /** New document: empty clipboard stays (it can be pasted elsewhere), selection resets. */
+  /** New document: the selection and the in-window clipboard reset. */
   documentChanged(): void {
     this.selection.clear();
     this.clipboard = null;
@@ -103,50 +107,32 @@ export class Editor {
   moveSelectionTo(gap: number): boolean {
     const doc = this.host.doc();
     if (!doc || this.selection.size === 0) return false;
-    if (!doc.apply(movePages(doc.pages, this.selection.ids, gap))) return false;
+    if (!this.edit(() => doc.apply(movePages(doc.pages, this.selection.ids, gap)))) return false;
     this.showFirstSelected();
     return true;
   }
 
   deleteSelection(): boolean {
-    const doc = this.host.doc();
-    if (!doc || this.selection.size === 0) return false;
-    if (!canDelete(doc.pages, this.selection.ids)) {
-      this.host.notify('A document needs at least one page.');
-      return false;
-    }
-    const first = this.selectedPositions()[0] ?? 0;
-    if (!doc.apply(deletePages(doc.pages, this.selection.ids))) return false;
-    const next = Math.min(first, doc.numPages - 1);
-    this.selection.selectOnly(doc.pages[next]!.id);
-    this.emit();
-    this.host.goToPage(next);
-    return true;
+    return this.deleteIds(new Set(this.selection.ids));
   }
 
   /** Copies the selected pages; other windows can paste them through the system clipboard. */
   async copySelection(): Promise<void> {
-    const doc = this.host.doc();
-    if (!doc || this.selection.size === 0) return;
-    const specs = this.selectedPositions().map((i) => ({ src: doc.pages[i]!.src, index: doc.pages[i]!.index }));
-    this.clipboard = specs;
-    try {
-      await this.host.platform.clipboardWritePdf(await doc.extract(specs));
-    } catch (e) {
-      // In-window paste still works from the in-memory copy.
-      console.warn('could not put pages on the system clipboard', e);
-    }
+    await this.copyIds(new Set(this.selection.ids));
   }
 
+  /** Cut acts on the pages selected when it was invoked, even if the selection changes meanwhile. */
   async cutSelection(): Promise<void> {
     const doc = this.host.doc();
-    if (!doc || this.selection.size === 0) return;
-    if (!canDelete(doc.pages, this.selection.ids)) {
+    const ids = new Set(this.selection.ids);
+    if (!doc || ids.size === 0) return;
+    if (!canDelete(doc.pages, ids)) {
       this.host.notify('A document needs at least one page.');
       return;
     }
-    await this.copySelection();
-    this.deleteSelection();
+    const copied = this.copyIds(ids);
+    this.deleteIds(ids);
+    await copied;
   }
 
   /** Inserts copied pages after the selection (or the current page) and selects them. */
@@ -156,7 +142,11 @@ export class Editor {
     this.busy = true;
     try {
       const gap = this.insertionGap();
-      const external = await this.host.platform.clipboardReadPdfPaths();
+      // Our own copy may still be on its way to the system clipboard; if that failed, the
+      // in-memory pages are the newest copy.
+      const systemOk = this.pendingCopy ? await this.pendingCopy : true;
+      const external = systemOk ? await this.host.platform.clipboardReadPdfPaths() : null;
+      if (this.host.doc() !== doc) return;
       if (external === null) {
         if (this.clipboard && this.clipboard.length > 0) this.insertSpecs(this.clipboard, gap);
         return;
@@ -179,14 +169,61 @@ export class Editor {
   }
 
   undo(): void {
-    this.host.doc()?.undo();
+    const doc = this.host.doc();
+    if (doc) this.edit(() => doc.undo());
   }
 
   redo(): void {
-    this.host.doc()?.redo();
+    const doc = this.host.doc();
+    if (doc) this.edit(() => doc.redo());
   }
 
   // ---- internals ------------------------------------------------------------
+
+  /** Runs a structural edit with selection-following paused. */
+  private edit(fn: () => boolean): boolean {
+    this.editing = true;
+    try {
+      return fn();
+    } finally {
+      this.editing = false;
+    }
+  }
+
+  private deleteIds(ids: ReadonlySet<number>): boolean {
+    const doc = this.host.doc();
+    if (!doc || ids.size === 0) return false;
+    if (!canDelete(doc.pages, ids)) {
+      this.host.notify('A document needs at least one page.');
+      return false;
+    }
+    const first = doc.pages.findIndex((p) => ids.has(p.id));
+    if (!this.edit(() => doc.apply(deletePages(doc.pages, ids)))) return false;
+    const next = Math.min(Math.max(0, first), doc.numPages - 1);
+    this.selection.selectOnly(doc.pages[next]!.id);
+    this.emit();
+    this.host.goToPage(next);
+    return true;
+  }
+
+  /** Remembers the pages in memory at once, then puts them on the system clipboard. */
+  private copyIds(ids: ReadonlySet<number>): Promise<boolean> {
+    const doc = this.host.doc();
+    if (!doc || ids.size === 0) return Promise.resolve(false);
+    const specs = doc.pages.filter((p) => ids.has(p.id)).map((p) => ({ src: p.src, index: p.index }));
+    this.clipboard = specs;
+    const write = (async () => {
+      try {
+        await this.host.platform.clipboardWritePdf(await doc.extract(specs));
+        return true;
+      } catch (e) {
+        console.warn('could not put pages on the system clipboard', e);
+        return false;
+      }
+    })();
+    this.pendingCopy = write;
+    return write;
+  }
 
   private async insertFilesAt(paths: string[], gap: number): Promise<void> {
     const doc = this.host.doc();
@@ -204,7 +241,7 @@ export class Editor {
     const doc = this.host.doc();
     if (!doc) return;
     const { pages, ids } = insertPages(doc.pages, gap, specs, doc.nextId);
-    if (!doc.apply(pages)) return;
+    if (!this.edit(() => doc.apply(pages))) return;
     this.selection.set(ids);
     this.emit();
     this.showFirstSelected();
@@ -223,7 +260,7 @@ export class Editor {
 
   /** While at most one page is selected, the selection follows the page shown in the viewer. */
   private followCurrentPage(page: number): void {
-    if (this.selection.size > 1) return;
+    if (this.editing || this.selection.size > 1) return;
     const id = this.idAt(page - 1);
     if (id === undefined || this.selection.has(id)) return;
     this.selection.selectOnly(id);

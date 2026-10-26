@@ -74,6 +74,11 @@ export class EditableDocument implements PageSource {
     return this.history.dirty;
   }
 
+  /** Identifies the current composition; `save()` writes exactly this version. */
+  get version(): number {
+    return this.history.token;
+  }
+
   /** Makes `next` the current composition; false (and no history entry) when nothing changed. */
   apply(next: Composition): boolean {
     if (samePages(next, this.pages)) return false;
@@ -94,8 +99,9 @@ export class EditableDocument implements PageSource {
     return true;
   }
 
-  markSaved(): void {
-    this.history.markSaved();
+  /** Marks `version` (default: the current one) as what is on disk. */
+  markSaved(version?: number): void {
+    this.history.markSaved(version);
   }
 
   onChange(cb: (kind: ChangeKind) => void): () => void {
@@ -175,7 +181,11 @@ export class EditableDocument implements PageSource {
       }),
     );
     const outline = await this.getOutline();
-    return writePdf(sources, pages, { outline, metaFrom: used.includes(0) ? 0 : pages[0]!.src });
+    const labels = new Map(await Promise.all(used.map(async (id) => [id, await this.source(id).getPageLabels()] as const)));
+    const pageLabels = [...labels.values()].some((l) => l !== null)
+      ? pages.map((p) => labels.get(p.src)?.[p.index] ?? null)
+      : undefined;
+    return writePdf(sources, pages, { outline, metaFrom: used.includes(0) ? 0 : pages[0]!.src, pageLabels });
   }
 
   /** The given source pages as a standalone PDF (used for copying pages to other windows). */

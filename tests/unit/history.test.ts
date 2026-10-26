@@ -138,3 +138,17 @@ describe('History', () => {
     expect(h.dirty).toBe(false);
   });
 });
+
+describe('History tokens', () => {
+  test('marking an older entry saved keeps later edits dirty until undone', () => {
+    const h = new History('a');
+    h.push('b');
+    const saved = h.token;
+    h.push('c');
+    h.markSaved(saved);
+    expect(h.dirty).toBe(true);
+    h.undo();
+    expect(h.current).toBe('b');
+    expect(h.dirty).toBe(false);
+  });
+});

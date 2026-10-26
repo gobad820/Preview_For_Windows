@@ -211,13 +211,13 @@ test.describe('page editing', () => {
   test('merging a password-protected PDF asks for its password', async ({ page }) => {
     await open(page, 'simple.pdf');
     await dropFixture(page, 'encrypted.pdf', 3, 'after');
-    const panel = page.locator('.password-panel');
+    const panel = page.getByRole('alertdialog');
     await expect(panel).toBeVisible();
     await expect(panel).toContainText('encrypted.pdf');
-    await page.locator('input[data-password-input]').fill('wrong');
+    await panel.locator('input.alert-input').fill('wrong');
     await page.keyboard.press('Enter');
     await expect(panel).toContainText(/incorrect/i);
-    await page.locator('input[data-password-input]').fill('secret');
+    await panel.locator('input.alert-input').fill('secret');
     await page.keyboard.press('Enter');
     await expect.poll(() => keys(page)).toEqual(['0:0', '0:1', '0:2', '1:0']);
     await expect(panel).toBeHidden();
@@ -364,5 +364,163 @@ test.describe('page editing', () => {
     expect((await state(page)).currentPage).toBe(155);
     expect(await page.locator('.page').count()).toBeLessThanOrEqual(10);
     await expectCleanPages(page);
+  });
+});
+
+test.describe('saving safety and review fixes', () => {
+  const file = (page: Page, path: string) =>
+    page.evaluate((p) => {
+      const b: Uint8Array | undefined = (window as any).__pfwFiles.get(p);
+      return b ? b.length : 0;
+    }, path);
+  const pagesIn = (page: Page, path: string) =>
+    page.evaluate(async (p) => {
+      const app = (window as any).__pfw.app;
+      const bytes: Uint8Array = (window as any).__pfwFiles.get(p);
+      // Open the saved bytes with a throwaway EditableDocument (the class of the open one).
+      const doc = await app.document.constructor.open(bytes.slice());
+      const n = doc.numPages;
+      await doc.destroy();
+      return n;
+    }, path);
+
+  test('edits made while a save is running stay unsaved', async ({ page }) => {
+    await open(page, 'simple.pdf');
+    await thumb(page, 2).click();
+    await page.keyboard.press('Delete');
+    await page.evaluate(() => ((window as any).__pfwWriteDelayMs = 400));
+    await page.keyboard.press('Control+s');
+    await page.waitForTimeout(50);
+    await page.keyboard.press('Delete'); // another page while the write is still running
+    await expect.poll(() => file(page, 'fixtures/simple.pdf'), { timeout: 5000 }).toBeGreaterThan(0);
+    await expect.poll(async () => (await state(page)).numPages).toBe(1);
+    expect((await state(page)).dirty).toBe(true);
+    await expect(page).toHaveTitle('simple.pdf — Edited');
+    expect(await pagesIn(page, 'fixtures/simple.pdf')).toBe(2);
+    // A second save is queued, not dropped.
+    await page.keyboard.press('Control+s');
+    await expect.poll(async () => (await state(page)).dirty, { timeout: 5000 }).toBe(false);
+    expect(await pagesIn(page, 'fixtures/simple.pdf')).toBe(1);
+  });
+
+  test('Ctrl+S does nothing when there is nothing to save', async ({ page }) => {
+    await open(page, 'simple.pdf');
+    await page.keyboard.press('Control+s');
+    await page.waitForTimeout(300);
+    expect(await file(page, 'fixtures/simple.pdf')).toBe(0);
+  });
+
+  test('undo after saving brings back "Edited", redo clears it', async ({ page }) => {
+    await open(page, 'simple.pdf');
+    await thumb(page, 2).click();
+    await page.keyboard.press('Delete');
+    await page.keyboard.press('Control+s');
+    await expect(page).toHaveTitle('simple.pdf');
+    await page.keyboard.press('Control+z');
+    await expect(page).toHaveTitle('simple.pdf — Edited');
+    await page.keyboard.press('Control+y');
+    await expect(page).toHaveTitle('simple.pdf');
+  });
+
+  test('a file changed by another app is not overwritten without asking', async ({ page }) => {
+    await open(page, 'simple.pdf');
+    await thumb(page, 2).click();
+    await page.keyboard.press('Delete');
+    await page.evaluate(() => (window as any).__pfwFiles.set('fixtures/simple.pdf', new Uint8Array([37, 80, 68, 70])));
+    await page.keyboard.press('Control+s');
+    const alert = page.getByRole('alertdialog');
+    await expect(alert).toContainText('has been changed by another application');
+    await alert.getByRole('button', { name: 'Cancel' }).click();
+    expect(await file(page, 'fixtures/simple.pdf')).toBe(4);
+    expect((await state(page)).dirty).toBe(true);
+    await page.keyboard.press('Control+s');
+    await alert.getByRole('button', { name: 'Replace' }).click();
+    await expect.poll(() => file(page, 'fixtures/simple.pdf')).toBeGreaterThan(4);
+    expect((await state(page)).dirty).toBe(false);
+  });
+
+  test('dragging the page you are viewing keeps it selected and in view', async ({ page }) => {
+    await open(page, 'outline.pdf');
+    await thumb(page, 4).click();
+    await expect.poll(async () => (await state(page)).currentPage).toBe(4);
+    await page.evaluate(() => (window as any).__pfw.editor.moveSelectionTo(0));
+    expect(await keys(page)).toEqual(['0:3', '0:0', '0:1', '0:2', '0:4', '0:5']);
+    expect(await selected(page)).toEqual(['1']);
+    await expect.poll(async () => (await state(page)).currentPage).toBe(1);
+    await expect(page.locator('#sidebar .thumb.current')).toHaveCount(1);
+  });
+
+  test('cut removes the pages it copied even if the selection changes', async ({ page }) => {
+    await open(page, 'simple.pdf');
+    await page.evaluate(() => ((window as any).__pfwClipboardDelayMs = 300));
+    await thumb(page, 1).click();
+    await page.keyboard.press('Control+x');
+    await thumb(page, 2).click();
+    await expect.poll(() => keys(page)).toEqual(['0:1', '0:2']);
+  });
+
+  test('Delete in the Contents tab does not delete pages', async ({ page }) => {
+    await open(page, 'outline.pdf');
+    await page.locator('#sidebar [data-tab="outline"]').click();
+    await page.getByRole('button', { name: 'Chapter 1', exact: true }).focus();
+    await page.keyboard.press('Delete');
+    await page.keyboard.press('Control+a');
+    await page.keyboard.press('Delete');
+    expect((await state(page)).numPages).toBe(6);
+  });
+
+  test('paste uses the in-window copy while the system clipboard is busy or failed', async ({ page }) => {
+    await open(page, 'simple.pdf');
+    // The system clipboard still holds an older PDF from elsewhere.
+    await page.evaluate(() => {
+      const w = window as any;
+      w.__pfwExternalClipboard = ['fixtures/mixed.pdf'];
+      w.__pfwClipboardDelayMs = 300;
+    });
+    await thumb(page, 3).click();
+    await page.keyboard.press('Control+c');
+    await page.keyboard.press('Control+v'); // before the system write has finished
+    await expect.poll(() => keys(page)).toEqual(['0:0', '0:1', '0:2', '0:2']);
+    await page.evaluate(() => {
+      const w = window as any;
+      w.__pfwExternalClipboard = ['fixtures/mixed.pdf'];
+      w.__pfwClipboardDelayMs = 0;
+      w.__pfwClipboardFail = true;
+    });
+    await thumb(page, 1).click();
+    await page.keyboard.press('Control+c');
+    await page.keyboard.press('Control+v');
+    await expect.poll(() => keys(page)).toEqual(['0:0', '0:0', '0:1', '0:2', '0:2']);
+  });
+
+  test('a merged password-protected file saves without its password', async ({ page }) => {
+    await open(page, 'simple.pdf');
+    await dropFixture(page, 'encrypted.pdf', 3, 'after');
+    const alert = page.getByRole('alertdialog');
+    await alert.locator('input.alert-input').fill('secret');
+    await page.keyboard.press('Enter');
+    await expect.poll(async () => (await state(page)).numPages).toBe(4);
+    await page.keyboard.press('Control+s');
+    await expect.poll(async () => (await state(page)).dirty).toBe(false);
+    expect(await pagesIn(page, 'fixtures/simple.pdf')).toBe(4);
+  });
+
+  test('a file restricted by an owner password can be edited and saved', async ({ page }) => {
+    await open(page, 'restricted-aes.pdf');
+    await thumb(page, 1).click();
+    await page.keyboard.press('Delete');
+    await page.keyboard.press('Control+s');
+    await expect.poll(async () => (await state(page)).dirty).toBe(false);
+    expect(await pagesIn(page, 'fixtures/restricted-aes.pdf')).toBe(2);
+    await expect(page.locator('.error-banner')).toBeHidden();
+  });
+
+  test('releasing a drag outside the list moves nothing', async ({ page }) => {
+    await open(page, 'simple.pdf');
+    await dragThumb(page, 3, 1, 'before', false);
+    await page.mouse.move(700, 400, { steps: 4 });
+    await page.mouse.up();
+    expect(await keys(page)).toEqual(['0:0', '0:1', '0:2']);
+    expect((await state(page)).dirty).toBe(false);
   });
 });

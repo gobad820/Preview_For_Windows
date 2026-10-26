@@ -33,6 +33,11 @@ export class History<T> {
     return this.pos < this.entries.length - 1;
   }
 
+  /** Identifies the current entry; pass it to `markSaved` once that state is on disk. */
+  get token(): number {
+    return this.entries[this.pos]!.seq;
+  }
+
   /** True when the current entry is not the one last saved (or opened). */
   get dirty(): boolean {
     return this.entries[this.pos]!.seq !== this.savedSeq;
@@ -58,8 +63,9 @@ export class History<T> {
     return this.current;
   }
 
-  markSaved(): void {
-    this.savedSeq = this.entries[this.pos]!.seq;
+  /** Marks the entry with `token` (default: the current one) as the state on disk. */
+  markSaved(token: number = this.token): void {
+    this.savedSeq = token;
   }
 
   /** Starts over for a new document: one clean entry, nothing to undo or redo. */

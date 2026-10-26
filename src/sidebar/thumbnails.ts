@@ -144,7 +144,11 @@ export class ThumbnailList {
     for (const t of next) frag.append(t.el);
     this.scroller.append(frag, this.indicator);
     this.relabel();
-    for (const t of next) if (t.near) void this.ensureRendered(t);
+    for (const t of next) {
+      if (t.near) void this.ensureRendered(t);
+      t.el.classList.remove('current');
+      t.el.removeAttribute('aria-current');
+    }
     this.current = 0;
     this.setCurrent(this.store.get().currentPage);
     this.renderSelection();
@@ -277,8 +281,9 @@ export class ThumbnailList {
   private readonly onPointerUp = (e: PointerEvent): void => {
     if (this.drag && e.pointerId === this.drag.pointerId) {
       const gap = this.drag.gap;
+      const inside = this.containsPoint({ x: e.clientX, y: e.clientY });
       this.cancelDrag();
-      this.deps.editor.moveSelectionTo(gap);
+      if (inside) this.deps.editor.moveSelectionTo(gap); // released elsewhere: nothing moves, like Preview
       return;
     }
     const p = this.press;

@@ -38,13 +38,12 @@ export class App {
   private lastPages: Composition = [];
   private openSeq = 0;
   private saveTimer = 0;
-  private saving = false;
-  /** Resolves the password prompt that is currently shown. */
-  private passwordReply: ((password: string | null) => void) | null = null;
-  private readonly passwordForm: HTMLFormElement;
-  private readonly passwordInput: HTMLInputElement;
-  private readonly passwordTitle: HTMLElement | null;
-  private readonly passwordMessage: HTMLElement;
+  /** Saves run one after another; each starts when the previous one has finished. */
+  private saveQueue: Promise<unknown> = Promise.resolve();
+  /** Size and modification time of the open file when it was read or last written. */
+  private fileStamp: string | null = null;
+  /** The close prompt that is showing, so repeated close requests share it. */
+  private closing: Promise<boolean> | null = null;
   private readonly overlay: HTMLElement;
 
   constructor(
@@ -54,22 +53,6 @@ export class App {
     const appEl = this.el('app');
     const banner = this.el('.error-banner');
     this.overlay = this.el('.drop-overlay');
-    this.passwordForm = this.el<HTMLFormElement>('.password-panel');
-    this.passwordInput = this.el<HTMLInputElement>('[data-password-input]');
-    this.passwordTitle = this.root.querySelector<HTMLElement>('.password-title');
-    this.passwordMessage = this.el('[data-password-message]');
-    this.passwordForm.addEventListener('submit', (e) => {
-      e.preventDefault();
-      if (this.passwordInput.value) this.answerPassword(this.passwordInput.value);
-    });
-    this.el('[data-password-cancel]').addEventListener('click', () => this.answerPassword(null));
-    this.passwordInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
-        this.answerPassword(null);
-      }
-    });
     this.viewer = new PdfViewer(this.el('viewer'), this.store, {
       onFirstPaint: () => {
         if (!this.metrics.firstPaint) this.metrics.firstPaint = performance.now();
@@ -295,7 +278,17 @@ export class App {
 
   /** Like Preview: an empty window loads the file; a window with a document opens a new one. */
   async openOrSpawn(path: string): Promise<void> {
-    if (this.doc && (await this.platform.openInNewWindow(path))) return;
+    if (this.doc) {
+      let spawned = false;
+      try {
+        spawned = await this.platform.openInNewWindow(path);
+      } catch (e) {
+        const reason = e instanceof Error ? e.message : String(e);
+        this.store.set({ error: `Can't open ${this.platform.fileName(path)} in a new window: ${reason}` });
+        return;
+      }
+      if (spawned) return;
+    }
     if (this.doc && !(await this.confirmDiscard())) return;
     await this.openPath(path);
   }
@@ -309,9 +302,11 @@ export class App {
     this.store.set({ status: this.doc ? 'ready' : 'loading', error: null });
     try {
       // pdf.js transfers the buffer to its worker, so a password retry re-reads the file.
+      const stamp = await this.platform.fileStamp(path).catch(() => null);
       const data = await this.platform.readFile(path);
       if (seq !== this.openSeq) return;
       await this.load(name, data, path, seq, password);
+      if (seq === this.openSeq) this.fileStamp = stamp;
     } catch (e) {
       if (seq !== this.openSeq) return;
       if (e instanceof PdfOpenError && e.kind === 'password') {
@@ -326,16 +321,39 @@ export class App {
 
   // ---- saving ---------------------------------------------------------------
 
-  /** Ctrl+S: writes over the opened file. */
-  async save(): Promise<boolean> {
-    const path = this.store.get().filePath;
-    if (!this.doc) return false;
-    if (!path) return this.saveAs();
-    return this.writeTo(path);
+  /** Ctrl+S: writes over the opened file. Nothing happens when there is nothing to save. */
+  save(): Promise<boolean> {
+    return this.queueSave(() => this.saveNow());
   }
 
   /** Ctrl+Shift+S: writes a copy and keeps editing the copy. */
-  async saveAs(): Promise<boolean> {
+  saveAs(): Promise<boolean> {
+    return this.queueSave(() => this.saveAsNow());
+  }
+
+  private queueSave(job: () => Promise<boolean>): Promise<boolean> {
+    const run = this.saveQueue.then(job, job);
+    this.saveQueue = run.catch(() => false);
+    return run;
+  }
+
+  private async saveNow(): Promise<boolean> {
+    const doc = this.doc;
+    const path = this.store.get().filePath;
+    if (!doc) return false;
+    if (!path) return this.saveAsNow();
+    // Rewriting an unedited file could only lose what this editor does not keep (forms, tags).
+    if (!doc.dirty) return true;
+    const changed = await this.changedOnDisk(path);
+    if (changed) {
+      const choice = await this.askChangedOnDisk(this.platform.fileName(path));
+      if (choice === 'cancel') return false;
+      if (choice === 'save-as') return this.saveAsNow();
+    }
+    return this.writeTo(path);
+  }
+
+  private async saveAsNow(): Promise<boolean> {
     if (!this.doc) return false;
     const s = this.store.get();
     const suggested = s.filePath ?? s.fileName ?? 'Untitled.pdf';
@@ -348,16 +366,18 @@ export class App {
     return true;
   }
 
+  /** Writes the document as it is right now; later edits stay marked as unsaved. */
   private async writeTo(path: string): Promise<boolean> {
     const doc = this.doc;
-    if (!doc || this.saving) return false;
-    this.saving = true;
+    if (!doc) return false;
     const name = this.platform.fileName(path);
+    const version = doc.version;
     try {
       const bytes = await doc.save();
       await this.platform.writeFile(path, bytes);
       if (this.doc === doc) {
-        doc.markSaved();
+        doc.markSaved(version);
+        this.fileStamp = await this.platform.fileStamp(path);
         this.store.set({ dirty: doc.dirty, error: null });
       }
       return true;
@@ -365,15 +385,41 @@ export class App {
       const reason = e instanceof Error ? e.message : String(e);
       this.store.set({ error: `Couldn't save ${name}: ${reason}` });
       return false;
-    } finally {
-      this.saving = false;
     }
   }
 
-  /** Before the window closes: true when it may close. */
-  private async confirmClose(): Promise<boolean> {
-    this.flushSave();
-    return this.confirmDiscard();
+  /** True when the file on disk is no longer the one this window read or last wrote. */
+  private async changedOnDisk(path: string): Promise<boolean> {
+    if (this.fileStamp === null) return false;
+    const now = await this.platform.fileStamp(path).catch(() => null);
+    return now !== null && now !== this.fileStamp;
+  }
+
+  private async askChangedOnDisk(name: string): Promise<'save-as' | 'overwrite' | 'cancel'> {
+    const { value } = await showAlert({
+      title: `“${name}” has been changed by another application.`,
+      message: 'Saving now would replace those changes. You can save your version as a new file instead.',
+      buttons: [
+        { label: 'Save As…', value: 'save-as', primary: true },
+        { label: 'Replace', value: 'overwrite' },
+        { label: 'Cancel', value: 'cancel', cancel: true },
+      ],
+    });
+    return value === 'save-as' || value === 'overwrite' ? value : 'cancel';
+  }
+
+  /** Before the window closes: true when it may close. Repeated requests share one prompt. */
+  private confirmClose(): Promise<boolean> {
+    this.closing ??= (async () => {
+      try {
+        this.flushSave();
+        await this.saveQueue; // a save in flight finishes before deciding
+        return await this.confirmDiscard();
+      } finally {
+        this.closing = null;
+      }
+    })();
+    return this.closing;
   }
 
   /**
@@ -448,8 +494,7 @@ export class App {
       await this.editor.insertFiles(paths, this.sidebar.thumbnails.gapAt(point.y));
       return;
     }
-    const first = paths[0];
-    if (first) await this.openOrSpawn(first);
+    for (const path of paths) await this.openOrSpawn(path);
   }
 
   /** Adds the PDF at `path` to the current document as a new source; null when skipped. */
@@ -529,15 +574,15 @@ export class App {
     const anchor = this.anchorAfterChange(this.lastPages, doc.pages);
     this.lastPages = doc.pages;
     this.findBar.structureChanged();
-    this.viewer.structureChanged(anchor);
+    this.viewer.structureChanged(anchor, 'center');
     this.sidebar.structureChanged();
     this.editor.structureChanged();
     this.store.set({ numPages: doc.numPages, dirty: doc.dirty });
   }
 
-  /** Keeps the page at the top of the viewport in view; if it was deleted, the next surviving page. */
+  /** Keeps the page in the middle of the view in view; if it was deleted, the next surviving page. */
   private anchorAfterChange(prev: Composition, next: Composition): DocPoint {
-    const top = this.viewer.topAnchor();
+    const top = this.viewer.centerAnchor();
     const positions = new Map(next.map((p, i) => [p.id, i]));
     const kept = prev[top.index] ? positions.get(prev[top.index]!.id) : undefined;
     if (kept !== undefined) return { index: kept, fraction: top.fraction };
@@ -583,26 +628,22 @@ export class App {
 
   // ---- password prompt --------------------------------------------------------
 
-  /** Shows the password prompt for `name`; resolves with the password, or null when cancelled. */
-  private askPassword(name: string, retry: boolean): Promise<string | null> {
-    this.passwordReply?.(null);
-    if (this.passwordTitle) this.passwordTitle.textContent = `“${name}” is password protected.`;
-    this.passwordMessage.textContent = retry ? 'Incorrect password. Try again.' : '';
-    this.passwordForm.hidden = false;
-    this.passwordInput.value = '';
-    this.passwordInput.focus();
-    return new Promise((resolve) => {
-      this.passwordReply = resolve;
+  /** Asks for `name`'s password in a modal alert; resolves with it, or null when cancelled. */
+  private async askPassword(name: string, retry: boolean): Promise<string | null> {
+    const { value, input } = await showAlert({
+      title: `“${name}” is password protected.`,
+      message: retry ? 'Incorrect password. Try again.' : 'Enter the password to open it.',
+      input: { type: 'password', placeholder: 'Password' },
+      buttons: [
+        { label: 'Open', value: 'open', primary: true },
+        { label: 'Cancel', value: 'cancel', cancel: true },
+      ],
     });
-  }
-
-  private answerPassword(password: string | null): void {
-    const reply = this.passwordReply;
-    this.passwordReply = null;
-    this.passwordForm.hidden = true;
-    this.passwordMessage.textContent = '';
-    if (password === null) this.el('viewer').focus();
-    reply?.(password);
+    if (value !== 'open' || !input) {
+      this.el('viewer').focus();
+      return null;
+    }
+    return input;
   }
 
   private el<T extends HTMLElement = HTMLElement>(idOrSelector: string): T {

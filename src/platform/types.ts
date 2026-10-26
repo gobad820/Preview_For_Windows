@@ -44,6 +44,8 @@ export interface Platform {
   /** Resolves with the chosen destination, or null when cancelled. */
   saveFileDialog(defaultPath: string): Promise<string | null>;
   writeFile(path: string, data: Uint8Array): Promise<void>;
+  /** Changes whenever the file's contents change (size and modification time); null if missing. */
+  fileStamp(path: string): Promise<string | null>;
   /** Opens `path` in a new window; resolves false when the host cannot (browser). */
   openInNewWindow(path: string): Promise<boolean>;
   /** Puts a PDF on the system clipboard as a file so other windows can paste it. */

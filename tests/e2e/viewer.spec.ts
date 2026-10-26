@@ -142,7 +142,7 @@ test.describe('viewer', () => {
   test('prompts for a password for an encrypted file', async ({ page }) => {
     await open(page, 'encrypted.pdf');
     expect((await state(page)).status).toBe('error');
-    await expect(page.locator('.password-panel')).toBeVisible();
+    await expect(page.getByRole('alertdialog')).toContainText('password protected');
     await expect(page.locator('.error-banner')).toBeHidden();
   });
 });

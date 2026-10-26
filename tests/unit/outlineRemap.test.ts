@@ -106,3 +106,22 @@ describe('remapOutline', () => {
     expect(outline0).toEqual(before);
   });
 });
+
+describe('entries without a page', () => {
+  test('keeps entries that open a web address, drops unresolvable ones', () => {
+    const outline = [
+      { title: 'Site', pageIndex: null, top: null, url: 'https://example.com/', children: [] },
+      { title: 'Broken', pageIndex: null, top: null, children: [] },
+      { title: 'Start', pageIndex: 0, top: null, children: [] },
+    ];
+    const pages = [
+      { id: 1, src: 0, index: 1 },
+      { id: 2, src: 0, index: 0 },
+    ];
+    const out = remapOutline([{ src: 0, nodes: outline }], pages);
+    expect(out.map((n) => [n.title, n.pageIndex])).toEqual([
+      ['Site', null],
+      ['Start', 1],
+    ]);
+  });
+});
