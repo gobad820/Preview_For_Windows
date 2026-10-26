@@ -1,8 +1,20 @@
 import { App } from './app';
 import { browserPlatform } from './platform/browser';
-import { hardenWebview, isTauri, tauriPlatform } from './platform/tauri';
+import { hardenWebview, isTauri, tauriPlatform, windowMaterial } from './platform/tauri';
+import type { Platform } from './platform/types';
 
-const tauri = isTauri();
-if (tauri) hardenWebview(document);
-const app = new App(tauri ? tauriPlatform() : browserPlatform(), document);
-void app.start();
+async function boot(): Promise<void> {
+  let platform: Platform;
+  if (isTauri()) {
+    hardenWebview(document);
+    platform = tauriPlatform(await windowMaterial());
+  } else {
+    platform = browserPlatform();
+  }
+  document.documentElement.dataset['material'] = platform.material;
+  document.documentElement.dataset['host'] = isTauri() ? 'tauri' : 'browser';
+  const app = new App(platform, document);
+  await app.start();
+}
+
+void boot();

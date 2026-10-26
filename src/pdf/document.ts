@@ -8,6 +8,7 @@ import type {
 } from 'pdfjs-dist/types/src/display/api';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type { PageSize } from '../types';
+import type { PageSource } from './source';
 
 if (typeof window !== 'undefined') {
   pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -56,7 +57,7 @@ export type PageText = TextItem[];
 
 const SIZE_BATCH = 25;
 
-export class PdfDocument {
+export class PdfDocument implements PageSource {
   readonly numPages: number;
   /** Unrotated page sizes in PDF points; entries default to page 1 until `loadSizes` fills them. */
   readonly sizes: PageSize[];
@@ -70,6 +71,8 @@ export class PdfDocument {
     private readonly task: PDFDocumentLoadingTask,
     private readonly proxy: PDFDocumentProxy,
     firstSize: PageSize,
+    /** Password the document was opened with, needed again to re-read it for saving. */
+    readonly password: string | undefined,
   ) {
     this.numPages = proxy.numPages;
     this.sizes = Array.from({ length: this.numPages }, () => ({ ...firstSize }));
@@ -92,9 +95,18 @@ export class PdfDocument {
       throw toOpenError(e);
     }
     const first = await proxy.getPage(1);
-    const doc = new PdfDocument(task, proxy, sizeOf(first));
+    const doc = new PdfDocument(task, proxy, sizeOf(first), opts.password);
     doc.pages.set(0, Promise.resolve(first));
     return doc;
+  }
+
+  /** Raw file bytes as pdf.js received them (still encrypted if the file was). */
+  getData(): Promise<Uint8Array> {
+    return this.proxy.getData();
+  }
+
+  pageKey(index: number): string {
+    return `0:${index}`;
   }
 
   getPage(index: number): Promise<PDFPageProxy> {

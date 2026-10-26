@@ -127,6 +127,7 @@ describe('initialState', () => {
       findIndex: -1,
       status: 'empty',
       error: null,
+      dirty: false,
     };
     expect(initialState).toEqual(expected);
   });

@@ -73,6 +73,8 @@ export interface ViewerState {
   findIndex: number;
   status: ViewerStatus;
   error: string | null;
+  /** The document has edits that are not saved. */
+  dirty: boolean;
 }
 
 export const initialState: ViewerState = {
@@ -91,4 +93,5 @@ export const initialState: ViewerState = {
   findIndex: -1,
   status: 'empty',
   error: null,
+  dirty: false,
 };

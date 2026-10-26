@@ -1,34 +1,72 @@
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { open } from '@tauri-apps/plugin-dialog';
-import type { Platform } from './types';
+import { open, save } from '@tauri-apps/plugin-dialog';
+import type { DragState, Platform, Point, WindowControls } from './types';
 
 export function isTauri(): boolean {
   return '__TAURI_INTERNALS__' in window;
 }
 
 const isPdf = (p: string) => /\.pdf$/i.test(p);
+const PDF_FILTER = [{ name: 'PDF Document', extensions: ['pdf'] }];
 
-/** Platform backed by the Tauri shell: native file reads, dialogs and OS drag-and-drop. */
-export function tauriPlatform(): Platform {
-  const dropHandlers = new Set<(path: string) => void>();
-  const dragHandlers = new Set<(over: boolean) => void>();
-  let over = false;
-  const setOver = (v: boolean) => {
-    if (over === v) return;
-    over = v;
-    dragHandlers.forEach((h) => h(v));
+/** Tauri reports physical pixels relative to the webview; the page works in CSS pixels. */
+const toCss = (p: { x: number; y: number }): Point => {
+  const dpr = window.devicePixelRatio || 1;
+  return { x: p.x / dpr, y: p.y / dpr };
+};
+
+function windowControls(): WindowControls {
+  const win = getCurrentWindow();
+  return {
+    minimize: () => win.minimize(),
+    toggleMaximize: () => win.toggleMaximize(),
+    close: () => win.close(),
+    isMaximized: () => win.isMaximized(),
+    onMaximizedChange(cb) {
+      let last: boolean | null = null;
+      let disposed = false;
+      const check = async () => {
+        const now = await win.isMaximized();
+        if (!disposed && now !== last) {
+          last = now;
+          cb(now);
+        }
+      };
+      void check();
+      const unlisten = win.onResized(() => void check());
+      return () => {
+        disposed = true;
+        void unlisten.then((u) => u());
+      };
+    },
   };
+}
+
+/** Platform backed by the Tauri shell: native file I/O, dialogs, OS drag-and-drop, window. */
+export function tauriPlatform(material: 'mica' | 'none' = 'none'): Platform {
+  const dropHandlers = new Set<(paths: string[], point: Point | null) => void>();
+  const dragHandlers = new Set<(state: DragState) => void>();
+  let dragPaths: string[] = [];
+  const emitDrag = (state: DragState) => dragHandlers.forEach((h) => h(state));
 
   void getCurrentWebview().onDragDropEvent((event) => {
     const p = event.payload;
-    if (p.type === 'enter') setOver(p.paths.some(isPdf));
-    else if (p.type === 'leave') setOver(false);
-    else if (p.type === 'drop') {
-      setOver(false);
-      const path = p.paths.find(isPdf);
-      if (path) dropHandlers.forEach((h) => h(path));
+    if (p.type === 'enter') {
+      dragPaths = p.paths.filter(isPdf);
+      emitDrag({ over: dragPaths.length > 0, point: toCss(p.position), paths: dragPaths });
+    } else if (p.type === 'over') {
+      if (dragPaths.length > 0) emitDrag({ over: true, point: toCss(p.position), paths: dragPaths });
+    } else if (p.type === 'leave') {
+      dragPaths = [];
+      emitDrag({ over: false, point: null, paths: [] });
+    } else if (p.type === 'drop') {
+      dragPaths = [];
+      emitDrag({ over: false, point: null, paths: [] });
+      const paths = p.paths.filter(isPdf);
+      const point = toCss(p.position);
+      if (paths.length > 0) dropHandlers.forEach((h) => h(paths, point));
     }
   });
 
@@ -38,14 +76,31 @@ export function tauriPlatform(): Platform {
       return new Uint8Array(buf);
     },
     async openFileDialog() {
-      const result = await open({
-        multiple: false,
-        directory: false,
-        filters: [{ name: 'PDF Document', extensions: ['pdf'] }],
-      });
+      const result = await open({ multiple: false, directory: false, filters: PDF_FILTER });
       if (typeof result === 'string') return result;
       if (Array.isArray(result)) return (result[0] as string | undefined) ?? null;
       return null;
+    },
+    async openFilesDialog() {
+      const result = await open({ multiple: true, directory: false, filters: PDF_FILTER });
+      if (Array.isArray(result)) return result as string[];
+      return typeof result === 'string' ? [result] : [];
+    },
+    async saveFileDialog(defaultPath) {
+      return (await save({ defaultPath, filters: PDF_FILTER })) ?? null;
+    },
+    async writeFile(path, data) {
+      await invoke('write_file', data, { headers: { 'x-path': encodeURIComponent(path) } });
+    },
+    async openInNewWindow(path) {
+      await invoke('open_window', { path });
+      return true;
+    },
+    async clipboardWritePdf(data) {
+      await invoke('clipboard_write_pdf', data);
+    },
+    clipboardReadPdfPaths() {
+      return invoke<string[] | null>('clipboard_read_pdf_paths');
     },
     startupFile() {
       return invoke<string | null>('startup_file');
@@ -58,13 +113,31 @@ export function tauriPlatform(): Platform {
       dragHandlers.add(cb);
       return () => dragHandlers.delete(cb);
     },
+    onCloseRequested(cb) {
+      const win = getCurrentWindow();
+      void win.onCloseRequested(async (event) => {
+        event.preventDefault();
+        if (await cb()) await win.destroy();
+      });
+    },
     setTitle(title) {
       return getCurrentWindow().setTitle(title);
     },
     fileName(path) {
       return path.split(/[\\/]/).pop() ?? path;
     },
+    windowControls: windowControls(),
+    material,
   };
+}
+
+/** Asks the shell which backdrop it applied (Mica on Windows 11). */
+export async function windowMaterial(): Promise<'mica' | 'none'> {
+  try {
+    return (await invoke<string>('window_material')) === 'mica' ? 'mica' : 'none';
+  } catch {
+    return 'none';
+  }
 }
 
 /** Browser-isms that make a desktop app feel wrong: context menus, reload keys, page zoom. */

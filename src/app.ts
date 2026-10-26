@@ -73,9 +73,12 @@ export class App {
       void this.platform.setTitle(name ?? 'Preview');
     });
     banner.addEventListener('click', () => this.store.set({ error: null }));
-    this.platform.onFileDrop((path) => void this.openPath(path));
-    this.platform.onDragState((over) => {
-      overlay.hidden = !over;
+    this.platform.onFileDrop((paths) => {
+      const first = paths[0];
+      if (first) void this.openOrSpawn(first);
+    });
+    this.platform.onDragState((state) => {
+      overlay.hidden = !state.over;
     });
     for (const b of root.querySelectorAll<HTMLElement>('.empty-state [data-action="open"]')) {
       b.addEventListener('click', () => void this.open());
@@ -218,7 +221,13 @@ export class App {
 
   async open(): Promise<void> {
     const path = await this.platform.openFileDialog();
-    if (path) await this.openPath(path);
+    if (path) await this.openOrSpawn(path);
+  }
+
+  /** Like Preview: an empty window loads the file; a window with a document opens a new one. */
+  async openOrSpawn(path: string): Promise<void> {
+    if (this.doc && (await this.platform.openInNewWindow(path))) return;
+    await this.openPath(path);
   }
 
   async openPath(path: string, password?: string): Promise<void> {
