@@ -14,7 +14,8 @@ export default defineConfig({
   webServer: {
     command: `npm run build && npm run preview -- --port ${port} --strictPort`,
     url: baseURL,
-    reuseExistingServer: !process.env.CI,
+    // Never reuse: a server left over from another checkout would silently test the wrong build.
+    reuseExistingServer: false,
     timeout: 120_000,
   },
   projects: [

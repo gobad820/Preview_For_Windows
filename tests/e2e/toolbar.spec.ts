@@ -77,10 +77,11 @@ test.describe('toolbar', () => {
     expect((await state(page)).fileName).toBe('한글 문서.pdf');
   });
 
-  test('open button uses a file chooser', async ({ page }) => {
+  test('Open… in the ⋯ menu uses a file chooser', async ({ page }) => {
     await page.goto('/');
     const chooser = page.waitForEvent('filechooser');
-    await page.locator('#toolbar [data-action="open"]').click();
+    await page.locator('#toolbar [data-action="more"]').click();
+    await page.getByRole('menuitem', { name: 'Open…' }).click();
     const fc = await chooser;
     await fc.setFiles(fileURLToPath(new URL('../fixtures/simple.pdf', import.meta.url)));
     await expect.poll(async () => (await state(page)).numPages).toBe(3);

@@ -1,16 +1,38 @@
-/** Inline 16px stroke icons (Fluent-like). All use currentColor. */
+/**
+ * Inline stroke icons in the spirit of SF Symbols (regular weight). Original drawings on a
+ * 24-unit grid shown at 18px, so the 2-unit stroke renders as 1.5px. All use currentColor.
+ */
 const svg = (body: string) =>
-  `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+  `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ` +
+  `stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${body}</svg>`;
+
+/** Filled shapes inside a stroked icon. */
+const solid = (d: string) => `<path fill="currentColor" stroke="none" fill-rule="evenodd" d="${d}"/>`;
+
+const LENS = '<circle cx="10.5" cy="10.5" r="6.75"/><path d="m15.5 15.5 5 5"/>';
 
 export const icons = {
-  sidebar: svg('<rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2"/><path d="M6 2.75v10.5"/>'),
-  open: svg('<path d="M1.75 4.25a1.5 1.5 0 0 1 1.5-1.5h3l1.5 1.5h5a1.5 1.5 0 0 1 1.5 1.5v6a1.5 1.5 0 0 1-1.5 1.5h-10a1.5 1.5 0 0 1-1.5-1.5z"/>'),
-  minus: svg('<path d="M3.5 8h9"/>'),
-  plus: svg('<path d="M8 3.5v9M3.5 8h9"/>'),
-  rotate: svg('<path d="M12.5 6.5a5 5 0 1 0 .5 3"/><path d="M13 2.5v4h-4"/>'),
-  search: svg('<circle cx="7" cy="7" r="4.25"/><path d="M10.2 10.2 13.5 13.5"/>'),
-  chevronDown: svg('<path d="M4 6.5 8 10.5l4-4"/>'),
-  chevronUp: svg('<path d="M4 9.5 8 5.5l4 4"/>'),
-  close: svg('<path d="M4 4l8 8M12 4l-8 8"/>'),
-  check: svg('<path d="M3 8.5l3 3 7-7"/>'),
+  sidebar: svg('<rect x="3" y="4.5" width="18" height="15" rx="3"/><path d="M9.5 4.5v15"/><path d="M5.9 8.5h1.2M5.9 11.5h1.2"/>'),
+  zoomIn: svg(`${LENS}<path d="M7.75 10.5h5.5M10.5 7.75v5.5"/>`),
+  zoomOut: svg(`${LENS}<path d="M7.75 10.5h5.5"/>`),
+  rotateLeft: svg('<rect x="4" y="11" width="10" height="10" rx="2"/><path d="M19.5 15V12a6 6 0 0 0-6-6H8.5"/><path d="m11 3.5-2.5 2.5L11 8.5"/>'),
+  rotateRight: svg('<rect x="10" y="11" width="10" height="10" rx="2"/><path d="M4.5 15V12a6 6 0 0 1 6-6h5"/><path d="m13 3.5 2.5 2.5L13 8.5"/>'),
+  ellipsis: svg(
+    '<circle cx="12" cy="12" r="9"/>' +
+      solid('M8 10.8a1.2 1.2 0 1 1 0 2.4a1.2 1.2 0 1 1 0-2.4ZM12 10.8a1.2 1.2 0 1 1 0 2.4a1.2 1.2 0 1 1 0-2.4ZM16 10.8a1.2 1.2 0 1 1 0 2.4a1.2 1.2 0 1 1 0-2.4Z'),
+  ),
+  search: svg(LENS),
+  chevronUp: svg('<path d="m6.5 14.75 5.5-5.5 5.5 5.5"/>'),
+  chevronDown: svg('<path d="m6.5 9.25 5.5 5.5 5.5-5.5"/>'),
+  chevronLeft: svg('<path d="m14.75 6.5-5.5 5.5 5.5 5.5"/>'),
+  chevronRight: svg('<path d="m9.25 6.5 5.5 5.5-5.5 5.5"/>'),
+  closeSmall: svg('<path d="m7.5 7.5 9 9M16.5 7.5l-9 9"/>'),
+  document: svg('<path d="M7.5 3H13l5 5v11.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 19.5v-15A1.5 1.5 0 0 1 7.5 3Z"/><path d="M13 3v5h5"/>'),
+  checkmark: svg('<path d="m5.5 12.5 4.5 4.5 8.5-10"/>'),
+  xmarkCircleFill: svg(
+    solid(
+      'M12 2.5a9.5 9.5 0 1 1 0 19a9.5 9.5 0 1 1 0-19Z' +
+        'M12 10.59 14.79 7.79 16.21 9.21 13.41 12 16.21 14.79 14.79 16.21 12 13.41 9.21 16.21 7.79 14.79 10.59 12 7.79 9.21 9.21 7.79Z',
+    ),
+  ),
 };

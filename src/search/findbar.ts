@@ -1,5 +1,6 @@
-import type { PdfDocument } from '../pdf/document';
+import type { PageSource } from '../pdf/source';
 import type { Store, ViewerState } from '../store';
+import { icons } from '../ui/icons';
 import type { PdfViewer } from '../viewer/viewer';
 import {
   buildPageIndex,
@@ -18,7 +19,7 @@ import {
  * / `#appendText`): the layer creates exactly one `<span>` per text content item
  * whose `str` is defined and pushes it to `textDivs`, in item order; marked-content
  * items (`beginMarkedContent`, `endMarkedContent`, …) only nest a container and
- * produce no div. `PdfDocument.getPageText` keeps precisely the items with a `str`,
+ * produce no div. `PageSource.getPageText` keeps precisely the items with a `str`,
  * so `viewer.getTextDivs(i)[k]` is the span of `getPageText(i)[k]`, and
  * `matchToItemSpans` offsets apply to that span's text verbatim. (An empty-string
  * item still gets a div, which is simply never appended; matches never cover it.)
@@ -35,7 +36,7 @@ const NUDGE_MARGIN_PX = 8;
 export interface FindBarDeps {
   viewer: PdfViewer;
   /** Document to search; `setDocument` replaces it when another file opens. */
-  doc?: PdfDocument | null;
+  doc?: PageSource | null;
 }
 
 /** A character range inside one text item, tagged with the match it belongs to. */
@@ -50,10 +51,10 @@ type RangeMap = Map<number, Map<number, ItemRange[]>>;
 
 // ---- text index (memoised per document) -------------------------------------
 
-const indexCache = new WeakMap<PdfDocument, Promise<PageTextIndex[]>>();
-const indexReady = new WeakSet<PdfDocument>();
+const indexCache = new WeakMap<PageSource, Promise<PageTextIndex[]>>();
+const indexReady = new WeakSet<PageSource>();
 
-async function buildIndex(doc: PdfDocument): Promise<PageTextIndex[]> {
+async function buildIndex(doc: PageSource): Promise<PageTextIndex[]> {
   const pages: PageTextIndex[] = [];
   for (let from = 0; from < doc.numPages; from += INDEX_BATCH) {
     const to = Math.min(from + INDEX_BATCH, doc.numPages);
@@ -68,7 +69,7 @@ async function buildIndex(doc: PdfDocument): Promise<PageTextIndex[]> {
   return pages;
 }
 
-function textIndex(doc: PdfDocument): Promise<PageTextIndex[]> {
+function textIndex(doc: PageSource): Promise<PageTextIndex[]> {
   let p = indexCache.get(doc);
   if (!p) {
     p = buildIndex(doc);
@@ -81,23 +82,19 @@ function textIndex(doc: PdfDocument): Promise<PageTextIndex[]> {
 
 // ---- DOM helpers --------------------------------------------------------------
 
-const svg = (path: string): string =>
-  `<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" ` +
-  `stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
-const ICON_SEARCH = svg('<circle cx="7" cy="7" r="4.25"/><path d="m10.25 10.25 3.25 3.25"/>');
-const ICON_UP = svg('<path d="m3.5 10 4.5-4.5 4.5 4.5"/>');
-const ICON_DOWN = svg('<path d="m3.5 6 4.5 4.5L12.5 6"/>');
-const ICON_CLOSE = svg('<path d="m4 4 8 8M12 4l-8 8"/>');
-
+/** Rounded search field (glyph, input, count, end-search button) followed by previous / next. */
 const TEMPLATE = `
-  <span class="find-glyph" aria-hidden="true">${ICON_SEARCH}</span>
-  <input type="text" data-find-input placeholder="Find" aria-label="Find in document"
-         autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
-  <span class="find-count" data-find-count aria-live="polite"></span>
-  <span class="find-sep" aria-hidden="true"></span>
-  <button type="button" class="find-btn" data-action="find-prev" title="Previous match (Shift+Enter)" aria-label="Previous match">${ICON_UP}</button>
-  <button type="button" class="find-btn" data-action="find-next" title="Next match (Enter)" aria-label="Next match">${ICON_DOWN}</button>
-  <button type="button" class="find-btn" data-action="find-close" title="Close (Esc)" aria-label="Close find bar">${ICON_CLOSE}</button>
+  <div class="find-field">
+    <span class="find-glyph" aria-hidden="true">${icons.search}</span>
+    <input type="text" data-find-input placeholder="Search" aria-label="Find in document"
+           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+    <span class="find-count" data-find-count aria-live="polite"></span>
+    <button type="button" class="find-clear" data-action="find-close" title="Done (Esc)" aria-label="Close find bar">${icons.xmarkCircleFill}</button>
+  </div>
+  <div class="find-nav">
+    <button type="button" class="find-btn" data-action="find-prev" title="Previous match (Shift+Enter)" aria-label="Previous match">${icons.chevronUp}</button>
+    <button type="button" class="find-btn" data-action="find-next" title="Next match (Enter)" aria-label="Next match">${icons.chevronDown}</button>
+  </div>
 `;
 
 function must<T extends Element>(root: ParentNode, selector: string): T {
@@ -200,7 +197,7 @@ export class FindBar {
   private readonly prevBtn: HTMLButtonElement;
   private readonly nextBtn: HTMLButtonElement;
   private readonly offTextLayer: () => void;
-  private doc: PdfDocument | null;
+  private doc: PageSource | null;
   /** Query whose results are currently shown ('' while idle or closed). */
   private activeQuery = '';
   private matches: Match[] = [];
@@ -280,7 +277,18 @@ export class FindBar {
   }
 
   /** Swaps the searched document; an open bar re-runs its query against the new one. */
-  setDocument(doc: PdfDocument | null): void {
+  /** Pages moved, were inserted or deleted: rebuild the text index and search again. */
+  structureChanged(): void {
+    const doc = this.doc;
+    if (!doc) return;
+    indexCache.delete(doc);
+    indexReady.delete(doc);
+    this.cancelPending();
+    this.reset();
+    if (this.store.get().findOpen && this.input.value) void this.search(this.input.value, false);
+  }
+
+  setDocument(doc: PageSource | null): void {
     if (doc === this.doc) return;
     this.doc = doc;
     this.cancelPending();
@@ -334,7 +342,7 @@ export class FindBar {
     this.seq++;
   }
 
-  private async search(query: string): Promise<void> {
+  private async search(query: string, reveal = true): Promise<void> {
     this.cancelPending();
     const seq = this.seq;
     this.activeQuery = query;
@@ -359,7 +367,7 @@ export class FindBar {
     this.current = this.matches.length > 0 ? 0 : -1;
     for (const index of this.viewer.getMountedPages().keys()) this.applyPage(index);
     this.publish();
-    this.reveal(seq);
+    if (reveal) this.reveal(seq);
   }
 
   private step(dir: 1 | -1): void {
