@@ -7,6 +7,8 @@
 #   powershell -File cdp-windows.ps1 -Exe C:\path\Preview.exe -Steps C:\path\steps.json
 #     [-Pdf C:\path\doc.pdf] [-Port 9333] [-Shot C:\path\page.png] [-KeepOpen]
 # steps.json: [ { "name": "label", "eval": "expression", "waitMs": 300 }, ... ]
+#   A step may instead carry "ps": a PowerShell snippet run on the host between page steps
+#   ($proc is the launched app process). A failing step is reported and the run continues.
 param(
   [Parameter(Mandatory = $true)][string]$Exe,
   [Parameter(Mandatory = $true)][string]$Steps,
@@ -69,19 +71,27 @@ for ($i = 0; $i -lt 100; $i++) {
 
 $list = Get-Content -Raw -Encoding UTF8 -Path $Steps | ConvertFrom-Json
 foreach ($step in $list) {
-  $res = Send-Cdp 'Runtime.evaluate' @{ expression = $step.eval; awaitPromise = $true; returnByValue = $true }
   $out = @{ step = $step.name }
-  if ($res.result.exceptionDetails) {
-    $out.error = [string]($res.result.exceptionDetails.exception.description)
-    if (-not $out.error) { $out.error = [string]$res.result.exceptionDetails.text }
-  } else {
-    $out.value = $res.result.result.value
+  try {
+    if ($step.ps) {
+      $out.value = (Invoke-Expression $step.ps | Out-String).Trim()
+    } else {
+      $res = Send-Cdp 'Runtime.evaluate' @{ expression = $step.eval; awaitPromise = $true; returnByValue = $true }
+      if ($res.result.exceptionDetails) {
+        $out.error = [string]($res.result.exceptionDetails.exception.description)
+        if (-not $out.error) { $out.error = [string]$res.result.exceptionDetails.text }
+      } else {
+        $out.value = $res.result.result.value
+      }
+    }
+  } catch {
+    $out.error = [string]$_.Exception.Message
   }
   Write-Output ($out | ConvertTo-Json -Depth 20 -Compress)
   if ($step.waitMs) { Start-Sleep -Milliseconds ([int]$step.waitMs) }
 }
 
-if ($Shot -ne "") {
+if ($Shot -ne "" -and $ws.State -eq 'Open') {
   $cap = Send-Cdp 'Page.captureScreenshot' @{ format = 'png' }
   [IO.File]::WriteAllBytes($Shot, [Convert]::FromBase64String($cap.result.data))
   Write-Output ('{"shot":"' + ($Shot -replace '\\', '\\') + '"}')
