@@ -7,6 +7,7 @@ import type {
   TextItem,
 } from 'pdfjs-dist/types/src/display/api';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import { hasOwnMarker } from '../annot/marker';
 import type { PageSize } from '../types';
 import type { PageSource } from './source';
 
@@ -75,6 +76,8 @@ export class PdfDocument implements PageSource {
     firstSize: PageSize,
     /** Password the document was opened with, needed again to re-read it for saving. */
     readonly password: string | undefined,
+    /** The file contains annotations written by this app (found by a byte search, not parsed). */
+    readonly ownMarker: boolean,
   ) {
     this.numPages = proxy.numPages;
     this.sizes = Array.from({ length: this.numPages }, () => ({ ...firstSize }));
@@ -82,6 +85,8 @@ export class PdfDocument implements PageSource {
 
   static async load(data: Uint8Array, opts: LoadOptions = {}): Promise<PdfDocument> {
     const assets = opts.assets ?? BROWSER_ASSETS;
+    // pdf.js transfers the buffer to its worker, so look for our annotations first.
+    const ownMarker = hasOwnMarker(data);
     const task = pdfjs.getDocument({
       data,
       password: opts.password,
@@ -97,7 +102,7 @@ export class PdfDocument implements PageSource {
       throw toOpenError(e);
     }
     const first = await proxy.getPage(1);
-    const doc = new PdfDocument(task, proxy, sizeOf(first), opts.password);
+    const doc = new PdfDocument(task, proxy, sizeOf(first), opts.password, ownMarker);
     doc.pages.set(0, Promise.resolve(first));
     return doc;
   }
@@ -109,6 +114,11 @@ export class PdfDocument implements PageSource {
     } catch {
       return null;
     }
+  }
+
+  /** Stops pdf.js from drawing these annotations (pdf.js ids, e.g. "12R"); overlays draw them instead. */
+  hideAnnotations(ids: readonly string[]): void {
+    for (const id of ids) this.proxy.annotationStorage.setValue(id, { noView: true });
   }
 
   /** Raw file bytes as pdf.js received them (still encrypted if the file was). */

@@ -243,11 +243,77 @@ def forms_actions(src, path):
         w.write(f)
 
 
+def rotated(path):
+    """Page 1 has /Rotate 90: its user space is A4 landscape (842 x 595 pt) and viewers show it
+    portrait, with the text running down the screen. Page 2 is upright A4."""
+    c = canvas.Canvas(path, pagesize=A4)
+    # reportlab writes a rotated page's MediaBox swapped, so user space is 842 wide and 595 tall.
+    c.setPageRotation(90)
+    body(c, ["Rotated page one", "The quick brown fox jumps over the lazy dog."], y_start=180 * mm)
+    c.showPage()
+    c.setPageRotation(0)
+    body(c, ["Upright page two", "Pack my box with five dozen liquor jugs."])
+    c.showPage()
+    c.save()
+
+
+def annotated(src, path):
+    """Page 1 carries annotations made by another application: a highlight with its own
+    appearance stream, a sticky note with a popup, and a reply to that note (/IRT)."""
+    from pypdf import PdfReader, PdfWriter
+    from pypdf.generic import (ArrayObject, DecodedStreamObject, DictionaryObject, FloatObject,
+                               NameObject, NumberObject, TextStringObject)
+    w = PdfWriter(clone_from=PdfReader(src))
+    p1 = w.pages[0]
+    N = NameObject
+
+    def nums(*v):
+        return ArrayObject([FloatObject(x) for x in v])
+
+    gs = DictionaryObject({N("/Type"): N("/ExtGState"), N("/BM"): N("/Multiply"), N("/ca"): FloatObject(1)})
+    hl_ap = DecodedStreamObject()
+    hl_ap.set_data(b"/G0 gs 1 0.9 0 rg 70 740 m 200 740 l 200 758 l 70 758 l h f")
+    hl_ap.update({N("/Type"): N("/XObject"), N("/Subtype"): N("/Form"), N("/BBox"): nums(70, 740, 200, 758),
+                  N("/Resources"): DictionaryObject({N("/ExtGState"): DictionaryObject({N("/G0"): gs})})})
+    highlight = w._add_object(DictionaryObject({
+        N("/Type"): N("/Annot"), N("/Subtype"): N("/Highlight"), N("/Rect"): nums(70, 740, 200, 758),
+        N("/QuadPoints"): nums(70, 758, 200, 758, 70, 740, 200, 740), N("/C"): nums(1, 0.9, 0),
+        N("/T"): TextStringObject("Acrobat User"), N("/Contents"): TextStringObject("foreign highlight"),
+        N("/NM"): TextStringObject("foreign-hl-1"), N("/F"): NumberObject(4),
+        N("/AP"): DictionaryObject({N("/N"): w._add_object(hl_ap)})}))
+    note = w._add_object(DictionaryObject({
+        N("/Type"): N("/Annot"), N("/Subtype"): N("/Text"), N("/Rect"): nums(400, 700, 420, 720),
+        N("/Name"): N("/Comment"), N("/T"): TextStringObject("Acrobat User"),
+        N("/Contents"): TextStringObject("foreign note"), N("/NM"): TextStringObject("foreign-note-1"),
+        N("/F"): NumberObject(28), N("/C"): nums(1, 0.82, 0)}))
+    popup = w._add_object(DictionaryObject({
+        N("/Type"): N("/Annot"), N("/Subtype"): N("/Popup"), N("/Rect"): nums(420, 620, 580, 720),
+        N("/Parent"): note, N("/Open"): FloatObject(0), N("/F"): NumberObject(28)}))
+    note.get_object()[N("/Popup")] = popup
+    reply = w._add_object(DictionaryObject({
+        N("/Type"): N("/Annot"), N("/Subtype"): N("/Text"), N("/Rect"): nums(400, 700, 420, 720),
+        N("/IRT"): note, N("/T"): TextStringObject("Reviewer"), N("/Contents"): TextStringObject("foreign reply"),
+        N("/NM"): TextStringObject("foreign-reply-1"), N("/F"): NumberObject(28)}))
+    p1[N("/Annots")] = ArrayObject([highlight, note, popup, reply])
+    with open(path, "wb") as f:
+        w.write(f)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--font", default=None, help="TTF with Korean glyphs to embed")
+    ap.add_argument("--only", default=None, help="comma-separated fixture names to (re)generate, e.g. rotated,annotated")
     args = ap.parse_args()
     os.makedirs(OUT, exist_ok=True)
+    if args.only:
+        jobs = {
+            "rotated": lambda: rotated(os.path.join(OUT, "rotated.pdf")),
+            "annotated": lambda: annotated(os.path.join(OUT, "simple.pdf"), os.path.join(OUT, "annotated.pdf")),
+        }
+        for name in args.only.split(","):
+            jobs[name]()
+            print(f"{name}.pdf\t{os.path.getsize(os.path.join(OUT, name + '.pdf'))} bytes")
+        return
     simple(os.path.join(OUT, "simple.pdf"))
     mixed(os.path.join(OUT, "mixed.pdf"))
     long300(os.path.join(OUT, "long300.pdf"))
@@ -259,6 +325,8 @@ def main():
     links_named(os.path.join(OUT, "links.pdf"), os.path.join(OUT, "links-named.pdf"))
     restricted(os.path.join(OUT, "simple.pdf"), os.path.join(OUT, "restricted-rc4.pdf"), os.path.join(OUT, "restricted-aes.pdf"))
     forms_actions(os.path.join(OUT, "simple.pdf"), os.path.join(OUT, "forms-actions.pdf"))
+    rotated(os.path.join(OUT, "rotated.pdf"))
+    annotated(os.path.join(OUT, "simple.pdf"), os.path.join(OUT, "annotated.pdf"))
     for name in sorted(os.listdir(OUT)):
         print(f"{name}\t{os.path.getsize(os.path.join(OUT, name))} bytes")
 

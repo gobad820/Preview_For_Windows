@@ -66,4 +66,6 @@ export interface Platform {
   readonly windowControls: WindowControls | null;
   /** Window backdrop: 'mica' makes chrome backgrounds translucent. */
   readonly material: 'mica' | 'none';
+  /** Bytes of the font text box annotations are saved in (Malgun Gothic), or null when unavailable. */
+  loadAnnotationFont(): Promise<Uint8Array | null>;
 }
