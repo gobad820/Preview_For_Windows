@@ -377,15 +377,15 @@ test.describe('sidebar look', () => {
 });
 
 test.describe('window states', () => {
-  test('empty window: app icon tile, title, blue Open… button and a hint', async ({ page }) => {
+  test('empty window: the splash, title, blue Open… button and a hint', async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'light' });
     await boot(page);
-    const glyph = page.locator('.empty-state .empty-glyph');
-    await expect(glyph).toBeVisible();
-    expect(await style(page, '.empty-state .empty-glyph', 'background-image')).toMatch(/^url\(/);
-    const g = (await glyph.boundingBox())!;
-    expect(g.width).toBe(96);
-    expect(g.height).toBe(96);
+    const splash = page.locator('.empty-state .empty-splash');
+    await expect(splash).toBeVisible();
+    await expect.poll(() => splash.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBe(1000);
+    const g = (await splash.boundingBox())!;
+    expect(g.width).toBeLessThanOrEqual(600);
+    expect(Math.abs(g.width / g.height - 10 / 7)).toBeLessThan(0.02);
     await expect(page.getByRole('heading', { name: 'Open a PDF' })).toBeVisible();
     const button = page.locator('.empty-state [data-action="open"]');
     await expect(button).toHaveText('Open…');
@@ -444,4 +444,22 @@ test.describe('window states', () => {
     expect(Math.round(open.y)).toBe(Math.round(cancel.y)); // two buttons side by side
     expect(open.x).toBeGreaterThan(cancel.x); // primary on the right, as on macOS
   });
+});
+
+test('About Preview shows the splash and the version, and closes with a click or Esc', async ({ page }) => {
+  await boot(page);
+  await page.click('[data-action="more"]');
+  await page.getByRole('menuitem', { name: 'About Preview' }).click();
+  const about = page.getByRole('dialog', { name: 'About Preview' });
+  await expect(about).toBeVisible();
+  await expect(about.locator('img')).toHaveJSProperty('complete', true);
+  await expect(about).toContainText(/Version \d+\.\d+\.\d+/);
+  await page.keyboard.press('Escape');
+  await expect(about).toBeHidden();
+  await page.click('[data-action="more"]');
+  await page.getByRole('menuitem', { name: 'About Preview' }).click();
+  // A click right after a menu closes is swallowed by the menu (src/ui/menu.ts); click later.
+  await page.waitForTimeout(700);
+  await page.mouse.click(10, 400);
+  await expect(about).toBeHidden();
 });

@@ -12,6 +12,7 @@ import { createStore, initialState, type DisplayMode, type SidebarTab, type Stor
 import { Toolbar } from './toolbar/toolbar';
 import type { Rotation } from './types';
 import type { DocPoint } from './viewer/layout';
+import { showAbout } from './ui/about';
 import { showAlert } from './ui/dialog';
 import { showMenu, type MenuItem } from './ui/menu';
 import { PdfViewer } from './viewer/viewer';
@@ -586,6 +587,8 @@ export class App {
       'separator',
       { label: 'Undo', shortcut: 'Ctrl+Z', disabled: !doc?.canUndo, action: () => this.editor.undo() },
       { label: 'Redo', shortcut: 'Ctrl+Y', disabled: !doc?.canRedo, action: () => this.editor.redo() },
+      'separator',
+      { label: 'About Preview', action: () => showAbout() },
     ]);
   }
 

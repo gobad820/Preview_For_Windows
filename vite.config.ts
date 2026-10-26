@@ -1,5 +1,5 @@
 import { defineConfig, type Plugin } from 'vite';
-import { cpSync, createReadStream, existsSync, statSync } from 'node:fs';
+import { cpSync, createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
 import { join, normalize } from 'node:path';
 
 type Handler = (req: any, res: any, next: () => void) => void;
@@ -61,8 +61,11 @@ function pdfjsAssets(): Plugin {
   };
 }
 
+const { version } = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')) as { version: string };
+
 export default defineConfig({
   publicDir: false,
+  define: { __APP_VERSION__: JSON.stringify(version) },
   plugins: [fixtureServer(), pdfjsAssets()],
   clearScreen: false,
   server: { port: 1420, strictPort: true },

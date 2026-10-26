@@ -152,12 +152,14 @@ prints each result as JSON. It never clicks or types, so it does not interfere
 with whoever is using the desktop. This is how saving and merging were checked
 against real files on Windows.
 
-### App icon
+### App icon and splash
 
-The icon is pixel art in the spirit of 2000s Windows apps: `src-tauri/icons/source/`
-holds the 16 px and 32 px drawings, and `node scripts/make-icons.mjs` rasterizes them
-(Chromium through Playwright) and writes every icon file, enlarging the 32 px raster
-without smoothing for the big sizes (needs Python with Pillow; set `PYTHON` if needed).
+The icon and the splash (shown on the empty window and in About Preview) are original
+artwork in the style of early-2000s desktop splash screens: a blue filter ring magnifying
+an eye over a beach. `src/assets/splash.svg` is the splash; `src-tauri/icons/source/`
+holds the icon (`icon.svg`, plus a simplified `icon-16.svg`), and
+`node scripts/make-icons.mjs` rasterizes them (Chromium through Playwright) into every icon
+file (needs Python with Pillow; set `PYTHON` if needed).
 
 ### Checking saved annotations in other viewers
 
