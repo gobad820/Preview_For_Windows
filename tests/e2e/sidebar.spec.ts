@@ -120,17 +120,17 @@ test.describe('sidebar', () => {
     await expect(chapter).toBeVisible();
     await expect(chapter).toHaveAttribute('data-page', '1');
     await expect(page.getByRole('button', { name: 'Appendix', exact: true })).toBeVisible();
-    await expect(section).toBeHidden();
-
-    await page.getByRole('button', { name: 'Expand Chapter 1' }).click();
+    // Top-level chapters start expanded so their sections are one click away.
     await expect(section).toBeVisible();
     await expect(section).toHaveAttribute('data-page', '2');
-    await section.click();
-    await expect.poll(async () => (await state(page)).currentPage).toBe(2);
-    expect(await activeId(page)).toBe('viewer');
 
     await page.getByRole('button', { name: 'Collapse Chapter 1' }).click();
     await expect(section).toBeHidden();
+    await page.getByRole('button', { name: 'Expand Chapter 1' }).click();
+    await expect(section).toBeVisible();
+    await section.click();
+    await expect.poll(async () => (await state(page)).currentPage).toBe(2);
+    expect(await activeId(page)).toBe('viewer');
 
     await thumbsTab.click();
     expect((await state(page)).sidebarTab).toBe('thumbnails');

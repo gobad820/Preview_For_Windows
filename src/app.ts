@@ -11,6 +11,9 @@ import type { Rotation } from './types';
 import { PdfViewer } from './viewer/viewer';
 import { zoomIn, zoomOut } from './viewer/zoom';
 
+/** Horizontal pan per arrow-key press when the page is wider than the viewport (CSS px). */
+const PAN_STEP = 80;
+
 export interface AppMetrics {
   openStart: number;
   firstPaint: number;
@@ -26,6 +29,11 @@ export class App {
   private doc: PdfDocument | null = null;
   private openSeq = 0;
   private saveTimer = 0;
+  /** File waiting for a password after a PasswordException. */
+  private pendingPassword: { path: string; name: string } | null = null;
+  private readonly passwordForm: HTMLFormElement;
+  private readonly passwordInput: HTMLInputElement;
+  private readonly passwordMessage: HTMLElement;
 
   constructor(
     private readonly platform: Platform,
@@ -34,6 +42,20 @@ export class App {
     const appEl = this.el('app');
     const banner = this.el('.error-banner');
     const overlay = this.el('.drop-overlay');
+    this.passwordForm = this.el<HTMLFormElement>('.password-panel');
+    this.passwordInput = this.el<HTMLInputElement>('[data-password-input]');
+    this.passwordMessage = this.el('[data-password-message]');
+    this.passwordForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      this.submitPassword();
+    });
+    this.el('[data-password-cancel]').addEventListener('click', () => this.cancelPassword());
+    this.passwordInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        this.cancelPassword();
+      }
+    });
     this.viewer = new PdfViewer(this.el('viewer'), this.store, {
       onFirstPaint: () => {
         if (!this.metrics.firstPaint) this.metrics.firstPaint = performance.now();
@@ -89,6 +111,7 @@ export class App {
     window.addEventListener('beforeunload', () => this.flushSave());
 
     (window as unknown as { __pfw: unknown }).__pfw = {
+      app: this,
       store: this.store,
       viewer: this.viewer,
       toolbar: this.toolbar,
@@ -161,10 +184,12 @@ export class App {
         this.toolbar.focusPageInput();
         break;
       case 'next-page':
-        this.viewer.goToPage(s.currentPage);
+        if (this.viewer.overflowsHorizontally()) this.viewer.panBy(PAN_STEP);
+        else this.viewer.goToPage(s.currentPage);
         break;
       case 'prev-page':
-        this.viewer.goToPage(s.currentPage - 2);
+        if (this.viewer.overflowsHorizontally()) this.viewer.panBy(-PAN_STEP);
+        else this.viewer.goToPage(s.currentPage - 2);
         break;
       case 'first-page':
         this.viewer.goToPage(0);
@@ -196,37 +221,35 @@ export class App {
     if (path) await this.openPath(path);
   }
 
-  async openPath(path: string): Promise<void> {
+  async openPath(path: string, password?: string): Promise<void> {
     const seq = ++this.openSeq;
     this.metrics.openStart = performance.now();
     this.metrics.firstPaint = 0;
+    if (!password) this.hidePasswordPanel();
     this.store.set({ status: this.doc ? 'ready' : 'loading', error: null });
     try {
+      // pdf.js transfers the buffer to its worker, so a password retry re-reads the file.
       const data = await this.platform.readFile(path);
       if (seq !== this.openSeq) return;
-      await this.load(this.platform.fileName(path), data, path, seq);
+      await this.load(this.platform.fileName(path), data, path, seq, password);
     } catch (e) {
-      if (seq === this.openSeq) this.fail(this.platform.fileName(path), e);
+      if (seq === this.openSeq) this.fail(this.platform.fileName(path), e, path);
     }
   }
 
-  async openBytes(name: string, data: Uint8Array): Promise<void> {
-    const seq = ++this.openSeq;
-    this.metrics.openStart = performance.now();
-    this.metrics.firstPaint = 0;
-    try {
-      await this.load(name, data, null, seq);
-    } catch (e) {
-      if (seq === this.openSeq) this.fail(name, e);
-    }
-  }
-
-  private async load(name: string, data: Uint8Array, path: string | null, seq: number): Promise<void> {
-    const doc = await PdfDocument.load(data);
+  private async load(
+    name: string,
+    data: Uint8Array,
+    path: string | null,
+    seq: number,
+    password?: string,
+  ): Promise<void> {
+    const doc = await PdfDocument.load(data, { password });
     if (seq !== this.openSeq) {
       void doc.destroy();
       return;
     }
+    this.hidePasswordPanel();
     const old = this.doc;
     this.doc = doc;
     const restored = path ? loadFileState(path) : null;
@@ -274,8 +297,14 @@ export class App {
     });
   }
 
-  private fail(name: string, e: unknown): void {
+  private fail(name: string, e: unknown, path?: string): void {
     const reason = e instanceof PdfOpenError ? e.message : e instanceof Error ? e.message : String(e);
+    if (e instanceof PdfOpenError && e.kind === 'password' && path) {
+      this.pendingPassword = { path, name };
+      this.store.set({ error: null, status: this.doc ? 'ready' : 'error' });
+      this.showPasswordPanel(reason.toLowerCase().includes('incorrect') ? 'Incorrect password. Try again.' : '');
+      return;
+    }
     this.store.set({
       error: `Can't open ${name}: ${reason}`,
       status: this.doc ? 'ready' : 'error',
@@ -283,10 +312,35 @@ export class App {
     if (!this.doc) this.sidebar.setDocument(null, null); // sidebar (Task 11)
   }
 
+  private showPasswordPanel(message: string): void {
+    this.passwordMessage.textContent = message;
+    this.passwordForm.hidden = false;
+    this.passwordInput.value = '';
+    this.passwordInput.focus();
+  }
+
+  private hidePasswordPanel(): void {
+    this.pendingPassword = null;
+    this.passwordForm.hidden = true;
+    this.passwordMessage.textContent = '';
+  }
+
+  private submitPassword(): void {
+    const pending = this.pendingPassword;
+    const password = this.passwordInput.value;
+    if (!pending || !password) return;
+    void this.openPath(pending.path, password);
+  }
+
+  private cancelPassword(): void {
+    this.hidePasswordPanel();
+    this.el('viewer').focus();
+  }
+
   private el<T extends HTMLElement = HTMLElement>(idOrSelector: string): T {
-    const node = idOrSelector.startsWith('.')
-      ? this.root.querySelector<T>(idOrSelector)
-      : (this.root.getElementById(idOrSelector) as T | null);
+    const node = /^[A-Za-z][\w-]*$/.test(idOrSelector)
+      ? (this.root.getElementById(idOrSelector) as T | null)
+      : this.root.querySelector<T>(idOrSelector);
     if (!node) throw new Error(`missing element ${idOrSelector}`);
     return node;
   }

@@ -39,10 +39,10 @@ const template = `
     <button class="tb-btn" data-action="find" title="Find (Ctrl+F)" aria-label="Find" aria-pressed="false" disabled>${icons.search}</button>
   </div>
   <div class="tb-menu" role="menu" hidden>
-    <button role="menuitem" data-zoom="fit-width">Fit Width</button>
-    <button role="menuitem" data-zoom="fit-page">Fit Page</button>
+    <button role="menuitemradio" data-zoom="fit-width">Fit Width</button>
+    <button role="menuitemradio" data-zoom="fit-page">Fit Page</button>
     <hr />
-    ${ZOOM_PRESETS.map((z) => `<button role="menuitem" data-zoom="${z}">${formatZoom(z)}</button>`).join('')}
+    ${ZOOM_PRESETS.map((z) => `<button role="menuitemradio" data-zoom="${z}">${formatZoom(z)}</button>`).join('')}
   </div>
 `;
 

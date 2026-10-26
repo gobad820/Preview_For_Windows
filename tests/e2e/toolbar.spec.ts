@@ -41,12 +41,12 @@ test.describe('toolbar', () => {
     await expect(page.locator('[data-zoom-menu]')).toHaveText('90%');
     await page.locator('[data-zoom-menu]').click();
     await expect(page.locator('[role="menu"]')).toBeVisible();
-    await page.getByRole('menuitem', { name: 'Fit Page' }).click();
+    await page.getByRole('menuitemradio', { name: 'Fit Page' }).click();
     await expect.poll(async () => (await state(page)).zoomMode).toBe('fit-page');
     await expect(page.locator('[data-zoom-menu]')).toHaveText('Fit Page');
     await expect(page.locator('[role="menu"]')).toBeHidden();
     await page.locator('[data-zoom-menu]').click();
-    await page.getByRole('menuitem', { name: '200%' }).click();
+    await page.getByRole('menuitemradio', { name: '200%' }).click();
     await expect.poll(async () => (await state(page)).scale).toBe(2);
     expect((await state(page)).zoomMode).toBe('custom');
   });

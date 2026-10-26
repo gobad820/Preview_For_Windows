@@ -134,6 +134,15 @@ export class PdfViewer {
     this.updateMounted();
   }
 
+  /** True when the layout is wider than the viewport (arrow keys pan instead of paging). */
+  overflowsHorizontally(): boolean {
+    return this.container.scrollWidth > this.container.clientWidth + 1;
+  }
+
+  panBy(dx: number): void {
+    this.container.scrollBy({ left: dx });
+  }
+
   scrollByViewport(dir: 1 | -1): void {
     this.container.scrollBy({ top: dir * Math.max(40, this.container.clientHeight - PAGE_GAP * 2) });
   }
@@ -345,6 +354,20 @@ export class PdfViewer {
     mp.text?.cancel();
     mp.el.remove();
     this.mounted.delete(index);
+    this.releasePage(index);
+  }
+
+  /** Frees the page's operator list and decoded images once nothing on screen uses it. */
+  private releasePage(index: number): void {
+    const doc = this.doc;
+    if (!doc) return;
+    void doc
+      .getPage(index)
+      .then((page) => {
+        if (this.doc !== doc || this.mounted.has(index)) return;
+        page.cleanup(); // returns false (no-op) while another render, e.g. a thumbnail, is pending
+      })
+      .catch(() => {});
   }
 
   private unmountAll(): void {

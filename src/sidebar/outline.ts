@@ -5,7 +5,7 @@ export interface OutlineDeps {
 }
 
 /**
- * Nested `<ul>` outline. Every node with children gets a disclosure toggle and starts collapsed;
+ * Nested `<ul>` outline. Every node with children gets a disclosure toggle; top-level nodes start expanded, deeper ones collapsed;
  * clicking an item navigates to its destination without taking focus.
  */
 export class OutlineTree {
@@ -27,9 +27,6 @@ export class OutlineTree {
     host.addEventListener('click', this.onClick);
   }
 
-  get isEmpty(): boolean {
-    return this.nodes.length === 0;
-  }
 
   setOutline(nodes: OutlineNode[]): void {
     this.nodes = nodes;
@@ -57,14 +54,15 @@ export class OutlineTree {
     const title = node.title.replace(/\s+/g, ' ').trim() || '(untitled)';
     const hasChildren = node.children.length > 0;
 
+    const expanded = hasChildren && depth === 0;
     if (hasChildren) {
-      li.classList.add('has-children', 'collapsed');
-      li.setAttribute('aria-expanded', 'false');
+      li.classList.add('has-children', expanded ? 'expanded' : 'collapsed');
+      li.setAttribute('aria-expanded', String(expanded));
       const toggle = document.createElement('button');
       toggle.type = 'button';
       toggle.className = 'outline-toggle';
       toggle.tabIndex = -1;
-      toggle.setAttribute('aria-label', `Expand ${title}`);
+      toggle.setAttribute('aria-label', `${expanded ? 'Collapse' : 'Expand'} ${title}`);
       row.append(toggle);
     } else {
       const spacer = document.createElement('span');
@@ -91,7 +89,7 @@ export class OutlineTree {
       const ul = document.createElement('ul');
       ul.className = 'outline-children';
       ul.setAttribute('role', 'group');
-      ul.hidden = true;
+      ul.hidden = !expanded;
       ul.append(...node.children.map((c) => this.renderNode(c, depth + 1)));
       li.append(ul);
     }

@@ -72,7 +72,7 @@ function resolveCtrl(k: KeyLike): Action | null {
 export function resolveShortcut(k: KeyLike): Action | null {
   if (k.altKey || k.metaKey) return null;
   if (k.ctrlKey) return resolveCtrl(k);
-  if (k.key === 'Escape') return 'close-find';
+  if (k.key === 'Escape') return k.findFocused || !k.inTextField ? 'close-find' : null;
   if (k.key === 'Enter') return k.findFocused ? (k.shiftKey ? 'find-prev' : 'find-next') : null;
   if (k.inTextField || k.findFocused) return null;
   if (k.key === ' ') return k.shiftKey ? 'scroll-up' : 'scroll-down';

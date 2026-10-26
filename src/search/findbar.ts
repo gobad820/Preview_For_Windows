@@ -296,10 +296,6 @@ export class FindBar {
     this.step(-1);
   }
 
-  get isOpen(): boolean {
-    return !this.host.hidden;
-  }
-
   destroy(): void {
     this.cancelPending();
     this.reset();

@@ -20,10 +20,19 @@ fn startup_file() -> Option<String> {
         .map(|p| clean_path(&p))
 }
 
+/// Absolute path as the user would write it: no symlink resolution and no `\\?\` prefix,
+/// so UNC shares and mapped drives stay readable and key the same per-file state as the
+/// dialog and drag-drop paths do.
 fn clean_path(p: &Path) -> String {
-    let abs = std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    let abs = std::path::absolute(p).unwrap_or_else(|_| p.to_path_buf());
     let s = abs.to_string_lossy().into_owned();
-    s.strip_prefix(r"\\?\").map(str::to_owned).unwrap_or(s)
+    if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+        return format!(r"\\{rest}");
+    }
+    if let Some(rest) = s.strip_prefix(r"\\?\") {
+        return rest.to_owned();
+    }
+    s
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

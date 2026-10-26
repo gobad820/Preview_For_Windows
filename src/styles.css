@@ -372,3 +372,35 @@ kbd {
   to { opacity: 1; transform: none; }
 }
 @media (prefers-reduced-motion: reduce) { .findbar { animation: none; } }
+
+/* ---- loading cue + password panel (review fixes) --------------------- */
+.loading-state {
+  position: absolute; inset: 0; z-index: 5;
+  display: none; align-items: center; justify-content: center; gap: 10px;
+  color: var(--fg-muted); font-size: 14px; pointer-events: none;
+}
+.app[data-status="loading"] .loading-state { display: flex; }
+.spinner {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid var(--control-border); border-top-color: var(--accent);
+  animation: pfw-spin 0.8s linear infinite;
+}
+@keyframes pfw-spin { to { transform: rotate(360deg); } }
+.password-panel {
+  position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%);
+  z-index: 45; width: min(380px, calc(100% - 32px));
+  padding: 16px 18px; border-radius: 10px;
+  background: var(--control-bg); color: var(--fg);
+  border: 1px solid var(--control-border); box-shadow: var(--page-shadow);
+}
+.password-panel[hidden] { display: none; }
+.password-title { margin: 0 0 4px; font-weight: 600; }
+.password-message { margin: 0 0 10px; min-height: 1.2em; color: #c0392b; }
+.password-row { display: flex; gap: 8px; }
+.password-row input {
+  flex: 1; height: 30px; padding: 0 8px; font: inherit;
+  color: var(--fg); background: var(--chrome);
+  border: 1px solid var(--control-border); border-radius: 6px;
+  -webkit-user-select: text; user-select: text;
+}
+.password-row input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }

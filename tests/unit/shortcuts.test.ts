@@ -58,7 +58,7 @@ describe('resolveShortcut', () => {
     ['Enter in a non-find text field → null', inField('Enter'), null],
     ['Ctrl+F in a text field → find', inField('f', { ctrlKey: true }), 'find'],
     ['Ctrl+= in a text field → zoom-in', inField('=', { ctrlKey: true }), 'zoom-in'],
-    ['Escape in a text field → close-find', inField('Escape'), 'close-find'],
+    ['Escape in a text field → null', inField('Escape'), null],
     ['Enter in find → find-next', inFind('Enter'), 'find-next'],
     ['Shift+Enter in find → find-prev', inFind('Enter', { shiftKey: true }), 'find-prev'],
     ['Escape in find → close-find', inFind('Escape'), 'close-find'],

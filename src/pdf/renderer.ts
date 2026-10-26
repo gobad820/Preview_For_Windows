@@ -6,6 +6,12 @@ import type { PdfDocument } from './document';
 /** CSS pixels per PDF point at 100% (pdf.js convention: 96 dpi / 72 dpi). */
 export const CSS_UNITS = 96 / 72;
 
+/**
+ * Upper bound on canvas backing-store pixels per page. Beyond this the bitmap is rendered
+ * smaller and CSS upscales it, so 800% on a HiDPI screen cannot allocate hundreds of MB.
+ */
+export const MAX_CANVAS_PIXELS = 2 ** 24;
+
 export interface RenderRequest {
   index: number;
   scale: number;
@@ -41,7 +47,12 @@ export class PageRenderer {
         const page = await this.doc.getPage(req.index);
         if (entry.cancelled) return;
         const rotation = ((page.rotate + req.rotation) % 360) as Rotation;
-        const viewport = page.getViewport({ scale: req.scale * CSS_UNITS * req.dpr, rotation });
+        let viewport = page.getViewport({ scale: req.scale * CSS_UNITS * req.dpr, rotation });
+        const pixels = viewport.width * viewport.height;
+        if (pixels > MAX_CANVAS_PIXELS) {
+          const factor = Math.sqrt(MAX_CANVAS_PIXELS / pixels);
+          viewport = page.getViewport({ scale: req.scale * CSS_UNITS * req.dpr * factor, rotation });
+        }
         const width = Math.max(1, Math.round(viewport.width));
         const height = Math.max(1, Math.round(viewport.height));
         const { canvas } = req;
