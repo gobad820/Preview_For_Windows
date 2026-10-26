@@ -22,8 +22,6 @@ test('text selection is one even tint with no line-break boxes showing', async (
       selecting: layer.classList.contains('selecting'),
     };
   });
-  expect(styles).toEqual({ br: 'rgba(0, 0, 0, 0)', span: 'rgb(179, 215, 255)', blend: 'multiply', guard: true, selecting: true });
-  // Clicking elsewhere ends the selection and the guard steps back.
-  await page.mouse.click(5, 300);
-  await expect(page.locator('.page[data-page="1"] .textLayer')).not.toHaveClass(/selecting/);
+  // Like pdf.js, the guard only covers the layer while the pointer is down.
+  expect(styles).toEqual({ br: 'rgba(0, 0, 0, 0)', span: 'rgb(179, 215, 255)', blend: 'multiply', guard: true, selecting: false });
 });
