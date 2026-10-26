@@ -18,6 +18,7 @@ import type { Store, ViewerState } from '../store';
 import type { PageView, PdfViewer } from '../viewer/viewer';
 import { localSize, placeBox, TEXT_LINE_HEIGHT, TEXT_PADDING, viewRect, type AnnotRef, type OverlayHost } from './overlay';
 import { NOTE_COLOR, type MarkupState, type Tool } from './state';
+import { selectionToMarks } from './textMarkup';
 
 /** Pointer travel (CSS px) below which a press counts as a click. */
 const CLICK_SLOP = 3;
@@ -89,6 +90,8 @@ export class MarkupController {
     c.addEventListener('pointercancel', this.onPointerCancel);
     // Selection and focus changes come from mousedown; a press markup handles must not make them.
     c.addEventListener('mousedown', this.onMouseDown, true);
+    // In highlight mode, finishing a text selection marks it.
+    document.addEventListener('pointerup', this.onSelectionEnd);
     deps.state.onChange(() => this.syncTool());
     this.syncTool();
   }
@@ -123,6 +126,44 @@ export class MarkupController {
       return true;
     }
     return false;
+  }
+
+  /**
+   * Marks the text selected in the document view with the current mark style (one annotation
+   * per page, one undo step) and clears the selection. False when no page text is selected.
+   */
+  markSelection(): boolean {
+    const doc = this.deps.doc();
+    const sel = window.getSelection();
+    if (!doc || !sel || sel.isCollapsed) return false;
+    const marks = selectionToMarks(sel, this.deps.viewer.getPageViews());
+    if (marks.size === 0) return false;
+    const { markKind, markColor } = this.deps.state.styles;
+    const added = [...marks].map(([pos, m]) => ({
+      pageId: doc.pages[pos]!.id,
+      annot: { id: doc.newAnnotId(), kind: markKind, color: markColor, opacity: 1, modified: now(), quads: m.quads, text: m.text } as Annot,
+    }));
+    sel.removeAllRanges();
+    this.addAll(doc, added);
+    return true;
+  }
+
+  /** Adds annotations to several pages as one undo step, loading their lists first when needed. */
+  private addAll(doc: EditableDocument, added: ReadonlyArray<{ pageId: number; annot: Annot }>): void {
+    const positions = added.map((a) => this.positionOf(a.pageId));
+    if (positions.some((p) => p < 0)) return;
+    if (positions.some((p) => doc.annotationsAt(p) === null)) {
+      void Promise.all(positions.map((p) => doc.loadAnnotations(p))).then(() => {
+        if (this.deps.doc() === doc && added.every((a) => doc.annotationsAt(this.positionOf(a.pageId)) !== null)) this.addAll(doc, added);
+      });
+      return;
+    }
+    const changes = new Map<number, Annot[]>();
+    added.forEach((a, i) => {
+      const pos = positions[i]!;
+      changes.set(pos, [...(changes.get(pos) ?? doc.annotationsAt(pos)!), a.annot]);
+    });
+    doc.updateAnnotations(changes);
   }
 
   deleteSelected(): boolean {
@@ -221,6 +262,14 @@ export class MarkupController {
   }
 
   // ---- pointer input ------------------------------------------------------------------
+
+  private readonly onSelectionEnd = (e: PointerEvent): void => {
+    if (e.button !== 0 || !this.deps.state.highlightMode || this.deps.state.tool !== 'select') return;
+    // The selection is final once the release has been handled.
+    setTimeout(() => {
+      if (this.deps.state.highlightMode && this.deps.state.tool === 'select') this.markSelection();
+    }, 0);
+  };
 
   private readonly onMouseDown = (e: MouseEvent): void => {
     if (this.gesture) e.preventDefault();

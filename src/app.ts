@@ -508,15 +508,17 @@ export class App {
     return this.markupController.handleEscape();
   }
 
-  /** The highlight button's main part: toggles highlight mode. */
+  /** The highlight button's main part: marks selected text and turns highlight mode on, or toggles the mode. */
   private highlightButton(): void {
-    this.markup.setHighlightMode(!this.markup.highlightMode);
+    if (this.markupController.markSelection()) this.markup.setHighlightMode(true);
+    else this.markup.setHighlightMode(!this.markup.highlightMode);
   }
 
-  /** A color or kind picked from a highlight menu becomes the mark style and turns highlight mode on. */
+  /** A color or kind picked from a highlight menu becomes the mark style, turns highlight mode on and marks selected text. */
   private pickMark(kind: MarkKind, color?: Color): void {
     this.markup.setMark(kind, color);
     this.markup.setHighlightMode(true);
+    this.markupController.markSelection();
   }
 
   private applyStyles(patch: Partial<Styles>): void {

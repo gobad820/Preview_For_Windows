@@ -1007,3 +1007,11 @@ button, input { font: inherit; color: inherit; letter-spacing: inherit; }
   -webkit-user-select: text; user-select: text;
 }
 .mk-note-popup textarea::placeholder { color: rgba(0, 0, 0, 0.3); }
+
+/* text layer in rotated views (pdf.js viewer rules): pdf.js lays the layer out unrotated at the
+   page's own size and tags it with the view rotation, so text selection, find and highlights
+   from the selection follow the rotated page */
+.page { --scale-round-x: 1px; --scale-round-y: 1px; }
+.textLayer[data-main-rotation="90"] { transform: rotate(90deg) translateY(-100%); }
+.textLayer[data-main-rotation="180"] { transform: rotate(180deg) translate(-100%, -100%); }
+.textLayer[data-main-rotation="270"] { transform: rotate(270deg) translateX(-100%); }
