@@ -20,8 +20,10 @@
         "minWidth": 480,
         "minHeight": 360,
         "dragDropEnabled": true,
-        "backgroundColor": "#e5e5e7",
-        "center": true
+        "center": true,
+        "decorations": false,
+        "transparent": true,
+        "shadow": true
       }
     ],
     "security": {
