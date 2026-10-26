@@ -18,6 +18,7 @@ public class PfwNative {
   [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdc, uint flags);
 }
 "@
 [PfwNative]::SetProcessDPIAware() | Out-Null
@@ -35,10 +36,19 @@ function Capture-Window($proc, $path) {
   $w = $r.Right - $r.Left; $h = $r.Bottom - $r.Top
   $bmp = New-Object System.Drawing.Bitmap $w, $h
   $g = [System.Drawing.Graphics]::FromImage($bmp)
-  $g.CopyFromScreen($r.Left, $r.Top, 0, 0, (New-Object System.Drawing.Size($w, $h)))
+  $printed = $false
+  if ($hwnd -ne [IntPtr]::Zero) {
+    # PW_RENDERFULLCONTENT (2) renders the window's own surface even when other windows cover it,
+    # so the capture never includes anything else on the desktop.
+    $hdc = $g.GetHdc()
+    try { $printed = [PfwNative]::PrintWindow($hwnd, $hdc, 2) } finally { $g.ReleaseHdc($hdc) }
+  }
+  if (-not $printed) {
+    $g.CopyFromScreen($r.Left, $r.Top, 0, 0, (New-Object System.Drawing.Size($w, $h)))
+  }
   $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
   $g.Dispose(); $bmp.Dispose()
-  return "{0}x{1}" -f $w, $h
+  return "{0}x{1}{2}" -f $w, $h, $(if ($printed) { "" } else { " (screen copy)" })
 }
 
 $sw = [System.Diagnostics.Stopwatch]::StartNew()

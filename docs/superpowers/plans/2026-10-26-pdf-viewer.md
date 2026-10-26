@@ -84,17 +84,17 @@ tests/fixtures/{simple.pdf,mixed.pdf,long300.pdf,outline.pdf,encrypted.pdf,broke
 - Produces: `npm run dev`, `npm run build`, `npm test` (vitest), `npm run e2e` (playwright, added in Task 8), `scripts/build-windows.sh [--bundle]` producing `src-tauri/target/x86_64-pc-windows-msvc/release/Preview.exe`.
 - Produces: Rust command `read_file(path: String) -> Result<tauri::ipc::Response, String>` (raw bytes), `startup_file() -> Option<String>` (first CLI argument that exists on disk).
 
-- [ ] **Step 1: Write the failing smoke test** `tests/unit/smoke.test.ts`: `expect(1 + 1).toBe(2)` — exists only to prove the test runner wiring.
-- [ ] **Step 2: Run `npx vitest run`** — expected: fails because no config/package exists.
-- [ ] **Step 3: Create `package.json`** with scripts `dev`, `build` (`tsc --noEmit && vite build`), `preview`, `test` (`vitest run`), `e2e` (`playwright test`), `tauri`; devDependencies vite, typescript, vitest, @playwright/test, @tauri-apps/cli@^2; dependencies pdfjs-dist (latest 5.x if it exports `TextLayer`, else 4.x), @tauri-apps/api@^2, @tauri-apps/plugin-dialog@^2, @tauri-apps/plugin-window-state@^2. `npm install`.
-- [ ] **Step 4: Create `vite.config.ts`** (root `.`, `build.outDir: dist`, `build.target: 'chrome120'`, `server.port 1420`, `clearScreen: false`), `tsconfig.json` (strict, ES2022, DOM, `moduleResolution: bundler`), `vitest.config.ts` (environment `node`, include `tests/unit/**`).
-- [ ] **Step 5: Create `index.html` + `src/main.ts` + `src/styles.css`** — a shell with `<header id="toolbar">`, `<aside id="sidebar">`, `<main id="viewer">`, `<div id="findbar">`; body shows an empty state "Open a PDF" with `Ctrl+O` hint. `main.ts` only sets `document.title = 'Preview'` for now.
-- [ ] **Step 6: Create the Tauri crate.** `Cargo.toml` name `preview`, lib + bin (`src/lib.rs` with `pub fn run()`, `main.rs` calling it, `windows_subsystem = "windows"` in release); deps `tauri = "2"`, `tauri-plugin-dialog = "2"`, `tauri-plugin-window-state = "2"`, serde, serde_json; release profile `opt-level = "s"`, `lto = true`, `codegen-units = 1`, `strip = true`. Commands `read_file` and `startup_file` as in Interfaces. `tauri.conf.json`: productName `Preview`, identifier `dev.sanghae.preview`, `build.frontendDist ../dist`, `build.devUrl http://localhost:1420`, `build.beforeDevCommand "npm run dev"`, `build.beforeBuildCommand "npm run build"`, one window `{ label: "main", title: "Preview", width: 1100, height: 800, minWidth: 480, minHeight: 360, dragDropEnabled: true, backgroundColor: "#e5e5e7" }`, `app.security.csp null`, bundle `{ active: true, targets: ["nsis"], icon: [...], fileAssociations: [{ ext: ["pdf"], name: "PDF Document", mimeType: "application/pdf", role: "Viewer" }], windows: { nsis: { installMode: "currentUser" } } }`. `capabilities/default.json`: `core:default`, `dialog:default`, `window-state:default`, `core:window:allow-set-title`.
-- [ ] **Step 7: Create `src-tauri/icon.svg`** (rounded square, neutral gray-blue, white page glyph) and run `npx tauri icon src-tauri/icon.svg` to generate `src-tauri/icons/`.
-- [ ] **Step 8: Create `scripts/build-windows.sh`**: sets PATH/env from Global Constraints, runs `npm run build`, then `npx tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc` (add `--no-bundle` unless `--bundle` passed). Prints the exe path and size.
-- [ ] **Step 9: Run `npx vitest run`** — expected: 1 passed.
-- [ ] **Step 10: Run `scripts/build-windows.sh`** — expected: `Preview.exe` exists, size well under 15 MB.
-- [ ] **Step 11: Commit** `chore: scaffold tauri + vite project with cross-build script`.
+- [x] **Step 1: Write the failing smoke test** `tests/unit/smoke.test.ts`: `expect(1 + 1).toBe(2)` — exists only to prove the test runner wiring.
+- [x] **Step 2: Run `npx vitest run`** — expected: fails because no config/package exists.
+- [x] **Step 3: Create `package.json`** with scripts `dev`, `build` (`tsc --noEmit && vite build`), `preview`, `test` (`vitest run`), `e2e` (`playwright test`), `tauri`; devDependencies vite, typescript, vitest, @playwright/test, @tauri-apps/cli@^2; dependencies pdfjs-dist (latest 5.x if it exports `TextLayer`, else 4.x), @tauri-apps/api@^2, @tauri-apps/plugin-dialog@^2, @tauri-apps/plugin-window-state@^2. `npm install`.
+- [x] **Step 4: Create `vite.config.ts`** (root `.`, `build.outDir: dist`, `build.target: 'chrome120'`, `server.port 1420`, `clearScreen: false`), `tsconfig.json` (strict, ES2022, DOM, `moduleResolution: bundler`), `vitest.config.ts` (environment `node`, include `tests/unit/**`).
+- [x] **Step 5: Create `index.html` + `src/main.ts` + `src/styles.css`** — a shell with `<header id="toolbar">`, `<aside id="sidebar">`, `<main id="viewer">`, `<div id="findbar">`; body shows an empty state "Open a PDF" with `Ctrl+O` hint. `main.ts` only sets `document.title = 'Preview'` for now.
+- [x] **Step 6: Create the Tauri crate.** `Cargo.toml` name `preview`, lib + bin (`src/lib.rs` with `pub fn run()`, `main.rs` calling it, `windows_subsystem = "windows"` in release); deps `tauri = "2"`, `tauri-plugin-dialog = "2"`, `tauri-plugin-window-state = "2"`, serde, serde_json; release profile `opt-level = "s"`, `lto = true`, `codegen-units = 1`, `strip = true`. Commands `read_file` and `startup_file` as in Interfaces. `tauri.conf.json`: productName `Preview`, identifier `dev.sanghae.preview`, `build.frontendDist ../dist`, `build.devUrl http://localhost:1420`, `build.beforeDevCommand "npm run dev"`, `build.beforeBuildCommand "npm run build"`, one window `{ label: "main", title: "Preview", width: 1100, height: 800, minWidth: 480, minHeight: 360, dragDropEnabled: true, backgroundColor: "#e5e5e7" }`, `app.security.csp null`, bundle `{ active: true, targets: ["nsis"], icon: [...], fileAssociations: [{ ext: ["pdf"], name: "PDF Document", mimeType: "application/pdf", role: "Viewer" }], windows: { nsis: { installMode: "currentUser" } } }`. `capabilities/default.json`: `core:default`, `dialog:default`, `window-state:default`, `core:window:allow-set-title`.
+- [x] **Step 7: Create `src-tauri/icon.svg`** (rounded square, neutral gray-blue, white page glyph) and run `npx tauri icon src-tauri/icon.svg` to generate `src-tauri/icons/`.
+- [x] **Step 8: Create `scripts/build-windows.sh`**: sets PATH/env from Global Constraints, runs `npm run build`, then `npx tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc` (add `--no-bundle` unless `--bundle` passed). Prints the exe path and size.
+- [x] **Step 9: Run `npx vitest run`** — expected: 1 passed.
+- [x] **Step 10: Run `scripts/build-windows.sh`** — expected: `Preview.exe` exists, size well under 15 MB.
+- [x] **Step 11: Commit** `chore: scaffold tauri + vite project with cross-build script`.
 
 ### Task 2: Reactive store
 
@@ -106,11 +106,11 @@ tests/fixtures/{simple.pdf,mixed.pdf,long300.pdf,outline.pdf,encrypted.pdf,broke
 - Produces: `createStore<T extends object>(initial: T): Store<T>` with `get(): T`, `set(patch: Partial<T>): void` (shallow merge, notifies only when at least one key changed by `Object.is`), `subscribe(fn: (state: T, prev: T) => void): () => void`, `select<K extends keyof T>(key: K, fn: (v: T[K]) => void): () => void` (fires on change of that key only, and immediately once on subscribe).
 - Produces: `ViewerState` type and `initialState` in the same file: `filePath: string | null`, `fileName: string | null`, `numPages: number`, `currentPage: number` (1-based, 0 when no doc), `zoomMode: ZoomMode` (from `src/types.ts`), `scale: number`, `rotation: Rotation` (from `src/types.ts`), `sidebarOpen: boolean`, `sidebarTab: 'thumbnails' | 'outline'`, `findOpen: boolean`, `findQuery: string`, `findTotal: number`, `findIndex: number` (0-based, -1 none), `status: 'empty' | 'loading' | 'ready' | 'error'`, `error: string | null`. Initial: zoomMode `fit-width`, scale 1, sidebarOpen false, sidebarTab thumbnails, status empty.
 
-- [ ] **Step 1: Write failing tests**: `set` merges and notifies with `(state, prev)`; `set` with identical values does not notify; `subscribe` returns unsubscribe; `select` fires immediately and then only on that key.
-- [ ] **Step 2: Run `npx vitest run tests/unit/store.test.ts`** — FAIL (module missing).
-- [ ] **Step 3: Implement `src/store.ts`.**
-- [ ] **Step 4: Run tests** — PASS.
-- [ ] **Step 5: Commit** `feat: add reactive viewer store`.
+- [x] **Step 1: Write failing tests**: `set` merges and notifies with `(state, prev)`; `set` with identical values does not notify; `subscribe` returns unsubscribe; `select` fires immediately and then only on that key.
+- [x] **Step 2: Run `npx vitest run tests/unit/store.test.ts`** — FAIL (module missing).
+- [x] **Step 3: Implement `src/store.ts`.**
+- [x] **Step 4: Run tests** — PASS.
+- [x] **Step 5: Commit** `feat: add reactive viewer store`.
 
 ### Task 3: Layout math
 
@@ -134,11 +134,11 @@ tests/fixtures/{simple.pdf,mixed.pdf,long300.pdf,outline.pdf,encrypted.pdf,broke
   - `yForDocPoint(layout, point): number` — inverse.
   - `anchoredScrollTop(oldLayout, newLayout, scrollTop, anchorOffset): number` — keeps the doc point at `scrollTop + anchorOffset` fixed: `yForDocPoint(newLayout, docPointAt(oldLayout, scrollTop + anchorOffset)) - anchorOffset`, clamped ≥ 0.
 
-- [ ] **Step 1: Write failing tests** with sizes A4 `{595, 842}`, landscape `{842, 595}`, small `{200, 200}`, scale 1, gap 16, padding 24, containerWidth 1000: assert exact `top/left/width/height` for three pages (width A4 = 595 × 1.3333 = 793.33, centered left = (1000 − 793.33)/2); `rotatedSize` swaps for 90/270; `fitWidthScale` for the mixed set uses 842 pt; `fitPageScale` on a 1000×800 container; `visibleRange` with overscan 0 at scrollTop 0 → `{0,0}`, at scrollTop just below page 1 bottom → starts at 1; `currentPageIndex` at halfway between pages picks the one with more visible height; `docPointAt`/`yForDocPoint` round-trip; `anchoredScrollTop` when scale doubles keeps page 1 fraction 0.5 fixed; empty sizes → `pages: []`, `totalHeight: 2*padding`, `currentPageIndex` -1, `visibleRange` null.
-- [ ] **Step 2: Run** `npx vitest run tests/unit/layout.test.ts` — FAIL.
-- [ ] **Step 3: Implement `src/viewer/layout.ts`.**
-- [ ] **Step 4: Run tests** — PASS.
-- [ ] **Step 5: Commit** `feat: add pure page layout math`.
+- [x] **Step 1: Write failing tests** with sizes A4 `{595, 842}`, landscape `{842, 595}`, small `{200, 200}`, scale 1, gap 16, padding 24, containerWidth 1000: assert exact `top/left/width/height` for three pages (width A4 = 595 × 1.3333 = 793.33, centered left = (1000 − 793.33)/2); `rotatedSize` swaps for 90/270; `fitWidthScale` for the mixed set uses 842 pt; `fitPageScale` on a 1000×800 container; `visibleRange` with overscan 0 at scrollTop 0 → `{0,0}`, at scrollTop just below page 1 bottom → starts at 1; `currentPageIndex` at halfway between pages picks the one with more visible height; `docPointAt`/`yForDocPoint` round-trip; `anchoredScrollTop` when scale doubles keeps page 1 fraction 0.5 fixed; empty sizes → `pages: []`, `totalHeight: 2*padding`, `currentPageIndex` -1, `visibleRange` null.
+- [x] **Step 2: Run** `npx vitest run tests/unit/layout.test.ts` — FAIL.
+- [x] **Step 3: Implement `src/viewer/layout.ts`.**
+- [x] **Step 4: Run tests** — PASS.
+- [x] **Step 5: Commit** `feat: add pure page layout math`.
 
 ### Task 4: Zoom steps
 
@@ -149,9 +149,9 @@ tests/fixtures/{simple.pdf,mixed.pdf,long300.pdf,outline.pdf,encrypted.pdf,broke
 **Interfaces:**
 - Produces: `ZOOM_MIN = 0.1`, `ZOOM_MAX = 8`, `ZOOM_STEPS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5, 6, 8]`, `zoomIn(scale): number` (smallest step > scale + 1e-6, else ZOOM_MAX), `zoomOut(scale): number`, `clampZoom(scale): number`, `formatZoom(scale): string` (`Math.round(scale*100) + '%'`), `wheelZoom(scale, deltaY): number` (multiplicative: `scale * 1.1^(−deltaY/100)` clamped; smooth for trackpads).
 
-- [ ] **Step 1: Write failing tests**: `zoomIn(1) === 1.1`, `zoomIn(1.05) === 1.1`, `zoomIn(8) === 8`, `zoomOut(1) === 0.9`, `zoomOut(0.1) === 0.1`, `clampZoom(20) === 8`, `formatZoom(1.333) === '133%'`, `wheelZoom(1, -100)` ≈ 1.1, `wheelZoom(1, 100)` ≈ 0.909.
-- [ ] **Step 2: Run** — FAIL. **Step 3: Implement.** **Step 4: Run** — PASS.
-- [ ] **Step 5: Commit** `feat: add zoom step math`.
+- [x] **Step 1: Write failing tests**: `zoomIn(1) === 1.1`, `zoomIn(1.05) === 1.1`, `zoomIn(8) === 8`, `zoomOut(1) === 0.9`, `zoomOut(0.1) === 0.1`, `clampZoom(20) === 8`, `formatZoom(1.333) === '133%'`, `wheelZoom(1, -100)` ≈ 1.1, `wheelZoom(1, 100)` ≈ 0.909.
+- [x] **Step 2: Run** — FAIL. **Step 3: Implement.** **Step 4: Run** — PASS.
+- [x] **Step 5: Commit** `feat: add zoom step math`.
 
 ### Task 5: Shortcut resolver
 
@@ -165,9 +165,9 @@ tests/fixtures/{simple.pdf,mixed.pdf,long300.pdf,outline.pdf,encrypted.pdf,broke
 - `resolveShortcut(k: KeyLike): Action | null` per Global Constraints; while `inTextField` only Ctrl-combos and Esc resolve, plus Enter/Shift+Enter → find-next/find-prev when `findFocused`; Esc → close-find always when `findFocused`; Alt combos never resolve.
 - `bindShortcuts(target: Window, handler: (a: Action, e: KeyboardEvent) => void): () => void` — builds `KeyLike` from the event (`inTextField` = target is input/textarea/contenteditable; `findFocused` = target has `data-find-input`), calls handler and `preventDefault()` only when an action resolved.
 
-- [ ] **Step 1: Write failing tests** covering each Action from one key combo, `Ctrl+=` and `Ctrl++` and `Ctrl+Shift+=` → zoom-in, `Ctrl+-` → zoom-out, Space vs Shift+Space, Space in a text field → null, Enter in find → find-next, Esc in find → close-find, `Alt+F` → null.
-- [ ] **Step 2: Run** — FAIL. **Step 3: Implement.** **Step 4: Run** — PASS.
-- [ ] **Step 5: Commit** `feat: add keyboard shortcut resolver`.
+- [x] **Step 1: Write failing tests** covering each Action from one key combo, `Ctrl+=` and `Ctrl++` and `Ctrl+Shift+=` → zoom-in, `Ctrl+-` → zoom-out, Space vs Shift+Space, Space in a text field → null, Enter in find → find-next, Esc in find → close-find, `Alt+F` → null.
+- [x] **Step 2: Run** — FAIL. **Step 3: Implement.** **Step 4: Run** — PASS.
+- [x] **Step 5: Commit** `feat: add keyboard shortcut resolver`.
 
 ### Task 6: Search matcher
 
@@ -182,9 +182,9 @@ tests/fixtures/{simple.pdf,mixed.pdf,long300.pdf,outline.pdf,encrypted.pdf,broke
 - `findMatches(query: string, pages: PageTextIndex[]): Match[]` — case-insensitive via `toLowerCase()` on NFKC-normalised strings, any whitespace run in the query matches any whitespace run (including newline) in the text; empty/whitespace-only query → `[]`; ordered by page then start.
 - `interface ItemSpan { item: number; start: number; end: number }`; `matchToItemSpans(index: PageTextIndex, m: Match): ItemSpan[]` — splits a match across the items it covers, offsets relative to each item string.
 
-- [ ] **Step 1: Write failing tests**: index offsets with and without `hasEOL`; query `"hello world"` matches `"Hello\nworld"`; Korean query matches Korean text; `matchToItemSpans` for a match spanning two items returns two spans with correct local offsets; empty query → `[]`.
-- [ ] **Step 2: Run** — FAIL. **Step 3: Implement.** **Step 4: Run** — PASS.
-- [ ] **Step 5: Commit** `feat: add text search matcher`.
+- [x] **Step 1: Write failing tests**: index offsets with and without `hasEOL`; query `"hello world"` matches `"Hello\nworld"`; Korean query matches Korean text; `matchToItemSpans` for a match spanning two items returns two spans with correct local offsets; empty query → `[]`.
+- [x] **Step 2: Run** — FAIL. **Step 3: Implement.** **Step 4: Run** — PASS.
+- [x] **Step 5: Commit** `feat: add text search matcher`.
 
 ### Task 7: Per-file state persistence
 
@@ -196,9 +196,9 @@ tests/fixtures/{simple.pdf,mixed.pdf,long300.pdf,outline.pdf,encrypted.pdf,broke
 - Produces (`types.ts`): `interface FileState { page: number; zoomMode: ZoomMode; scale: number; rotation: Rotation; updatedAt: number }` (types imported from `src/types.ts`, never from `store.ts`); `interface Platform { readFile(path: string): Promise<Uint8Array>; openFileDialog(): Promise<string | null>; startupFile(): Promise<string | null>; onFileDrop(cb: (path: string) => void): () => void; setTitle(title: string): Promise<void>; fileName(path: string): string }`.
 - Produces (`fileState.ts`): `loadFileState(path: string, storage?: StorageLike): FileState | null`, `saveFileState(path: string, state: Omit<FileState,'updatedAt'>, storage?: StorageLike): void`, key `pfw:file:` + path, keeps at most 200 entries (evicts oldest `updatedAt`), every storage access wrapped in try/catch, `StorageLike = Pick<Storage,'getItem'|'setItem'|'removeItem'|'key'|'length'>`.
 
-- [ ] **Step 1: Write failing tests** with an in-memory `StorageLike`: round trip; missing → null; corrupt JSON → null; 201st entry evicts the oldest; throwing storage does not throw.
-- [ ] **Step 2: Run** — FAIL. **Step 3: Implement.** **Step 4: Run** — PASS.
-- [ ] **Step 5: Commit** `feat: persist last page and zoom per file`.
+- [x] **Step 1: Write failing tests** with an in-memory `StorageLike`: round trip; missing → null; corrupt JSON → null; 201st entry evicts the oldest; throwing storage does not throw.
+- [x] **Step 2: Run** — FAIL. **Step 3: Implement.** **Step 4: Run** — PASS.
+- [x] **Step 5: Commit** `feat: persist last page and zoom per file`.
 
 ### Task 8: PDF document wrapper, fixtures, Playwright setup
 
@@ -212,13 +212,13 @@ tests/fixtures/{simple.pdf,mixed.pdf,long300.pdf,outline.pdf,encrypted.pdf,broke
 - Produces: `browserPlatform(): Platform` — `readFile` fetches the path relative to the page (`fetch(encodeURI(path))`), `startupFile` reads `?file=` from `location.search`, `openFileDialog` uses a hidden `<input type=file>` and stores the chosen `File` under a `blob:` path, `onFileDrop` listens to HTML5 drop with files, `setTitle` sets `document.title`, `fileName` = last path segment.
 - Fixtures: `simple.pdf` (3 A4 pages, text "Hello world page N"), `mixed.pdf` (A4 portrait, A4 landscape, 200×200), `long300.pdf` (300 pages, page number text), `outline.pdf` (6 pages, nested bookmarks "Chapter 1" → "Section 1.1"), `encrypted.pdf` (user password "secret"), `broken.pdf` (text file with `.pdf` extension), `한글 문서.pdf` (2 pages with Korean text "안녕하세요 미리보기").
 
-- [ ] **Step 1: Fixtures already exist** (generated in Task 1 by `scripts/make-fixtures.py` with Noto Sans KR embedded on page 1 and the non-embedded `HYSMyeongJo-Medium` CID font on page 2 of `한글 문서.pdf`). pdf.js therefore needs its CMaps: serve `node_modules/pdfjs-dist/cmaps` and `standard_fonts` at `/pdfjs/cmaps/` and `/pdfjs/standard_fonts/` (dev/preview middleware + copy into `dist/pdfjs/` at build) and pass `cMapUrl`, `cMapPacked: true`, `standardFontDataUrl` to `getDocument`.
-- [ ] **Step 2: Write failing `tests/unit/document.test.ts`** (Vitest, Node): `PdfDocument.load(simple)` → `numPages 3`, `sizes[0]` ≈ `{595.28, 841.89}`; `mixed` → `loadSizes` ends with `sizes[1].width > sizes[1].height`; `outline` → root title `Chapter 1`, child `Section 1.1` with `pageIndex 1`; `encrypted` without password → rejects with `kind 'password'`; `broken` → `kind 'invalid'`; `getPageText(0)` of simple contains an item whose `str` includes `Hello`. Use `pdfjs-dist/legacy/build/pdf.mjs` under Node via a `vitest` alias when `typeof window === 'undefined'`.
-- [ ] **Step 3: Run** — FAIL. **Step 4: Implement `document.ts` and `renderer.ts`.** Set `GlobalWorkerOptions.workerSrc` from `new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url)` in browser builds only.
-- [ ] **Step 5: Run** — PASS.
-- [ ] **Step 6: Playwright**: `npx playwright install chromium`; `playwright.config.ts` with `webServer: { command: 'npm run build && npm run preview -- --port 4173 --strictPort', url: 'http://localhost:4173' }`, `use: { baseURL, viewport 1200×800 }`, projects `chromium` and `chromium-hidpi` (`deviceScaleFactor: 2`). Vite `publicDir` must expose `tests/fixtures` at `/fixtures` (symlink `public/fixtures` → `../tests/fixtures`, or `vite.config.ts` `publicDir: 'tests'` so files are at `/fixtures/...`; choose the latter).
-- [ ] **Step 7: Write `tests/e2e/_setup.spec.ts`**: `page.goto('/')` → heading text "Open a PDF" visible. Run `npm run e2e` — PASS. If Chromium fails to launch for missing system libraries, record the exact missing library names in the task notes and fall back to running e2e through `msedge` on the Windows host via Playwright's `channel: 'msedge'` with `executablePath` under `/mnt/c/...` — only if headless Chromium cannot run.
-- [ ] **Step 8: Commit** `feat: pdf document wrapper, renderer, fixtures and e2e harness`.
+- [x] **Step 1: Fixtures already exist** (generated in Task 1 by `scripts/make-fixtures.py` with Noto Sans KR embedded on page 1 and the non-embedded `HYSMyeongJo-Medium` CID font on page 2 of `한글 문서.pdf`). pdf.js therefore needs its CMaps: serve `node_modules/pdfjs-dist/cmaps` and `standard_fonts` at `/pdfjs/cmaps/` and `/pdfjs/standard_fonts/` (dev/preview middleware + copy into `dist/pdfjs/` at build) and pass `cMapUrl`, `cMapPacked: true`, `standardFontDataUrl` to `getDocument`.
+- [x] **Step 2: Write failing `tests/unit/document.test.ts`** (Vitest, Node): `PdfDocument.load(simple)` → `numPages 3`, `sizes[0]` ≈ `{595.28, 841.89}`; `mixed` → `loadSizes` ends with `sizes[1].width > sizes[1].height`; `outline` → root title `Chapter 1`, child `Section 1.1` with `pageIndex 1`; `encrypted` without password → rejects with `kind 'password'`; `broken` → `kind 'invalid'`; `getPageText(0)` of simple contains an item whose `str` includes `Hello`. Use `pdfjs-dist/legacy/build/pdf.mjs` under Node via a `vitest` alias when `typeof window === 'undefined'`.
+- [x] **Step 3: Run** — FAIL. **Step 4: Implement `document.ts` and `renderer.ts`.** Set `GlobalWorkerOptions.workerSrc` from `new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url)` in browser builds only.
+- [x] **Step 5: Run** — PASS.
+- [x] **Step 6: Playwright**: `npx playwright install chromium`; `playwright.config.ts` with `webServer: { command: 'npm run build && npm run preview -- --port 4173 --strictPort', url: 'http://localhost:4173' }`, `use: { baseURL, viewport 1200×800 }`, projects `chromium` and `chromium-hidpi` (`deviceScaleFactor: 2`). Vite `publicDir` must expose `tests/fixtures` at `/fixtures` (symlink `public/fixtures` → `../tests/fixtures`, or `vite.config.ts` `publicDir: 'tests'` so files are at `/fixtures/...`; choose the latter).
+- [x] **Step 7: Write `tests/e2e/_setup.spec.ts`**: `page.goto('/')` → heading text "Open a PDF" visible. Run `npm run e2e` — PASS. If Chromium fails to launch for missing system libraries, record the exact missing library names in the task notes and fall back to running e2e through `msedge` on the Windows host via Playwright's `channel: 'msedge'` with `executablePath` under `/mnt/c/...` — only if headless Chromium cannot run.
+- [x] **Step 8: Commit** `feat: pdf document wrapper, renderer, fixtures and e2e harness`.
 
 ### Task 9: Viewer component (virtualised continuous scroll, zoom, rotation)
 
@@ -234,7 +234,7 @@ tests/fixtures/{simple.pdf,mixed.pdf,long300.pdf,outline.pdf,encrypted.pdf,broke
 - Page element contract: `<div class="page" data-page="N" style="position:absolute; top;left;width;height"><canvas></canvas><div class="textLayer"></div></div>`; a page that is not mounted has no element at all; the scroll container has a single `.page-layer` child whose height = `layout.totalHeight`.
 - Behaviours: DPR from `devicePixelRatio`, re-render on `resize` (ResizeObserver, debounced 100 ms; fit modes recompute scale); render order: current page, then outward; overscan = 0.5 viewport; renders cancelled on unmount; on zoom the canvas CSS size changes immediately (stretched bitmap) then the re-render replaces it; `currentPage` in store updated from `currentPageIndex` on scroll (rAF-throttled); Ctrl+wheel → `setZoom('custom', wheelZoom(...), {x,y})` with `preventDefault`; `scale` and `zoomMode` written to store whenever they change; `firstPaint` metric recorded when the first canvas render completes.
 
-- [ ] **Step 1: Write failing `tests/e2e/viewer.spec.ts`** (open via `/?file=fixtures/<name>.pdf`):
+- [x] **Step 1: Write failing `tests/e2e/viewer.spec.ts`** (open via `/?file=fixtures/<name>.pdf`):
   - `simple.pdf`: `.page[data-page="1"] canvas` present and non-blank (sample via `page.evaluate` reading `getImageData` from the canvas, count of non-white pixels > 100); `__pfw.store.get().numPages === 3`; `metrics.firstPaint - metrics.openStart < 1000`.
   - `long300.pdf`: after load, `document.querySelectorAll('.page').length <= 10`; scroll to `layout`-middle (`__pfw.viewer.goToPage(149)`) → `currentPage === 150` and mounted count still ≤ 10; `firstPaint - openStart < 1000`.
   - `mixed.pdf`: every `.page` has `left + width/2` within 1px of container center; after `setZoom('fit-width')` the landscape page width ≈ container width − 2×padding.
@@ -242,10 +242,10 @@ tests/fixtures/{simple.pdf,mixed.pdf,long300.pdf,outline.pdf,encrypted.pdf,broke
   - Rotation: `setRotation(90)` on `simple` → page element width > height.
   - HiDPI project: `canvas.width === Math.round(canvas.clientWidth * 2)`.
   - `broken.pdf` → `status 'error'`, `.error-banner` visible containing "broken.pdf"; `encrypted.pdf` → `error` mentions password.
-- [ ] **Step 2: Run** `npm run e2e` — FAIL.
-- [ ] **Step 3: Implement `textlayer.ts`, `viewer.ts`, `app.ts`, styles** (theme tokens: `--bg`, `--surface`, `--page-shadow`, `--fg`, `--accent`, dark overrides under `prefers-color-scheme: dark`; text layer CSS copied from pdf.js `pdf_viewer.css` `.textLayer` rules).
-- [ ] **Step 4: Run** — PASS on both projects.
-- [ ] **Step 5: Commit** `feat: virtualised pdf viewer with zoom, rotation and text layer`.
+- [x] **Step 2: Run** `npm run e2e` — FAIL.
+- [x] **Step 3: Implement `textlayer.ts`, `viewer.ts`, `app.ts`, styles** (theme tokens: `--bg`, `--surface`, `--page-shadow`, `--fg`, `--accent`, dark overrides under `prefers-color-scheme: dark`; text layer CSS copied from pdf.js `pdf_viewer.css` `.textLayer` rules).
+- [x] **Step 4: Run** — PASS on both projects.
+- [x] **Step 5: Commit** `feat: virtualised pdf viewer with zoom, rotation and text layer`.
 
 ### Task 10: Toolbar, page indicator, empty state, open flows
 
@@ -259,9 +259,9 @@ tests/fixtures/{simple.pdf,mixed.pdf,long300.pdf,outline.pdf,encrypted.pdf,broke
 - Empty state: `section.empty-state` with "Open a PDF" heading, `button[data-action=open]` "Open…", hint "or drop a file here". Dragging a file over the window shows `.drop-overlay`.
 - App: `open()` → `platform.openFileDialog()` → `openPath`; native/HTML5 drops → `openPath`; title = `fileName`.
 
-- [ ] **Step 1: Write failing e2e**: page input `150` + Enter on `long300` → `currentPage 150`; `999` → clamps to 300; zoom-in button changes `formatZoom` label; zoom menu "Fit Page" → `zoomMode 'fit-page'`; rotate button → `rotation 90`; sidebar button toggles `sidebarOpen`; `/?file=fixtures/한글 문서.pdf` → `document.title === '한글 문서.pdf'`; HTML5 drop of `simple.pdf` (Playwright `setInputFiles` on the hidden input via the Open button) → `numPages 3`; empty state visible on `/` with no file.
-- [ ] **Step 2: Run** — FAIL. **Step 3: Implement.** **Step 4: Run** — PASS.
-- [ ] **Step 5: Commit** `feat: toolbar, page indicator, zoom menu and open flows`.
+- [x] **Step 1: Write failing e2e**: page input `150` + Enter on `long300` → `currentPage 150`; `999` → clamps to 300; zoom-in button changes `formatZoom` label; zoom menu "Fit Page" → `zoomMode 'fit-page'`; rotate button → `rotation 90`; sidebar button toggles `sidebarOpen`; `/?file=fixtures/한글 문서.pdf` → `document.title === '한글 문서.pdf'`; HTML5 drop of `simple.pdf` (Playwright `setInputFiles` on the hidden input via the Open button) → `numPages 3`; empty state visible on `/` with no file.
+- [x] **Step 2: Run** — FAIL. **Step 3: Implement.** **Step 4: Run** — PASS.
+- [x] **Step 5: Commit** `feat: toolbar, page indicator, zoom menu and open flows`.
 
 ### Task 11: Sidebar — thumbnails and outline
 
@@ -275,9 +275,9 @@ tests/fixtures/{simple.pdf,mixed.pdf,long300.pdf,outline.pdf,encrypted.pdf,broke
 - `ThumbnailList`: one `button.thumb[data-page=N]` per page with a `<canvas>` rendered lazily at 160 px width via `IntersectionObserver` (root = sidebar scroller, rootMargin 400px), rendered through a separate `PageRenderer` instance so main-view renders are not cancelled; `.thumb.current` follows `currentPage` and is scrolled into view (`block: 'nearest'`).
 - `OutlineTree`: nested `<ul>` with `button.outline-item[data-page]`; items with children get a disclosure toggle; top-level expanded, deeper levels collapsed; click → `goToPage(pageIndex, top ?? undefined)`.
 
-- [ ] **Step 1: Write failing e2e**: open `long300` with sidebar → thumbnails count 300, canvases rendered only for visible ones (`canvas.width > 0` count < 40); click thumb 42 → `currentPage 42`; `goToPage(199)` → `.thumb.current` is page 200 and within sidebar viewport; `outline.pdf` outline tab → "Chapter 1" visible, expanding shows "Section 1.1", clicking goes to `currentPage 2`; `simple.pdf` → outline tab disabled.
-- [ ] **Step 2: Run** — FAIL. **Step 3: Implement.** **Step 4: Run** — PASS.
-- [ ] **Step 5: Commit** `feat: sidebar with lazy thumbnails and outline`.
+- [x] **Step 1: Write failing e2e**: open `long300` with sidebar → thumbnails count 300, canvases rendered only for visible ones (`canvas.width > 0` count < 40); click thumb 42 → `currentPage 42`; `goToPage(199)` → `.thumb.current` is page 200 and within sidebar viewport; `outline.pdf` outline tab → "Chapter 1" visible, expanding shows "Section 1.1", clicking goes to `currentPage 2`; `simple.pdf` → outline tab disabled.
+- [x] **Step 2: Run** — FAIL. **Step 3: Implement.** **Step 4: Run** — PASS.
+- [x] **Step 5: Commit** `feat: sidebar with lazy thumbnails and outline`.
 
 ### Task 12: Find bar
 
@@ -290,9 +290,9 @@ tests/fixtures/{simple.pdf,mixed.pdf,long300.pdf,outline.pdf,encrypted.pdf,broke
 - Produces: `class FindBar` — `constructor(host, store, deps: { doc, viewer })`; DOM `input[data-find-input]`, `span[data-find-count]` ("3 of 12", "No results", empty while idle), `button[data-action=find-prev]`, `button[data-action=find-next]`, `button[data-action=find-close]`; `open()` focuses and selects the input; `close()` clears highlights and store find fields; search runs debounced 150 ms after typing, builds the text index lazily (all pages, batches of 10, memoised on the doc); current match → `goToPage(pageIndex, topOfMatchFromTextDiv)` then `mark.find-current` scrolled into view; highlights applied to mounted text layers by wrapping ranges in `<mark class="find-match">` and re-applied whenever `onTextLayer` fires for a page with matches.
 - Verify in `node_modules/pdfjs-dist` that `TextLayer.textDivs[i]` corresponds to text content item `i` (document the finding in a code comment in `findbar.ts`; if not 1:1, use the `textDivProperties`/`textContentItemsStr` mapping instead).
 
-- [ ] **Step 1: Write failing e2e** on `simple.pdf`: Ctrl+F opens and focuses input; type `page 2` → count "1 of 1", `currentPage 2`, one `mark.find-current`; type `hello` → "1 of 3"; Enter → "2 of 3"; Shift+Enter → "1 of 3"; Esc → bar hidden, no `mark` left; `한글 문서.pdf` query `미리보기` → "1 of 2" or more; query `zzzz` → "No results".
-- [ ] **Step 2: Run** — FAIL. **Step 3: Implement.** **Step 4: Run** — PASS.
-- [ ] **Step 5: Commit** `feat: find in document with highlights`.
+- [x] **Step 1: Write failing e2e** on `simple.pdf`: Ctrl+F opens and focuses input; type `page 2` → count "1 of 1", `currentPage 2`, one `mark.find-current`; type `hello` → "1 of 3"; Enter → "2 of 3"; Shift+Enter → "1 of 3"; Esc → bar hidden, no `mark` left; `한글 문서.pdf` query `미리보기` → "1 of 2" or more; query `zzzz` → "No results".
+- [x] **Step 2: Run** — FAIL. **Step 3: Implement.** **Step 4: Run** — PASS.
+- [x] **Step 5: Commit** `feat: find in document with highlights`.
 
 ### Task 13: Shortcut binding and state restore
 
@@ -304,9 +304,9 @@ tests/fixtures/{simple.pdf,mixed.pdf,long300.pdf,outline.pdf,encrypted.pdf,broke
 - Consumes: Task 5 `bindShortcuts`, Task 7 `loadFileState/saveFileState`.
 - Behaviours: every `Action` dispatches to the matching App/viewer method; `goto-page` focuses the page input; `saveFileState` debounced 300 ms on `currentPage/scale/zoomMode/rotation` changes; on `openPath` of a known path restore page + zoom + rotation (page restored after the layout exists).
 
-- [ ] **Step 1: Write failing e2e**: on `long300` press `End` → 300, `Home` → 1, `PageDown` → 2, `Space` → `scrollTop` increased by ≈ viewport height, `Ctrl+0` → scale 1 custom, `Ctrl+1` → fit-width, `Ctrl+2` → fit-page, `Ctrl+L` → rotation 90, `Ctrl+Shift+S` → sidebar; reload the same URL → `currentPage` restored to the page set before reload and rotation 90 restored.
-- [ ] **Step 2: Run** — FAIL. **Step 3: Implement.** **Step 4: Run** — PASS.
-- [ ] **Step 5: Commit** `feat: keyboard shortcuts and per-file state restore`.
+- [x] **Step 1: Write failing e2e**: on `long300` press `End` → 300, `Home` → 1, `PageDown` → 2, `Space` → `scrollTop` increased by ≈ viewport height, `Ctrl+0` → scale 1 custom, `Ctrl+1` → fit-width, `Ctrl+2` → fit-page, `Ctrl+L` → rotation 90, `Ctrl+Shift+S` → sidebar; reload the same URL → `currentPage` restored to the page set before reload and rotation 90 restored.
+- [x] **Step 2: Run** — FAIL. **Step 3: Implement.** **Step 4: Run** — PASS.
+- [x] **Step 5: Commit** `feat: keyboard shortcuts and per-file state restore`.
 
 ### Task 14: Tauri platform, window state, packaging, Windows smoke test
 
@@ -320,11 +320,11 @@ tests/fixtures/{simple.pdf,mixed.pdf,long300.pdf,outline.pdf,encrypted.pdf,broke
 - Rust: register `tauri_plugin_dialog` and `tauri_plugin_window_state` (`Builder::default().build()`); `read_file` reads with `std::fs::read` and returns `tauri::ipc::Response::new(bytes)`; `startup_file` returns the first argument after the exe that is an existing file, canonicalised and with the `\\?\` prefix stripped.
 - `smoke-windows.ps1 <exe> <pdf>`: starts the exe with the pdf path, waits 4 s, captures the primary screen to `smoke.png` with `System.Drawing`, checks the process is still alive, then stops it. The build script copies the fixture `한글 문서.pdf` to `C:\Users\Public\pfw-smoke\` for the launch.
 
-- [ ] **Step 1: Implement `tauri.ts`, Rust commands, plugin registration, capabilities.**
-- [ ] **Step 2: Run `scripts/build-windows.sh --bundle`** — expected: `Preview.exe` and `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/Preview_0.1.0_x64-setup.exe` exist. If NSIS bundling fails on Linux, keep the portable exe as the deliverable and record the failure in `docs/superpowers/plans/` notes.
-- [ ] **Step 3: Run the smoke script from WSL** with the fixture `한글 문서.pdf`; `Read` the screenshot; expected: a window titled `한글 문서.pdf` showing Korean text on a rendered page, no error banner.
-- [ ] **Step 4: Measure startup**: run the exe with `long300.pdf`, screenshot at 1.0 s; expected: first page visible.
-- [ ] **Step 5: Commit** `feat: tauri platform, window state and windows packaging`.
+- [x] **Step 1: Implement `tauri.ts`, Rust commands, plugin registration, capabilities.**
+- [x] **Step 2: Run `scripts/build-windows.sh --bundle`** — expected: `Preview.exe` and `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/Preview_0.1.0_x64-setup.exe` exist. If NSIS bundling fails on Linux, keep the portable exe as the deliverable and record the failure in `docs/superpowers/plans/` notes.
+- [x] **Step 3: Run the smoke script from WSL** with the fixture `한글 문서.pdf`; `Read` the screenshot; expected: a window titled `한글 문서.pdf` showing Korean text on a rendered page, no error banner.
+- [x] **Step 4: Measure startup**: run the exe with `long300.pdf`, screenshot at 1.0 s; expected: first page visible.
+- [x] **Step 5: Commit** `feat: tauri platform, window state and windows packaging`.
 
 ### Task 15: README, final verification and review
 
