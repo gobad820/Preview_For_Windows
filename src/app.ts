@@ -59,6 +59,14 @@ export class App {
       },
     });
 
+    // ---- page layout (Continuous Scroll / Two Pages) ----
+    this.store.subscribe((s, prev) => {
+      if (s.displayMode !== prev.displayMode || s.bookMode !== prev.bookMode) {
+        this.viewer.setDisplay(s.displayMode, s.bookMode);
+      }
+    });
+    this.viewer.setDisplay(this.store.get().displayMode, this.store.get().bookMode);
+
     this.store.select('status', (s) => {
       appEl.dataset['status'] = s;
     });
@@ -248,11 +256,11 @@ export class App {
         break;
       case 'next-page':
         if (this.viewer.overflowsHorizontally()) this.viewer.panBy(PAN_STEP);
-        else this.viewer.goToPage(s.currentPage);
+        else this.viewer.stepPage(1);
         break;
       case 'prev-page':
         if (this.viewer.overflowsHorizontally()) this.viewer.panBy(-PAN_STEP);
-        else this.viewer.goToPage(s.currentPage - 2);
+        else this.viewer.stepPage(-1);
         break;
       case 'first-page':
         this.viewer.goToPage(0);

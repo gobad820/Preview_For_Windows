@@ -3,25 +3,30 @@ import type { PageViewport } from 'pdfjs-dist/types/src/display/page_viewport';
 import type { PageSource } from '../pdf/source';
 import { CSS_UNITS, PageRenderer, type RenderHandle } from '../pdf/renderer';
 import { mountTextLayer, type TextLayerHandle } from '../pdf/textlayer';
-import type { Store, ViewerState } from '../store';
+import type { DisplayMode, Store, ViewerState } from '../store';
 import type { Rotation, ZoomMode } from '../types';
 import {
-  anchoredScrollTop,
+  anchoredScroll,
   computeLayout,
   currentPageIndex,
   docPointAt,
   fitPageScale,
   fitWidthScale,
+  rowOfPage,
   scrollTopForPage,
+  stepRow,
   visibleRange,
   yForDocPoint,
   type DocPoint,
   type Layout,
+  type Spread,
 } from './layout';
 import { clampZoom, wheelZoom } from './zoom';
 
 export const PAGE_GAP = 16;
 export const PAGE_PADDING = 24;
+/** Space between the two pages of a row in Two Pages, CSS px. */
+export const SPINE_GAP = 8;
 /** Pages within this many viewport heights of the visible area stay mounted. */
 const OVERSCAN_VIEWPORTS = 0.5;
 const RESIZE_DEBOUNCE_MS = 100;
@@ -83,6 +88,9 @@ export class PdfViewer {
   private scale = 1;
   private zoomMode: ZoomMode = 'fit-width';
   private rotation: Rotation = 0;
+  private spread: Spread = 'none';
+  /** The page last gone to and the scroll position that put it there; it stays current until the view scrolls. */
+  private navTarget: { index: number; scrollTop: number } | null = null;
   private scrollRaf = 0;
   private resizeTimer = 0;
   private painted = false;
@@ -185,7 +193,8 @@ export class PdfViewer {
 
   /** The document point at the middle of the viewport (normally on the current page). */
   centerAnchor(): DocPoint {
-    return docPointAt(this.layout, this.container.scrollTop + this.container.clientHeight / 2);
+    const { scrollTop, scrollLeft, clientHeight, clientWidth } = this.container;
+    return docPointAt(this.layout, scrollTop + clientHeight / 2, scrollLeft + clientWidth / 2);
   }
 
   /** The document point at the top edge of the viewport. */
@@ -214,7 +223,10 @@ export class PdfViewer {
 
   // ---- navigation ---------------------------------------------------------
 
-  /** Scrolls so page `index` (0-based) starts at the top; `top` is PDF points from the page's top edge. */
+  /**
+   * Scrolls so the row of page `index` (0-based) starts at the top and makes that page the
+   * current one; `top` is PDF points from the page's top edge.
+   */
   goToPage(index: number, top?: number): void {
     if (!this.doc || this.layout.pages.length === 0) return;
     const i = Math.min(Math.max(0, index), this.layout.pages.length - 1);
@@ -223,8 +235,15 @@ export class PdfViewer {
       y = Math.max(0, this.layout.pages[i]!.top + top * this.scale * CSS_UNITS - PAGE_PADDING);
     }
     this.container.scrollTop = y;
+    this.navTarget = { index: i, scrollTop: this.container.scrollTop };
     this.syncCurrentPage();
     this.updateMounted();
+  }
+
+  /** Goes to the first page of the next (1) or previous (-1) row. */
+  stepPage(dir: 1 | -1): void {
+    if (!this.doc || this.layout.pages.length === 0) return;
+    this.goToPage(stepRow(this.layout, Math.max(0, this.store.get().currentPage - 1), dir));
   }
 
   /** True when the layout is wider than the viewport (arrow keys pan instead of paging). */
@@ -255,6 +274,18 @@ export class PdfViewer {
     this.syncCurrentPage();
   }
 
+  /** One page per row or two (Book Mode: the first page alone on the right); keeps the center page in view. */
+  setDisplay(mode: DisplayMode, book: boolean): void {
+    const spread: Spread = mode === 'two-pages' ? (book ? 'book' : 'pairs') : 'none';
+    if (spread === this.spread) return;
+    this.spread = spread;
+    if (!this.doc) return;
+    if (this.zoomMode !== 'custom') this.scale = this.computeScale(this.zoomMode, this.scale);
+    this.relayout(this.center());
+    if (this.store.get().scale !== this.scale) this.store.set({ scale: this.scale });
+    this.syncCurrentPage();
+  }
+
   setRotation(rotation: Rotation): void {
     this.rotation = rotation;
     if (this.doc) {
@@ -280,8 +311,11 @@ export class PdfViewer {
   /** Document point under a viewport (client) coordinate. */
   docPointAtClient(clientX: number, clientY: number): DocPoint {
     const rect = this.container.getBoundingClientRect();
-    void clientX;
-    return docPointAt(this.layout, this.container.scrollTop + (clientY - rect.top));
+    return docPointAt(
+      this.layout,
+      this.container.scrollTop + (clientY - rect.top),
+      this.container.scrollLeft + (clientX - rect.left),
+    );
   }
 
   getLayout(): Layout {
@@ -335,10 +369,10 @@ export class PdfViewer {
     const w = this.container.clientWidth;
     const h = this.container.clientHeight;
     if (mode === 'fit-width' && w > 0) {
-      return clampZoom(fitWidthScale(this.doc.sizes, this.rotation, w, PAGE_PADDING));
+      return clampZoom(fitWidthScale(this.doc.sizes, this.rotation, w, PAGE_PADDING, this.spread, SPINE_GAP));
     }
     if (mode === 'fit-page' && w > 0 && h > 0) {
-      return clampZoom(fitPageScale(this.doc.sizes, this.rotation, w, h, PAGE_PADDING));
+      return clampZoom(fitPageScale(this.doc.sizes, this.rotation, w, h, PAGE_PADDING, this.spread, SPINE_GAP));
     }
     return clampZoom(fallback);
   }
@@ -354,14 +388,15 @@ export class PdfViewer {
       gap: PAGE_GAP,
       padding: PAGE_PADDING,
       containerWidth: this.container.clientWidth,
+      spread: this.spread,
+      spineGap: SPINE_GAP,
     });
     this.layout = next;
     this.layer.style.height = `${next.totalHeight}px`;
     this.layer.style.width = `${next.contentWidth}px`;
     if (anchor && old.pages.length > 0) {
-      const top = anchoredScrollTop(old, next, this.container.scrollTop, anchor.y);
-      const ratio = old.contentWidth > 0 ? next.contentWidth / old.contentWidth : 1;
-      const left = Math.max(0, (this.container.scrollLeft + anchor.x) * ratio - anchor.x);
+      const { scrollTop, scrollLeft } = this.container;
+      const { top, left } = anchoredScroll(old, next, { top: scrollTop, left: scrollLeft }, anchor);
       this.container.scrollTop = top;
       this.container.scrollLeft = left;
     }
@@ -458,9 +493,27 @@ export class PdfViewer {
     this.dprQuery.addEventListener('change', onChange);
   }
 
+  /**
+   * The current page is the first (left) page of the most visible row, except: the page last
+   * gone to while the view has not scrolled since (a short last row cannot reach the top),
+   * and a page of that same row that was current already (the right page of a spread).
+   */
   private syncCurrentPage(): void {
     if (!this.doc) return;
-    const idx = currentPageIndex(this.layout, this.container.scrollTop, this.container.clientHeight);
+    const { scrollTop, clientHeight } = this.container;
+    const layout = this.layout;
+    let idx = currentPageIndex(layout, scrollTop, clientHeight);
+    const nav = this.navTarget;
+    const target = nav && nav.scrollTop === scrollTop ? layout.pages[nav.index] : undefined;
+    if (target && target.top < scrollTop + clientHeight && target.top + target.height > scrollTop) {
+      idx = target.index;
+    } else {
+      this.navTarget = null;
+      const current = this.store.get().currentPage - 1;
+      if (current >= 0 && current < layout.pages.length && rowOfPage(layout, current) === rowOfPage(layout, idx)) {
+        idx = current;
+      }
+    }
     const page = idx + 1;
     if (page > 0 && this.store.get().currentPage !== page) this.store.set({ currentPage: page });
   }
