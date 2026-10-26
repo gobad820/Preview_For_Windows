@@ -1,23 +1,47 @@
 /**
  * Text markup geometry from the browser selection: each client rect of the selected text that
- * lies on a page becomes a rect in that page's PDF space, rects on one line merge, and every
- * merged rect becomes one quad. One entry per page touched.
+ * lies on a page becomes a rect in that page's PDF space, rects on one line merge (across word
+ * spaces, like Preview), and every merged rect becomes one quad. One entry per page touched.
  */
 import type { PdfRect, Quad } from '../annot/types';
 import type { PageView } from '../viewer/viewer';
 
-/** Rects closer than this (points) along the line join. */
+/** Rects closer than this (points) along the line join, whatever their order. */
 const JOIN_GAP = 2;
+/**
+ * Rects that follow each other in reading order on one line join across gaps up to this many
+ * line heights: pdf.js text layers often have no text for word spaces, and justified lines
+ * stretch them. Column gutters are wider, and reading order leaves a column at its bottom.
+ */
+const WORD_GAP = 1.2;
+/** The same with a space between them in the text (a stretched justified line), up to this. */
+const SPACED_GAP = 4;
+
+/** A selected rect; `blank` ones are spaces, which only bridge the words around them. */
+export interface LineRect extends PdfRect {
+  readonly blank?: boolean;
+}
 /** Rects join when they share at least this fraction of the smaller one's height. */
 const JOIN_OVERLAP = 0.5;
 
 const clean = (n: number) => (n === 0 ? 0 : Math.round(n * 1000) / 1000);
 
-function joins(a: PdfRect, b: PdfRect): boolean {
+function sameLine(a: PdfRect, b: PdfRect): boolean {
   const shared = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
   const smaller = Math.min(a.y1 - a.y0, b.y1 - b.y0);
+  return shared >= JOIN_OVERLAP * smaller - 1e-9;
+}
+
+function joins(a: PdfRect, b: PdfRect): boolean {
   const gap = Math.max(a.x0, b.x0) - Math.min(a.x1, b.x1);
-  return shared >= JOIN_OVERLAP * smaller - 1e-9 && gap <= JOIN_GAP + 1e-9;
+  return sameLine(a, b) && gap <= JOIN_GAP + 1e-9;
+}
+
+/** `next` continues `line` in reading order: same line, not behind it, within a word gap. */
+function continues(line: PdfRect, next: PdfRect, spaced: boolean): boolean {
+  if (!sameLine(line, next) || next.x1 < line.x0 - JOIN_GAP) return false;
+  const height = Math.max(line.y1 - line.y0, next.y1 - next.y0);
+  return next.x0 - line.x1 <= (spaced ? SPACED_GAP : WORD_GAP) * height + 1e-9;
 }
 
 const union = (a: PdfRect, b: PdfRect): PdfRect => ({
@@ -28,12 +52,26 @@ const union = (a: PdfRect, b: PdfRect): PdfRect => ({
 });
 
 /**
- * Merges rects (upright text, y up) that overlap vertically by at least half the smaller
- * height and touch or overlap horizontally within 2 pt; one quad per merged rect, upper lines
- * first, then left to right. Quads are top-left, top-right, bottom-left, bottom-right.
+ * Merges rects (upright text, y up, in reading order) that share a line, meaning they overlap
+ * vertically by at least half the smaller height: consecutive ones across word gaps up to
+ * 1.2 line heights (4 with a space between them), any others when they touch or overlap
+ * within 2 pt. Spaces never start or end a mark. One quad per merged rect, upper lines first,
+ * then left to right. Quads are top-left, top-right, bottom-left, bottom-right.
  */
-export function quadsForRects(rects: readonly PdfRect[]): Quad[] {
-  let groups = rects.filter((r) => r.x1 - r.x0 > 0 && r.y1 - r.y0 > 0).map((r) => ({ ...r }));
+export function quadsForRects(rects: readonly LineRect[]): Quad[] {
+  let groups: PdfRect[] = [];
+  let spaced = false;
+  for (const r of rects) {
+    if (!(r.x1 - r.x0 > 0 && r.y1 - r.y0 > 0)) continue;
+    const last = groups[groups.length - 1];
+    if (r.blank) {
+      if (last && sameLine(last, r)) spaced = true;
+      continue;
+    }
+    if (last && continues(last, r, spaced)) groups[groups.length - 1] = union(last, r);
+    else groups.push({ x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1 });
+    spaced = false;
+  }
   for (let merged = true; merged; ) {
     merged = false;
     const next: PdfRect[] = [];
@@ -77,10 +115,10 @@ const normTurn = (deg: number): Turn => ((((Math.round(deg / 90) * 90) % 360) + 
  * a multiple of 90): lines merge along the text direction and each quad's top edge is the
  * text's top.
  */
-export function quadsInTextFrame(rects: readonly PdfRect[], angle: number): Quad[] {
+export function quadsInTextFrame(rects: readonly LineRect[], angle: number): Quad[] {
   const a = normTurn(angle);
   if (a === 0) return quadsForRects(rects);
-  return quadsForRects(rects.map((r) => frameRect(r, a))).map((q) => {
+  return quadsForRects(rects.map((r) => ({ ...frameRect(r, a), blank: r.blank }))).map((q) => {
     const out: number[] = [];
     for (let i = 0; i < 8; i += 2) out.push(...turn(q[i]!, q[i + 1]!, a));
     return out.map(clean) as unknown as Quad;
@@ -96,6 +134,8 @@ export interface PageMarks {
 /** The selected part of one text node. */
 interface Piece {
   rects: PdfRect[];
+  /** Only whitespace: bridges the words around it, never marks on its own. */
+  blank: boolean;
   /** Counter-clockwise page-space angle of its text, a multiple of 90. */
   angle: Turn;
   text: string;
@@ -131,8 +171,11 @@ export function selectionToMarks(sel: Selection, views: readonly PageView[]): Ma
       if (!layer || !range.intersectsNode(layer)) continue;
       const pieces = piecesOn(view, layer, range);
       if (pieces.length === 0) continue;
-      const byAngle = new Map<Turn, PdfRect[]>();
-      for (const p of pieces) byAngle.set(p.angle, [...(byAngle.get(p.angle) ?? []), ...p.rects]);
+      const byAngle = new Map<Turn, LineRect[]>();
+      for (const p of pieces) {
+        const rects = p.rects.map((r): LineRect => (p.blank ? { ...r, blank: true } : r));
+        byAngle.set(p.angle, [...(byAngle.get(p.angle) ?? []), ...rects]);
+      }
       const quads: Quad[] = [];
       for (const [angle, rects] of byAngle) quads.push(...quadsInTextFrame(rects, angle));
       if (quads.length === 0) continue;
@@ -156,7 +199,7 @@ function piecesOn(view: PageView, layer: HTMLElement, range: Range): Piece[] {
     const part = clip(range, node);
     if (!part) continue;
     const text = node.data.slice(part[0], part[1]);
-    if (text.trim() === '') continue;
+    const blank = text.trim() === '';
     const sub = document.createRange();
     sub.setStart(node, part[0]);
     sub.setEnd(node, part[1]);
@@ -167,7 +210,7 @@ function piecesOn(view: PageView, layer: HTMLElement, range: Range): Piece[] {
       const [bx, by] = vp.convertToPdfPoint((r.right - host.left) * kx, (r.bottom - host.top) * ky) as [number, number];
       rects.push({ x0: Math.min(ax, bx), y0: Math.min(ay, by), x1: Math.max(ax, bx), y1: Math.max(ay, by) });
     }
-    if (rects.length > 0) pieces.push({ rects, angle: normTurn(textAngle(node)), text });
+    if (rects.length > 0) pieces.push({ rects, blank, angle: normTurn(textAngle(node)), text });
   }
   return pieces;
 }
