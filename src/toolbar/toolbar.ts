@@ -1,5 +1,6 @@
 import type { WindowControls } from '../platform/types';
 import type { Store, ViewerState } from '../store';
+import type { Color } from '../annot/types';
 import type { ZoomMode } from '../types';
 import { icons } from '../ui/icons';
 import { closeMenus, showMenu, type MenuItem } from '../ui/menu';
@@ -16,6 +17,21 @@ export interface ToolbarActions {
   open(): void;
   /** Shows the ⋯ menu below `anchor`, the ⋯ button's rect. */
   moreMenu(anchor: DOMRect): void;
+  /** Shows or hides the markup toolbar row. */
+  toggleMarkup(): void;
+  /** The highlight button's main part: marks the selection or toggles highlight mode. */
+  highlight(): void;
+  /** The highlight button's chevron: color and kind menu below `anchor`. */
+  highlightMenu(anchor: DOMRect): void;
+  /** The chevron next to the sidebar button: View menu below `anchor`. */
+  viewMenu(anchor: DOMRect): void;
+}
+
+/** What the highlight button shows: whether highlight mode is on and the current mark style. */
+export interface HighlightButtonState {
+  on: boolean;
+  color: Color;
+  kind: 'highlight' | 'underline' | 'strikeout';
 }
 
 const ZOOM_PRESETS = [0.5, 0.75, 1, 1.25, 1.5, 2, 4];
@@ -30,6 +46,7 @@ const GLYPH = { minimize: '', maximize: '', restore: '', close: '' }
  */
 const template = `
   <button class="tb-btn" data-action="sidebar" title="Sidebar (Ctrl+Alt+S)" aria-label="Toggle sidebar" aria-pressed="false">${icons.sidebar}</button>
+  <button class="tb-btn tb-chevron" data-action="view-menu" title="View" aria-label="View options" aria-haspopup="menu" aria-expanded="false">${icons.chevronDown}</button>
   <div class="tb-title" data-tauri-drag-region>
     <div class="tb-title-line" data-tauri-drag-region>
       <span class="tb-doc-title" data-doc-title data-tauri-drag-region>Preview</span>
@@ -44,6 +61,11 @@ const template = `
   </div>
   <div class="tb-flex" data-tauri-drag-region></div>
   <div class="tb-items">
+    <div class="tb-split" role="group" aria-label="Highlight">
+      <button class="tb-btn tb-split-main" data-action="highlight" title="Highlight" aria-label="Highlight" aria-pressed="false" disabled>${icons.highlighter}<span class="tb-swatch" data-highlight-swatch></span></button>
+      <button class="tb-btn tb-split-menu" data-action="highlight-menu" title="Highlight Style" aria-label="Highlight style" aria-haspopup="menu" aria-expanded="false" disabled>${icons.chevronDown}</button>
+    </div>
+    <button class="tb-btn" data-action="markup" title="Show Markup Toolbar (Ctrl+Shift+A)" aria-label="Markup toolbar" aria-pressed="false" disabled>${icons.markup}</button>
     <div class="tb-segmented" role="group" aria-label="Zoom">
       <button class="tb-btn" data-action="zoom-out" title="Zoom Out (Ctrl+-)" aria-label="Zoom out" disabled>${icons.zoomOut}</button>
       <button class="tb-btn" data-action="zoom-in" title="Zoom In (Ctrl+=)" aria-label="Zoom in" disabled>${icons.zoomIn}</button>
@@ -86,7 +108,10 @@ export class Toolbar {
     this.zoomButton = this.q('[data-zoom-menu]');
     this.zoomLabel = this.q('.tb-pill-label');
     this.docControls = Array.from(
-      host.querySelectorAll<HTMLButtonElement>('[data-action="zoom-out"], [data-action="zoom-in"], [data-action="rotate"], [data-action="find"]'),
+      host.querySelectorAll<HTMLButtonElement>(
+        '[data-action="zoom-out"], [data-action="zoom-in"], [data-action="rotate"], [data-action="find"], ' +
+          '[data-action="highlight"], [data-action="highlight-menu"], [data-action="markup"]',
+      ),
     );
     if (windowControls) this.addCaptionButtons(windowControls);
 
@@ -97,6 +122,12 @@ export class Toolbar {
     this.q('[data-action="find"]').addEventListener('click', () => actions.toggleFind());
     const more = this.q('[data-action="more"]');
     more.addEventListener('click', () => actions.moreMenu(more.getBoundingClientRect()));
+    this.q('[data-action="markup"]').addEventListener('click', () => actions.toggleMarkup());
+    this.q('[data-action="highlight"]').addEventListener('click', () => actions.highlight());
+    const highlightMenu = this.q('[data-action="highlight-menu"]');
+    highlightMenu.addEventListener('click', () => actions.highlightMenu(highlightMenu.closest('.tb-split')!.getBoundingClientRect()));
+    const viewMenu = this.q('[data-action="view-menu"]');
+    viewMenu.addEventListener('click', () => actions.viewMenu(this.q('[data-action="sidebar"]').getBoundingClientRect()));
     this.zoomButton.addEventListener('click', () => this.openZoomMenu());
 
     this.pageInput.addEventListener('focus', () => this.pageInput.select());
@@ -129,6 +160,7 @@ export class Toolbar {
       store.subscribe((s, prev) => {
         if (s.zoomMode !== prev.zoomMode || s.scale !== prev.scale) this.syncZoom(s);
         if (s.sidebarOpen !== prev.sidebarOpen) this.pressed('sidebar', s.sidebarOpen);
+        if (s.markupOpen !== prev.markupOpen) this.pressed('markup', s.markupOpen);
         if (s.findOpen !== prev.findOpen) this.syncFind(s.findOpen);
         if (s.fileName !== prev.fileName || s.numPages !== prev.numPages || s.dirty !== prev.dirty) this.syncTitle(s);
       }),
@@ -137,6 +169,14 @@ export class Toolbar {
     this.syncTitle(store.get());
     this.pressed('sidebar', store.get().sidebarOpen);
     this.syncFind(store.get().findOpen);
+  }
+
+  /** Reflects highlight mode and the current mark style on the highlight button. */
+  setHighlight(state: HighlightButtonState): void {
+    this.pressed('highlight', state.on);
+    const swatch = this.q('[data-highlight-swatch]');
+    swatch.style.setProperty('--swatch', state.color);
+    swatch.dataset['kind'] = state.kind;
   }
 
   focusPageInput(): void {

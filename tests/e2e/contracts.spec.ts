@@ -1,0 +1,89 @@
+import { expect, test, type Page } from '@playwright/test';
+
+async function open(page: Page, name: string) {
+  await page.goto(`/?file=${encodeURIComponent(`fixtures/${name}`)}`);
+  await page.waitForFunction(() => (window as any).__pfw?.store.get().status === 'ready');
+}
+
+test('the viewer reports page views that match the page elements', async ({ page }) => {
+  await page.addInitScript(() => {
+    (window as any).__views = [];
+    const hook = () => {
+      const pfw = (window as any).__pfw;
+      if (!pfw) return void setTimeout(hook, 5);
+      pfw.viewer.onPageView((v: any) =>
+        (window as any).__views.push({ index: v.index, width: v.viewport.width, gen: v.canvasGeneration, interactive: v.interactive, el: v.el }),
+      );
+    };
+    hook();
+  });
+  await open(page, 'simple.pdf');
+  await page.waitForSelector('#viewer .page[data-page="1"] canvas[data-rendered="true"]');
+  await expect.poll(() => page.evaluate(() => (window as any).__views.some((v: any) => v.index === 0 && v.gen === 0))).toBe(true);
+  const check = await page.evaluate(() => {
+    const v = (window as any).__views.filter((x: any) => x.index === 0 && x.gen === 0).at(-1);
+    return { width: v.width, elWidth: v.el.getBoundingClientRect().width, interactive: v.interactive, isPage: v.el.classList.contains('page') };
+  });
+  expect(check.isPage).toBe(true);
+  expect(check.interactive).toBe(true);
+  expect(Math.abs(check.width - check.elWidth)).toBeLessThan(1);
+
+  // Zooming re-emits with the new viewport.
+  const before = check.width;
+  await page.evaluate(() => (window as any).__pfw.viewer.setZoom('custom', 2));
+  await expect
+    .poll(() => page.evaluate(() => (window as any).__views.filter((x: any) => x.index === 0).at(-1).width))
+    .not.toBe(before);
+});
+
+test('thumbnails report views on their canvas frame', async ({ page }) => {
+  await open(page, 'simple.pdf');
+  await page.evaluate(() => (window as any).__pfw.store.set({ sidebarOpen: true }));
+  await page.waitForSelector('#sidebar .thumb[data-page="1"] canvas[data-rendered="true"]');
+  const v = await page.evaluate(() => {
+    const view = (window as any).__pfw.sidebar.thumbnails.getPageViews().find((x: any) => x.index === 0);
+    return { frame: view.el.className, width: view.viewport.width, canvas: view.el.querySelector('canvas').getBoundingClientRect().width, interactive: view.interactive };
+  });
+  expect(v.frame).toBe('thumb-canvas');
+  expect(v.interactive).toBe(false);
+  expect(Math.abs(v.width - v.canvas)).toBeLessThan(1);
+});
+
+test('toolbar order and the markup toolbar toggle', async ({ page }) => {
+  await open(page, 'simple.pdf');
+  const order = await page.evaluate(() =>
+    Array.from(document.querySelectorAll('#toolbar [data-action], #toolbar [data-zoom-menu]')).map(
+      (el) => (el as HTMLElement).dataset['action'] ?? 'zoom-menu',
+    ),
+  );
+  expect(order.slice(0, 2)).toEqual(['sidebar', 'view-menu']);
+  const items = order.slice(2);
+  expect(items.indexOf('highlight')).toBeLessThan(items.indexOf('highlight-menu'));
+  expect(items.indexOf('highlight-menu')).toBeLessThan(items.indexOf('markup'));
+  expect(items.indexOf('markup')).toBeLessThan(items.indexOf('zoom-out'));
+  expect(items.indexOf('zoom-in')).toBeLessThan(items.indexOf('zoom-menu'));
+  expect(items.indexOf('zoom-menu')).toBeLessThan(items.indexOf('rotate'));
+
+  await expect(page.locator('#markupbar')).toBeHidden();
+  await page.click('[data-action="markup"]');
+  await expect(page.locator('#markupbar')).toBeVisible();
+  await expect(page.locator('[data-action="markup"]')).toHaveAttribute('aria-pressed', 'true');
+  await page.click('[data-action="markup"]');
+  await expect(page.locator('#markupbar')).toBeHidden();
+});
+
+test('annotation edits mark the document edited without re-rendering the canvas', async ({ page }) => {
+  await open(page, 'simple.pdf');
+  await page.waitForSelector('#viewer .page[data-page="1"] canvas[data-rendered="true"]');
+  const same = await page.evaluate(async () => {
+    const pfw = (window as any).__pfw;
+    const canvas = document.querySelector('#viewer .page[data-page="1"] canvas');
+    pfw.app.document.setAnnotations(0, [
+      { id: 'x', kind: 'rect', color: '#ff0000', opacity: 1, modified: '', rect: { x0: 10, y0: 10, x1: 50, y1: 50 }, fill: null, width: 2, rounded: false },
+    ]);
+    await new Promise((r) => setTimeout(r, 300));
+    return { same: canvas === document.querySelector('#viewer .page[data-page="1"] canvas'), dirty: pfw.store.get().dirty };
+  });
+  expect(same).toEqual({ same: true, dirty: true });
+  await expect(page.locator('[data-doc-edited]')).toBeVisible();
+});

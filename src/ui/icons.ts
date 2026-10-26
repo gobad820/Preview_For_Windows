@@ -22,6 +22,10 @@ export const icons = {
       solid('M8 10.8a1.2 1.2 0 1 1 0 2.4a1.2 1.2 0 1 1 0-2.4ZM12 10.8a1.2 1.2 0 1 1 0 2.4a1.2 1.2 0 1 1 0-2.4ZM16 10.8a1.2 1.2 0 1 1 0 2.4a1.2 1.2 0 1 1 0-2.4Z'),
   ),
   search: svg(LENS),
+  /** Markup toolbar: a pen nib in a circle (Preview's pencil.tip.crop.circle). */
+  markup: svg('<circle cx="12" cy="12" r="9"/><path d="M9.25 16.5 12 7.25l2.75 9.25"/><path d="M10.35 13.25h3.3"/>'),
+  /** Highlight: a slanted marker. */
+  highlighter: svg('<path d="m13.75 5.25 5 5-7.5 7.5-3.25.75-2.5-2.5.75-3.25Z"/><path d="m11.25 7.75 5 5"/><path d="m6.5 16-2 2"/>'),
   chevronUp: svg('<path d="m6.5 14.75 5.5-5.5 5.5 5.5"/>'),
   chevronDown: svg('<path d="m6.5 9.25 5.5 5.5 5.5-5.5"/>'),
   chevronLeft: svg('<path d="m14.75 6.5-5.5 5.5 5.5 5.5"/>'),

@@ -52,6 +52,7 @@ export function createStore<T extends object>(initial: T): Store<T> {
 }
 
 export type SidebarTab = 'thumbnails' | 'outline';
+export type DisplayMode = 'continuous' | 'two-pages';
 export type ViewerStatus = 'empty' | 'loading' | 'ready' | 'error';
 
 export interface ViewerState {
@@ -75,6 +76,12 @@ export interface ViewerState {
   error: string | null;
   /** The document has edits that are not saved. */
   dirty: boolean;
+  /** The markup toolbar row is shown. */
+  markupOpen: boolean;
+  /** One page per row, or two (Preview's Two Pages). */
+  displayMode: DisplayMode;
+  /** In Two Pages, the first page sits alone on the right like a book cover. */
+  bookMode: boolean;
 }
 
 export const initialState: ViewerState = {
@@ -94,4 +101,7 @@ export const initialState: ViewerState = {
   status: 'empty',
   error: null,
   dirty: false,
+  markupOpen: false,
+  displayMode: 'continuous',
+  bookMode: false,
 };

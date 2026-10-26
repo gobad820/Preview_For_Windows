@@ -4,6 +4,8 @@ import type { PageSource } from '../pdf/source';
 import type { Point } from '../platform/types';
 import type { Store, ViewerState } from '../store';
 import type { Rotation } from '../types';
+import type { PageGoneListener, PageView, PageViewListener } from '../viewer/viewer';
+import type { PageViewport } from 'pdfjs-dist/types/src/display/page_viewport';
 
 /** CSS width of every thumbnail canvas. */
 export const THUMB_WIDTH = 160;
@@ -23,6 +25,8 @@ export interface ThumbnailDeps {
 
 interface Thumb {
   el: HTMLButtonElement;
+  /** Positioned wrapper around the canvas; overlays attach here. */
+  frame: HTMLElement;
   canvas: HTMLCanvasElement;
   label: HTMLElement;
   /** `PageSource.pageKey` of the page shown. */
@@ -32,6 +36,8 @@ interface Thumb {
   renderedKey: string | null;
   renderingKey: string | null;
   render: RenderHandle | null;
+  viewport: PageViewport | null;
+  canvasGeneration: number;
 }
 
 interface Press {
@@ -68,6 +74,8 @@ export class ThumbnailList {
   private drag: Drag | null = null;
   private readonly indicator: HTMLElement;
   private readonly unsubscribe: Array<() => void> = [];
+  private readonly viewListeners = new Set<PageViewListener>();
+  private readonly goneListeners = new Set<PageGoneListener>();
 
   constructor(
     private readonly scroller: HTMLElement,
@@ -137,6 +145,7 @@ export class ThumbnailList {
       for (const t of list) {
         this.observer?.unobserve(t.el);
         t.el.remove();
+        this.emitGone(t.frame);
       }
     }
     this.thumbs = next;
@@ -144,6 +153,7 @@ export class ThumbnailList {
     for (const t of next) frag.append(t.el);
     this.scroller.append(frag, this.indicator);
     this.relabel();
+    for (const t of next) this.emitView(t);
     for (const t of next) {
       if (t.near) void this.ensureRendered(t);
       t.el.classList.remove('current');
@@ -152,6 +162,28 @@ export class ThumbnailList {
     this.current = 0;
     this.setCurrent(this.store.get().currentPage);
     this.renderSelection();
+  }
+
+  /** Fires when a thumbnail canvas was rendered or the thumbnail moved to another position. */
+  onPageView(cb: PageViewListener): () => void {
+    this.viewListeners.add(cb);
+    return () => this.viewListeners.delete(cb);
+  }
+
+  /** Fires when a thumbnail is removed. */
+  onPageGone(cb: PageGoneListener): () => void {
+    this.goneListeners.add(cb);
+    return () => this.goneListeners.delete(cb);
+  }
+
+  /** Current views of the rendered thumbnails. */
+  getPageViews(): PageView[] {
+    return this.thumbs.map((t) => this.viewOf(t)).filter((v): v is PageView => v !== null);
+  }
+
+  /** Re-renders thumbnails whose `hideGeneration` changed. */
+  annotationsChanged(): void {
+    for (const t of this.thumbs) if (t.near) void this.ensureRendered(t);
   }
 
   /** Call after more page sizes are known so placeholders take their real aspect. */
@@ -431,10 +463,25 @@ export class ThumbnailList {
     const canvas = document.createElement('canvas');
     canvas.width = 0;
     canvas.height = 0;
+    const frame = document.createElement('span');
+    frame.className = 'thumb-canvas';
+    frame.append(canvas);
     const label = document.createElement('span');
     label.className = 'thumb-label';
-    el.append(canvas, label);
-    const t: Thumb = { el, canvas, label, key, near: false, renderedKey: null, renderingKey: null, render: null };
+    el.append(frame, label);
+    const t: Thumb = {
+      el,
+      frame,
+      canvas,
+      label,
+      key,
+      near: false,
+      renderedKey: null,
+      renderingKey: null,
+      render: null,
+      viewport: null,
+      canvasGeneration: -1,
+    };
     this.observer?.observe(el);
     return t;
   }
@@ -481,8 +528,27 @@ export class ThumbnailList {
     });
   }
 
-  private renderKey(): string {
-    return `${this.rotation}|${window.devicePixelRatio || 1}`;
+  private generation(index: number): number {
+    return this.doc?.hideGeneration?.(index) ?? 0;
+  }
+
+  private renderKey(index: number): string {
+    return `${this.rotation}|${window.devicePixelRatio || 1}|${this.generation(index)}`;
+  }
+
+  private viewOf(t: Thumb): PageView | null {
+    if (!t.viewport || t.renderedKey === null) return null;
+    const index = Number(t.el.dataset['page']) - 1;
+    return { index, el: t.frame, viewport: t.viewport, canvasGeneration: t.canvasGeneration, interactive: false };
+  }
+
+  private emitView(t: Thumb): void {
+    const view = this.viewOf(t);
+    if (view) for (const l of this.viewListeners) l(view);
+  }
+
+  private emitGone(frame: HTMLElement): void {
+    for (const l of this.goneListeners) l(frame);
   }
 
   /** Sets the placeholder height from the (possibly provisional) page size. */
@@ -503,12 +569,13 @@ export class ThumbnailList {
     const doc = this.doc;
     const renderer = this.renderer;
     if (!doc || !renderer) return;
-    const key = this.renderKey();
+    const index = Number(t.el.dataset['page']) - 1;
+    const generation = this.generation(index);
+    const key = this.renderKey(index);
     if (t.renderedKey === key || t.renderingKey === key) return;
     t.render?.cancel();
     t.render = null;
     t.renderingKey = key;
-    const index = Number(t.el.dataset['page']) - 1;
     const pageKey = t.key;
     try {
       const page = await doc.getPage(index);
@@ -518,10 +585,11 @@ export class ThumbnailList {
       const view = page.getViewport({ scale: 1, rotation });
       this.setHeight(t, (THUMB_WIDTH * view.height) / view.width);
       const canvas = document.createElement('canvas');
+      const scale = THUMB_WIDTH / (view.width * CSS_UNITS);
       const handle = renderer.render({
         index,
         slot: t,
-        scale: THUMB_WIDTH / (view.width * CSS_UNITS),
+        scale,
         rotation: this.rotation,
         canvas,
         dpr: window.devicePixelRatio || 1,
@@ -535,6 +603,9 @@ export class ThumbnailList {
       t.renderedKey = key;
       t.renderingKey = null;
       t.render = null;
+      t.viewport = page.getViewport({ scale: scale * CSS_UNITS, rotation });
+      t.canvasGeneration = generation;
+      this.emitView(t);
     } catch (err) {
       if (t.renderingKey === key) t.renderingKey = null;
       console.error(`thumbnail render failed for page ${index + 1}`, err);
@@ -561,6 +632,7 @@ export class ThumbnailList {
     for (const t of this.thumbs) {
       t.render?.cancel();
       t.el.remove();
+      this.emitGone(t.frame);
     }
     this.indicator.remove();
     this.thumbs = [];

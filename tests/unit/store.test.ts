@@ -128,6 +128,9 @@ describe('initialState', () => {
       status: 'empty',
       error: null,
       dirty: false,
+      markupOpen: false,
+      displayMode: 'continuous',
+      bookMode: false,
     };
     expect(initialState).toEqual(expected);
   });

@@ -16,4 +16,6 @@ export interface PageSource {
   getOutline(): Promise<OutlineNode[]>;
   /** "<src>:<sourcePageIndex>"; positions with equal keys render identically. */
   pageKey(index: number): string;
+  /** Changes when the page's canvas must be re-rendered (annotations it must no longer draw); part of render keys. */
+  hideGeneration?(index: number): number;
 }

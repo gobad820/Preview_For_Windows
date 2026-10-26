@@ -97,7 +97,15 @@ export class App {
       toggleFind: () => this.findBar.toggle(),
       open: () => void this.open(),
       moreMenu: (anchor) => this.moreMenu(anchor),
+      toggleMarkup: () => this.store.set({ markupOpen: !this.store.get().markupOpen }),
+      highlight: () => {},
+      highlightMenu: () => {},
+      viewMenu: () => {},
     }, this.platform.windowControls);
+    const markupBar = this.el('markupbar');
+    this.store.select('markupOpen', (open) => {
+      markupBar.hidden = !open;
+    });
 
     // ---- page editing ----
     this.editor = new Editor({
@@ -573,6 +581,8 @@ export class App {
     }
     if (kind === 'annotations') {
       this.lastPages = doc.pages;
+      this.viewer.annotationsChanged();
+      this.sidebar.thumbnails.annotationsChanged();
       this.store.set({ dirty: doc.dirty });
       return;
     }

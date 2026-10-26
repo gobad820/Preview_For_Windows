@@ -63,7 +63,9 @@ export class PageRenderer {
         if (canvas.height !== height) canvas.height = height;
         const canvasContext = canvas.getContext('2d', { alpha: false });
         if (!canvasContext) return;
-        const task = page.render({ canvas, canvasContext, viewport });
+        // ENABLE_STORAGE draws annotations like ENABLE, minus those whose storage entry says `noView`
+        // (this app's own annotations, which overlays draw instead).
+        const task = page.render({ canvas, canvasContext, viewport, annotationMode: pdfjs.AnnotationMode.ENABLE_STORAGE });
         entry.task = task;
         await task.promise;
       } catch (e) {

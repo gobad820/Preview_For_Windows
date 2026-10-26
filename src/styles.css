@@ -235,6 +235,37 @@ button, input { font: inherit; color: inherit; letter-spacing: inherit; }
 
 .tb-items { flex: none; display: flex; align-items: center; gap: 6px; }
 
+/* narrow chevron that belongs to the button before it (sidebar ▾ opens the View menu) */
+.tb-chevron { width: 16px; margin-left: -4px; }
+.tb-chevron svg, .tb-split-menu svg { width: 12px; height: 12px; stroke-width: 2.6; }
+.tb-chevron[aria-expanded="true"], .tb-split-menu[aria-expanded="true"] { background: var(--fill-pressed); }
+
+/* highlight: main button + chevron share one bezel; the swatch shows the current mark style */
+.tb-split { display: flex; border-radius: var(--radius-control); transition: background-color 120ms ease; }
+.tb-split .tb-btn { border-radius: 0; }
+.tb-split .tb-split-main { width: 30px; border-radius: var(--radius-control) 0 0 var(--radius-control); position: relative; }
+.tb-split .tb-split-menu { width: 16px; border-radius: 0 var(--radius-control) var(--radius-control) 0; }
+.tb-split:hover:has(.tb-btn:not(:disabled)) { background: var(--fill-quiet); }
+.tb-split:hover .tb-btn + .tb-btn { box-shadow: inset 1px 0 0 var(--hairline); }
+.tb-btn:is([data-action="markup"], [data-action="highlight"])[aria-pressed="true"] { background: var(--fill-pressed); color: var(--text); }
+.tb-swatch {
+  position: absolute; left: 8px; right: 8px; bottom: 4px; height: 3px;
+  border-radius: 1.5px;
+  background: var(--swatch, #ffd60a);
+}
+.tb-btn:disabled .tb-swatch { opacity: 0.35; }
+
+/* markup toolbar row under the unified toolbar (src/markup/bar.ts fills it) */
+.markupbar {
+  position: relative; z-index: 19;
+  flex: none; height: 38px;
+  display: flex; align-items: center; gap: 4px;
+  padding: 0 12px;
+  background: var(--chrome-bg);
+  box-shadow: inset 0 -1px 0 var(--hairline);
+}
+.markupbar[hidden] { display: none; }
+
 /* zoom out | zoom in: borderless segments that share a bezel on hover */
 .tb-segmented { display: flex; border-radius: var(--radius-control); transition: background-color 120ms ease; }
 .tb-segmented .tb-btn { width: 30px; border-radius: 0; }
@@ -569,6 +600,8 @@ button, input { font: inherit; color: inherit; letter-spacing: inherit; }
   box-shadow: var(--thumb-shadow), 0 0 0 6px var(--thumb-ring);
   transition: box-shadow 120ms ease;
 }
+/* positioned frame around a thumbnail canvas: annotation overlays attach here */
+.thumb-canvas { position: relative; display: block; flex: none; line-height: 0; }
 .thumb-label {
   min-width: 20px; padding: 0 7px;
   border-radius: 999px;

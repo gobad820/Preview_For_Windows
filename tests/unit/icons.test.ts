@@ -17,6 +17,8 @@ const REQUIRED = [
   'document',
   'checkmark',
   'xmarkCircleFill',
+  'markup',
+  'highlighter',
 ] as const;
 
 const attr = (svg: string, name: string): string | null =>
