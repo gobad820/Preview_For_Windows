@@ -113,9 +113,9 @@ Browser shim behaviour (test hooks, all on `window`):
 
 Tauri platform: implement everything except `writeFile`, `clipboard*`, `openInNewWindow`, `material` (stubs that throw `not implemented`, `material: 'none'`; filled by Task C4). `onFileDrop`/`onDragState` convert the physical drop position to CSS px by dividing by `devicePixelRatio`.
 
-- [ ] Install `@cantoo/pdf-lib@2.11.1`; add Inter 4.1 `InterVariable.woff2` and `InterVariable-Italic`-free subset (just the upright variable file) with `OFL.txt` under `src/assets/fonts/`.
-- [ ] Add the interfaces and shim behaviour; adapt `App` to the new drop signature (drop with no document opens the first PDF in place; with a document, opens it via `openInNewWindow`, falling back to in-place open when that returns false).
-- [ ] `npm run build`, `npm test`, `npm run e2e` all green; commit `chore: contracts for page editing and mac ui`.
+- [x] Install `@cantoo/pdf-lib@2.11.1`; add Inter 4.1 `InterVariable.woff2` and `InterVariable-Italic`-free subset (just the upright variable file) with `OFL.txt` under `src/assets/fonts/`.
+- [x] Add the interfaces and shim behaviour; adapt `App` to the new drop signature (drop with no document opens the first PDF in place; with a document, opens it via `openInNewWindow`, falling back to in-place open when that returns false).
+- [x] `npm run build`, `npm test`, `npm run e2e` all green; commit `chore: contracts for page editing and mac ui`.
 
 ### Task A1–A5 (worktree `edit-core`, agent): pure editing modules
 
@@ -179,7 +179,7 @@ Rules: a node's `pageIndex` becomes the position of the first `PageRef` with the
 
 **A5 `src/shortcuts.ts`**: add actions `'save' | 'save-as' | 'undo' | 'redo' | 'close-window' | 'select-all-pages' | 'copy-pages' | 'cut-pages' | 'paste-pages' | 'delete-pages'`; add `inSidebar: boolean` to `KeyLike` (`keyLikeFromEvent` sets it when the target is inside `#sidebar`). Rules per Global Constraints. In the sidebar, arrows, Home and End resolve to `null` (the sidebar handles them). `toggle-sidebar` moves to Ctrl+Alt+S (Alt combos stay null otherwise). Undo/redo resolve to null inside text fields. Update existing tests accordingly.
 
-- [ ] For each of A1–A5: failing test → implement → `npx vitest run` → commit (`feat: composition ops`, `feat: edit history`, `feat: thumbnail selection model`, `feat: outline remapping`, `feat: editing shortcuts`). Finish with `npm run build` and `npm test` green.
+- [x] For each of A1–A5: failing test → implement → `npx vitest run` → commit (`feat: composition ops`, `feat: edit history`, `feat: thumbnail selection model`, `feat: outline remapping`, `feat: editing shortcuts`). Finish with `npm run build` and `npm test` green.
 
 ### Task B1–B5 (worktree `mac-ui`, agent): Mac-style visual redesign
 
@@ -215,7 +215,7 @@ Menu: `role="menu"`, items `role="menuitem"` or `menuitemradio` with `aria-check
 
 **B5** empty state (app icon tile, "Open a PDF", primary blue "Open…" button, hint), error toast (top-center, translucent, rounded 10px, icon), loading cue, and the password panel restyled as a Mac alert (CSS only; DOM and classes unchanged). Visual review: screenshots light/dark of empty, document, sidebar+selection demo, zoom menu, alert into `docs/screenshots/` (PNG) — these are the deliverable reviewers look at.
 
-- [ ] One commit per B-task; full `npm run e2e` (with `PW_PORT=4185`) and `npm test` green at the end.
+- [x] One commit per B-task; full `npm run e2e` (with `PW_PORT=4185`) and `npm test` green at the end.
 
 ### Task C1–C4 (worktree `pdf-writer`, coordinator): saving engine and native side
 
@@ -280,7 +280,7 @@ Tests: open/apply/undo through the public API using fixtures under Node; `save()
 
 ### Task E: Verification and handoff
 
-- [ ] `npm test`, `npm run e2e`, `cargo fmt --check`, `scripts/build-windows.sh --bundle`.
-- [ ] Windows smoke: launch with `long300.pdf`, capture light screenshot of the new chrome with Mica; launch with `한글 문서.pdf`.
-- [ ] Fresh-context code review of the whole range; fix Critical/Important findings.
-- [ ] README (features, shortcuts), notes file, screenshots; update memory.
+- [x] `npm test`, `npm run e2e`, `cargo fmt --check`, `scripts/build-windows.sh --bundle`.
+- [x] Windows smoke: launch with `long300.pdf`, capture light screenshot of the new chrome with Mica; launch with `한글 문서.pdf`.
+- [x] Fresh-context code review of the whole range; fix Critical/Important findings.
+- [x] README (features, shortcuts), notes file, screenshots; update memory.

@@ -22,10 +22,13 @@ copy, paste and merge pages, then save.
   delete, copy, cut and paste pages, undo and redo every change.
 - **Merging:** drop PDF files from Explorer between two thumbnails, or use
   ⋯ › Insert Pages from File…; password-protected files ask for their
-  password. Pages copied in one Preview window paste into another, and a PDF
+  password (files that are only restricted by an owner password open and save
+without one). Pages copied in one Preview window paste into another, and a PDF
   copied in Explorer pastes as pages.
-- **Saving:** Ctrl+S writes over the file (atomically), Ctrl+Shift+S saves a
-  copy and keeps editing it. The title shows "— Edited" while there are
+- **Saving:** Ctrl+S writes over the file (atomically, and only when there
+  are changes), Ctrl+Shift+S saves a copy and keeps editing it. If another
+  program changed the file since it was opened, Preview asks before
+  replacing it. The title shows "— Edited" while there are
   unsaved changes, and closing or replacing the document asks first. Saved
   files keep the outline and metadata, internal links follow moved pages, and
   deleted pages leave no trace in the file.

@@ -26,6 +26,33 @@ Driven through WebView2 DevTools with an isolated profile, no clicks or keys:
 - Close with unsaved changes: the Mac-style alert appeared with the file name; "Don't Save" closed the window and the process exited.
 - Rust unit tests (path decoding, atomic write) run as a Windows test executable.
 
+## Second code review (fresh-context reviewer) and fixes
+
+The reviewer probed every suspicion and found three critical issues, all fixed
+in `fix: address the v0.2 code review` with tests that fail without the fix:
+
+- edits made during a save were marked saved and lost; saves now write and
+  mark the exact version they captured, and queue instead of being dropped;
+- files restricted only by an owner password could not be saved or copied;
+  they now open with the empty user password;
+- deleted pages leaked into saved files through button and chained GoTo
+  actions and form-field trees; every GoTo action is now detached and
+  retargeted or removed, widgets leave the field tree, and a final
+  mark-and-sweep removes anything unreachable.
+
+Important fixes: Ctrl+S on an unedited file is a no-op; a file changed by
+another program asks before being replaced; dragging the page in view keeps
+it selected; cut deletes what it copied; paste waits for (or skips) the system
+clipboard write; page keys only act in the thumbnail list; the window-state
+plugin no longer restores the v0.1 native frame; URL outline entries and page
+labels survive saving. Plus the minor items listed in that commit.
+
+Verified on the real Windows host after the fixes: the changed-on-disk prompt
+(Cancel keeps the other program's bytes, Replace writes, a later save does not
+ask); an AES owner-password-only file opens without a prompt and saves; with
+`decorated: true` in the saved window state, v0.1 gets a 71 px native frame and
+v0.2 stays frameless (15 px of resize border).
+
 ## Not verified on Windows
 
 - Native drag-and-drop from Explorer onto the sidebar (needs a real mouse drag; the same code path is covered with HTML5 drops in Playwright, and position conversion from physical to CSS pixels is untested on a scaled display).
@@ -38,3 +65,6 @@ Driven through WebView2 DevTools with an isolated profile, no clicks or keys:
 - Interactive form fields lose their interactivity when saved (their appearance is kept).
 - A saved copy of a password-protected file is not encrypted.
 - Windows 11 snap layouts do not appear on the custom maximize button.
+- Windows shutdown or logoff with unsaved edits does not prompt.
+- Saving replaces the file by rename, so the original's ACLs and alternate data streams are not kept.
+- A new window opens at the same position as the previous one.
