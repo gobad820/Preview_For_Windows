@@ -23,7 +23,17 @@ export type Action =
   | 'first-page'
   | 'last-page'
   | 'scroll-down'
-  | 'scroll-up';
+  | 'scroll-up'
+  | 'save'
+  | 'save-as'
+  | 'undo'
+  | 'redo'
+  | 'close-window'
+  | 'select-all-pages'
+  | 'copy-pages'
+  | 'cut-pages'
+  | 'paste-pages'
+  | 'delete-pages';
 
 export interface KeyLike {
   key: string;
@@ -36,6 +46,8 @@ export interface KeyLike {
   inTextField: boolean;
   /** Focus is in the find bar's text input. */
   findFocused: boolean;
+  /** Focus is inside the sidebar (`#sidebar`), which edits pages. */
+  inSidebar: boolean;
 }
 
 /**
@@ -52,9 +64,12 @@ function resolveCtrl(k: KeyLike): Action | null {
   if (k.key === '=' || k.key === '+' || k.code === 'NumpadAdd') return 'zoom-in';
   if (k.key === '-' || k.code === 'NumpadSubtract') return 'zoom-out';
   const ch = keyChar(k);
+  // Text fields keep their own undo, redo, paste and selection.
+  const pages = k.inSidebar && !k.inTextField;
   if (k.shiftKey) {
     if (ch === 'l') return 'rotate-ccw';
-    if (ch === 's') return 'toggle-sidebar';
+    if (ch === 's') return 'save-as';
+    if (ch === 'z') return k.inTextField ? null : 'redo';
     return null;
   }
   switch (ch) {
@@ -65,18 +80,47 @@ function resolveCtrl(k: KeyLike): Action | null {
     case '0': return 'zoom-100';
     case '1': return 'fit-width';
     case '2': return 'fit-page';
+    case 's': return 'save';
+    case 'w': return 'close-window';
+    case 'z': return k.inTextField ? null : 'undo';
+    case 'y': return k.inTextField ? null : 'redo';
+    case 'v': return k.inTextField ? null : 'paste-pages';
+    case 'a': return pages ? 'select-all-pages' : null;
+    case 'c': return pages ? 'copy-pages' : null;
+    case 'x': return pages ? 'cut-pages' : null;
     default: return null;
   }
 }
 
+/** Ctrl+Alt+S toggles the sidebar; other Alt combos are left alone. Not in text fields, where Ctrl+Alt is AltGr. */
+function resolveCtrlAlt(k: KeyLike): Action | null {
+  return !k.shiftKey && !k.inTextField && keyChar(k) === 's' ? 'toggle-sidebar' : null;
+}
+
 export function resolveShortcut(k: KeyLike): Action | null {
-  if (k.altKey || k.metaKey) return null;
+  if (k.metaKey) return null;
+  if (k.altKey) return k.ctrlKey ? resolveCtrlAlt(k) : null;
   if (k.ctrlKey) return resolveCtrl(k);
   if (k.key === 'Escape') return k.findFocused || !k.inTextField ? 'close-find' : null;
   if (k.key === 'Enter') return k.findFocused ? (k.shiftKey ? 'find-prev' : 'find-next') : null;
   if (k.inTextField || k.findFocused) return null;
   if (k.key === ' ') return k.shiftKey ? 'scroll-up' : 'scroll-down';
   if (k.shiftKey) return null;
+  if (k.inSidebar) {
+    // The sidebar moves its selection with arrows, Home and End itself.
+    switch (k.key) {
+      case 'Delete':
+      case 'Backspace':
+        return 'delete-pages';
+      case 'ArrowUp':
+      case 'ArrowDown':
+      case 'ArrowLeft':
+      case 'ArrowRight':
+      case 'Home':
+      case 'End':
+        return null;
+    }
+  }
   switch (k.key) {
     case 'PageDown': return 'scroll-down';
     case 'PageUp': return 'scroll-up';
@@ -92,6 +136,7 @@ interface ElementLike {
   tagName?: string;
   isContentEditable?: boolean;
   hasAttribute?: (name: string) => boolean;
+  closest?: (selector: string) => unknown;
 }
 
 function isTextField(el: ElementLike | null): boolean {
@@ -102,6 +147,10 @@ function isTextField(el: ElementLike | null): boolean {
 
 function isFindInput(el: ElementLike | null): boolean {
   return typeof el?.hasAttribute === 'function' && el.hasAttribute('data-find-input');
+}
+
+function isInSidebar(el: ElementLike | null): boolean {
+  return typeof el?.closest === 'function' && el.closest('#sidebar') != null;
 }
 
 export function keyLikeFromEvent(e: KeyboardEvent): KeyLike {
@@ -115,6 +164,7 @@ export function keyLikeFromEvent(e: KeyboardEvent): KeyLike {
     metaKey: e.metaKey,
     inTextField: isTextField(el),
     findFocused: isFindInput(el),
+    inSidebar: isInSidebar(el),
   };
 }
 
