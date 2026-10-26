@@ -29,7 +29,8 @@ async function openFile(page, name) {
 async function settle(page) {
   await page.evaluate(async () => {
     await document.fonts.ready;
-    await Promise.all(document.getAnimations().map((a) => a.finished.catch(() => {})));
+    const finite = document.getAnimations().filter((a) => a.effect?.getTiming().iterations !== Infinity);
+    await Promise.all(finite.map((a) => a.finished.catch(() => {})));
   });
   await page.waitForTimeout(250);
 }
