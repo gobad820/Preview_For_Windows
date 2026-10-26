@@ -974,6 +974,9 @@ button, input { font: inherit; color: inherit; letter-spacing: inherit; }
 
 /* armed markup tool: pages take the pointer, text cannot be selected */
 .viewer.mk-armed .page { cursor: crosshair; }
+/* Touch and pen draw with a tool armed, and move a selected annotation, instead of scrolling. */
+.viewer.mk-armed .page { touch-action: none; }
+.viewer.mk-selection .page { touch-action: pinch-zoom; }
 .viewer.mk-armed .textLayer,
 .viewer.mk-armed .textLayer :is(span, br) { pointer-events: none; -webkit-user-select: none; user-select: none; cursor: inherit; }
 

@@ -50,7 +50,12 @@ export interface MarkupDeps {
   state: MarkupState;
   store: Store<ViewerState>;
   overlays: OverlayHost;
+  /** Tells the user something went wrong (the app's error banner). */
+  notify(message: string): void;
 }
+
+/** Shown when an edit waits for a page's annotations and they cannot be read. */
+export const UNREADABLE_MARKUP = "The markup already on this page couldn't be read, so it can't be changed here.";
 
 type ShapeTool = 'line' | 'arrow' | 'rect' | 'rounded' | 'oval';
 const SHAPE_TOOLS: readonly Tool[] = ['line', 'arrow', 'rect', 'rounded', 'oval'];
@@ -110,6 +115,8 @@ export class MarkupController {
   private markPress: MarkPress | null = null;
   private editing: Editing | null = null;
   private selection: AnnotRef | null = null;
+  /** Edits waiting for a page's annotations to be read. */
+  private readonly deferred = new Set<Promise<unknown>>();
 
   constructor(private readonly deps: MarkupDeps) {
     const c = deps.container;
@@ -141,7 +148,18 @@ export class MarkupController {
   select(ref: AnnotRef | null): void {
     if (ref?.pageId === this.selection?.pageId && ref?.annotId === this.selection?.annotId) return;
     this.selection = ref;
+    // With something selected, a touch or pen drag moves it instead of scrolling.
+    this.deps.container.classList.toggle('mk-selection', ref !== null);
     this.deps.overlays.setSelected(ref);
+  }
+
+  /**
+   * Commits an open editor and waits until edits that were waiting for a page's annotations
+   * are applied (or have failed), so saving and closing see them.
+   */
+  async settle(): Promise<void> {
+    this.commitEditing();
+    while (this.deferred.size > 0) await Promise.allSettled([...this.deferred]);
   }
 
   /** Esc: ends editing, cancels a drag, disarms a tool, then deselects. True when it did one of these. */
@@ -195,9 +213,12 @@ export class MarkupController {
     const positions = added.map((a) => this.positionOf(a.pageId));
     if (positions.some((p) => p < 0)) return;
     if (positions.some((p) => doc.annotationsAt(p) === null)) {
-      void Promise.all(positions.map((p) => doc.loadAnnotations(p))).then(() => {
-        if (this.deps.doc() === doc && added.every((a) => doc.annotationsAt(this.positionOf(a.pageId)) !== null)) this.addAll(doc, added);
-      });
+      this.defer(
+        Promise.all(positions.map((p) => doc.loadAnnotations(p))).then(() => {
+          if (this.deps.doc() === doc && added.every((a) => doc.annotationsAt(this.positionOf(a.pageId)) !== null)) this.addAll(doc, added);
+        }),
+        doc,
+      );
       return;
     }
     const changes = new Map<number, Annot[]>();
@@ -321,25 +342,42 @@ export class MarkupController {
 
   // ---- document updates -------------------------------------------------------------
 
-  /** Replaces the page's list through `edit`; one undo step. Loads the page's annotations first when needed. */
-  private updatePage(pageId: number, edit: (list: readonly Annot[]) => readonly Annot[]): void {
+  /**
+   * Replaces the page's list through `edit`; one undo step. Loads the page's annotations first
+   * when needed; `then` runs once the edit is applied.
+   */
+  private updatePage(pageId: number, edit: (list: readonly Annot[]) => readonly Annot[], then?: () => void): void {
     const doc = this.deps.doc();
     const pos = this.positionOf(pageId);
     if (!doc || pos < 0) return;
     const list = doc.annotationsAt(pos);
     if (list === null) {
-      void doc.loadAnnotations(pos).then(() => {
-        if (this.deps.doc() === doc && doc.annotationsAt(this.positionOf(pageId)) !== null) this.updatePage(pageId, edit);
-      });
+      this.defer(
+        doc.loadAnnotations(pos).then(() => {
+          if (this.deps.doc() === doc && doc.annotationsAt(this.positionOf(pageId)) !== null) this.updatePage(pageId, edit, then);
+        }),
+        doc,
+      );
       return;
     }
     const next = edit(list);
     if (next !== list) doc.setAnnotations(pos, next);
+    then?.();
+  }
+
+  /** Tracks an edit waiting for annotations to be read; tells the user when they cannot be. */
+  private defer(work: Promise<unknown>, doc: EditableDocument): void {
+    const tracked = work.catch((e: unknown) => {
+      console.warn('markup edit dropped', e);
+      if (this.deps.doc() === doc) this.deps.notify(UNREADABLE_MARKUP);
+    });
+    this.deferred.add(tracked);
+    void tracked.finally(() => this.deferred.delete(tracked));
   }
 
   private add(pageId: number, a: Annot, select = true): void {
-    this.updatePage(pageId, (list) => [...list, a]);
-    if (select) this.select({ pageId, annotId: a.id });
+    // Selected once it exists: an edit may wait for the page's annotations to be read.
+    this.updatePage(pageId, (list) => [...list, a], select ? () => this.select({ pageId, annotId: a.id }) : undefined);
   }
 
   /** Replaces the annotation with `next.id` on the page (one undo step). */
@@ -514,13 +552,20 @@ export class MarkupController {
     if (this.gesture) e.preventDefault();
   };
 
+  /** True for presses on the view's scrollbars (pages extend under them when zoomed in). */
+  private inScrollbar(e: PointerEvent): boolean {
+    const c = this.deps.container;
+    const r = c.getBoundingClientRect();
+    return e.clientX - r.left >= c.clientLeft + c.clientWidth || e.clientY - r.top >= c.clientTop + c.clientHeight;
+  }
+
   /** True for events inside the open text box editor or note popup, which handle them natively. */
   private inEditor(target: EventTarget | null): boolean {
     return !!this.editing && target instanceof Node && this.editing.el.contains(target);
   }
 
   private readonly onPointerDown = (e: PointerEvent): void => {
-    if (e.button !== 0 || !e.isPrimary || this.inEditor(e.target)) return;
+    if (e.button !== 0 || !e.isPrimary || this.inEditor(e.target) || this.inScrollbar(e)) return;
     const doc = this.deps.doc();
     if (!doc) return;
     const tool = this.deps.state.tool;

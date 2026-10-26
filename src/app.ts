@@ -200,6 +200,7 @@ export class App {
       state: this.markup,
       store: this.store,
       overlays: this.overlays,
+      notify: (message) => this.store.set({ error: message }),
     });
 
     // ---- find bar ----
@@ -397,13 +398,20 @@ export class App {
   /** Ctrl+S: writes over the opened file. Nothing happens when there is nothing to save. */
   save(): Promise<boolean> {
     this.markupController.commitEditing();
-    return this.queueSave(() => this.saveNow());
+    return this.queueSave(async () => {
+      // Edits waiting for a page's annotations to be read belong in this save.
+      await this.markupController.settle();
+      return this.saveNow();
+    });
   }
 
   /** Ctrl+Shift+S: writes a copy and keeps editing the copy. */
   saveAs(): Promise<boolean> {
     this.markupController.commitEditing();
-    return this.queueSave(() => this.saveAsNow());
+    return this.queueSave(async () => {
+      await this.markupController.settle();
+      return this.saveAsNow();
+    });
   }
 
   private queueSave(job: () => Promise<boolean>): Promise<boolean> {
@@ -502,8 +510,8 @@ export class App {
    * caller may proceed (saved or discarded).
    */
   async confirmDiscard(): Promise<boolean> {
-    // Text still in an open text box or note editor counts as an edit.
-    this.markupController.commitEditing();
+    // Text still in an open text box or note editor, or waiting for a page's annotations, counts as an edit.
+    await this.markupController.settle();
     if (!this.doc?.dirty) return true;
     const choice = await this.askUnsaved(this.store.get().fileName ?? 'Untitled');
     if (choice === 'cancel') return false;
