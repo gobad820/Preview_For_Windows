@@ -168,13 +168,186 @@ kbd {
 .app { display: flex; flex-direction: column; height: 100%; }
 .body { display: flex; flex: 1; min-height: 0; }
 
-/* ---- toolbar --------------------------------------------------------- */
+/* ---- unified title bar + toolbar (src/toolbar/toolbar.ts) ----------- */
 .toolbar {
+  position: relative; z-index: 20;
   height: var(--toolbar-h); flex: none;
-  display: flex; align-items: center; gap: 6px;
-  padding: 0 10px;
-  background: var(--chrome);
-  border-bottom: 1px solid var(--chrome-border);
+  display: flex; align-items: center;
+  padding: 0 10px 0 12px;
+  background: var(--chrome-bg);
+  box-shadow: inset 0 -1px 0 var(--hairline);
+}
+.toolbar.has-caption { padding-right: 0; }
+.tb-btn {
+  flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 28px; padding: 0;
+  border: 0; border-radius: var(--radius-control);
+  color: var(--icon);
+  background: transparent;
+  outline: none;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.tb-btn:hover:not(:disabled) { background: var(--fill-hover); }
+.tb-btn:active:not(:disabled) { background: var(--fill-pressed); color: var(--text); }
+.tb-btn:disabled { color: var(--text-tertiary); }
+.tb-btn:focus-visible, .tb-pill:focus-visible { box-shadow: var(--focus-ring); }
+
+/* title block: "file.pdf — Edited" over "Page 3 of 12" */
+.tb-title {
+  flex: 0 1 auto; min-width: 0;
+  display: flex; flex-direction: column; justify-content: center;
+  margin-left: 8px; padding-right: 12px;
+}
+.tb-title-line { display: flex; align-items: baseline; min-width: 0; white-space: nowrap; }
+.tb-doc-title {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  font-size: 13px; font-weight: 600; line-height: 16px;
+  letter-spacing: -0.006em;
+  color: var(--text);
+}
+.tb-doc-edited { flex: none; margin-left: 4px; font-size: 13px; line-height: 16px; color: var(--text-secondary); }
+.tb-doc-edited[hidden] { display: none; }
+.tb-subtitle {
+  display: flex; align-items: center; gap: 3px;
+  margin-top: 1px;
+  font-size: 11px; line-height: 14px; letter-spacing: 0.004em;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.tb-subtitle[hidden] { display: none; }
+.tb-page-input {
+  height: 16px; min-width: 14px; padding: 0 2px;
+  border: 0; border-radius: 4px;
+  font-size: 11px; font-weight: 500; text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  background: transparent;
+  outline: none;
+  -webkit-user-select: text; user-select: text;
+  transition: background-color 120ms ease;
+}
+.tb-page-input:hover:not(:disabled) { background: var(--fill-hover); }
+.tb-page-input:focus {
+  background: var(--control-bg);
+  box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.tb-page-total { font-variant-numeric: tabular-nums; }
+.tb-flex { flex: 1 1 0; min-width: 0; align-self: stretch; }
+
+.tb-items { flex: none; display: flex; align-items: center; gap: 6px; }
+
+/* zoom out | zoom in: borderless segments that share a bezel on hover */
+.tb-segmented { display: flex; border-radius: var(--radius-control); transition: background-color 120ms ease; }
+.tb-segmented .tb-btn { width: 30px; border-radius: 0; }
+.tb-segmented .tb-btn:first-child { border-radius: var(--radius-control) 0 0 var(--radius-control); }
+.tb-segmented .tb-btn:last-child { border-radius: 0 var(--radius-control) var(--radius-control) 0; }
+.tb-segmented:hover:has(.tb-btn:not(:disabled)) { background: var(--fill-quiet); }
+.tb-segmented:hover .tb-btn + .tb-btn { box-shadow: inset 1px 0 0 var(--hairline); }
+
+.tb-pill {
+  flex: none;
+  display: inline-flex; align-items: center; justify-content: space-between; gap: 2px;
+  min-width: 76px; height: 24px; padding: 0 4px 0 9px;
+  border: 0; border-radius: var(--radius-control);
+  font-size: 12px; font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  background: var(--fill-quiet);
+  outline: none;
+  transition: background-color 120ms ease;
+}
+.tb-pill svg { width: 13px; height: 13px; stroke-width: 2.6; color: var(--text-secondary); }
+.tb-pill:hover:not(:disabled), .tb-pill[aria-expanded="true"] { background: var(--fill-pressed); }
+.tb-pill:disabled { color: var(--text-tertiary); background: transparent; }
+.tb-pill:disabled svg { color: var(--text-tertiary); }
+
+.tb-search { display: flex; align-items: center; }
+.toolbar.find-open [data-action="find"] { display: none; }
+
+/* Windows caption buttons: square, flush with the window edge */
+.tb-caption { flex: none; display: flex; align-self: stretch; margin-left: 10px; }
+.tb-caption button {
+  width: 46px; height: var(--toolbar-h); padding: 0;
+  border: 0; border-radius: 0;
+  font-family: var(--caption-font); font-size: 10px;
+  color: var(--text);
+  background: transparent;
+  outline: none;
+  transition: background-color 80ms linear, color 80ms linear;
+}
+.tb-caption button:hover { background: var(--fill-hover); }
+.tb-caption button:active { background: var(--fill-pressed); }
+.tb-caption [data-window="close"]:hover { background: var(--caption-close); color: #ffffff; }
+.tb-caption [data-window="close"]:active { background: color-mix(in srgb, var(--caption-close) 88%, transparent); color: #ffffff; }
+
+/* ---- find field (src/search/findbar.ts), lives in the toolbar -------- */
+.findbar { display: flex; align-items: center; gap: 4px; }
+.findbar[hidden] { display: none; }
+.find-field {
+  display: flex; align-items: center;
+  width: 220px; height: 28px; padding: 0 5px 0 7px;
+  border-radius: 7px;
+  background: var(--control-bg);
+  box-shadow: inset 0 0 0 1px var(--field-border), 0 0.5px 1px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+  animation: pfw-find-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.find-field:focus-within { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 80%, transparent), var(--focus-ring); }
+.find-glyph { flex: none; display: inline-flex; color: var(--text-secondary); }
+.find-glyph svg { width: 15px; height: 15px; }
+.find-field input {
+  flex: 1; min-width: 0; height: 100%;
+  padding: 0 4px 0 5px;
+  border: 0; background: transparent; outline: none;
+  font-size: 13px; color: var(--text);
+  -webkit-user-select: text; user-select: text;
+}
+.find-field input::placeholder { color: var(--text-tertiary); }
+.find-count {
+  flex: none; padding: 0 4px;
+  font-size: 11px; color: var(--text-secondary);
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.find-count:empty { display: none; }
+.find-clear {
+  flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; padding: 0;
+  border: 0; border-radius: 50%;
+  color: var(--text-tertiary); background: transparent;
+  outline: none;
+}
+.find-clear svg { width: 15px; height: 15px; }
+.find-clear:hover { color: var(--text-secondary); }
+.find-clear:focus-visible { box-shadow: var(--focus-ring); }
+.find-nav { display: flex; }
+.find-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 28px; padding: 0;
+  border: 0; border-radius: var(--radius-control);
+  color: var(--icon); background: transparent;
+  outline: none;
+}
+.find-btn:hover:not(:disabled) { background: var(--fill-hover); }
+.find-btn:active:not(:disabled) { background: var(--fill-pressed); }
+.find-btn:disabled { color: var(--text-tertiary); }
+.find-btn:focus-visible { box-shadow: var(--focus-ring); }
+@keyframes pfw-find-in {
+  from { width: 32px; opacity: 0.3; }
+}
+
+/* narrow windows: the title truncates first, then secondary controls step aside */
+@media (max-width: 720px) {
+  .tb-segmented, .tb-rotate { display: none; }
+  .find-field { width: 160px; }
+}
+@media (max-width: 560px) {
+  .find-nav { display: none; }
+  .find-field { width: 132px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .find-field { animation: none; }
 }
 
 /* ---- sidebar --------------------------------------------------------- */
@@ -298,56 +471,6 @@ kbd {
 .textLayer mark { color: transparent; background: var(--find-match); border-radius: 2px; }
 .textLayer mark.find-current { background: var(--find-current); }
 
-/* ---- toolbar controls ------------------------------------------------ */
-.toolbar { position: relative; }
-.tb-group { display: flex; align-items: center; gap: 2px; }
-.tb-spacer { flex: 1; }
-.tb-divider { width: 1px; height: 20px; margin: 0 6px; background: var(--chrome-border); }
-.tb-btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  height: 30px; min-width: 30px; padding: 0 6px;
-  border: 1px solid transparent; border-radius: 6px;
-  background: transparent; color: var(--fg);
-  cursor: default;
-}
-.tb-btn:hover:not(:disabled) { background: var(--control-hover); }
-.tb-btn:active:not(:disabled) { filter: brightness(0.95); }
-.tb-btn[aria-pressed="true"] { background: var(--control-hover); border-color: var(--control-border); }
-.tb-btn:disabled { opacity: 0.4; }
-.tb-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
-.tb-zoom { min-width: 72px; font-variant-numeric: tabular-nums; }
-.tb-page { gap: 6px; color: var(--fg-muted); }
-.tb-input {
-  width: 48px; height: 26px; padding: 0 6px;
-  text-align: center; font: inherit; font-variant-numeric: tabular-nums;
-  color: var(--fg); background: var(--control-bg);
-  border: 1px solid var(--control-border); border-radius: 6px;
-  -webkit-user-select: text; user-select: text;
-}
-.tb-input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-.tb-input:disabled { opacity: 0.5; }
-.tb-total { min-width: 2ch; font-variant-numeric: tabular-nums; }
-.tb-menu {
-  position: absolute; top: 40px; z-index: 60;
-  transform: translateX(-50%);
-  min-width: 140px; padding: 4px;
-  background: var(--control-bg);
-  border: 1px solid var(--control-border); border-radius: 8px;
-  box-shadow: var(--page-shadow);
-}
-.tb-menu[hidden] { display: none; }
-.tb-menu hr { border: 0; border-top: 1px solid var(--chrome-border); margin: 4px 0; }
-.tb-menu [role="menuitem"] {
-  display: flex; align-items: center; justify-content: space-between;
-  width: 100%; height: 28px; padding: 0 10px 0 26px;
-  border: 0; border-radius: 5px; background: transparent; color: var(--fg);
-  text-align: left; cursor: default; position: relative;
-}
-.tb-menu [role="menuitem"]:hover { background: var(--accent); color: var(--accent-fg); }
-.tb-menu [role="menuitem"][aria-checked="true"]::before {
-  content: "✓"; position: absolute; left: 9px; font-size: 12px;
-}
-
 /* ---- sidebar: tabs, thumbnails, outline (Task 11) -------------------- */
 .sidebar-tabs {
   flex: none;
@@ -427,53 +550,6 @@ kbd {
 .outline-item:disabled { color: var(--fg-muted); cursor: default; }
 .outline-empty { margin: 0; padding: 20px 12px; color: var(--fg-muted); text-align: center; }
 .outline-empty[hidden] { display: none; }
-/* ---- find bar (Task 12) ---------------------------------------------- */
-.findbar {
-  position: absolute; top: var(--toolbar-h); right: 28px; z-index: 30;
-  display: flex; align-items: center; gap: 4px;
-  height: 38px; padding: 0 6px 0 10px;
-  background: var(--chrome);
-  border: 1px solid var(--chrome-border); border-top: none;
-  border-radius: 0 0 8px 8px;
-  box-shadow: var(--page-shadow);
-  animation: findbar-in 120ms ease-out;
-}
-.findbar[hidden] { display: none; }
-.findbar .find-glyph { display: inline-flex; color: var(--fg-muted); margin-right: 2px; }
-.findbar input {
-  width: 200px; height: 26px; padding: 0 8px;
-  font: inherit; color: var(--fg);
-  background: var(--control-bg);
-  border: 1px solid var(--control-border); border-radius: 6px;
-  outline: none;
-}
-.findbar input::placeholder { color: var(--fg-muted); }
-.findbar input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
-}
-.findbar .find-count {
-  min-width: 64px; padding: 0 6px;
-  color: var(--fg-muted); white-space: nowrap; text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-.findbar .find-sep { width: 1px; height: 18px; margin: 0 2px; background: var(--chrome-border); }
-.find-btn {
-  width: 28px; height: 28px; padding: 0;
-  display: inline-flex; align-items: center; justify-content: center;
-  border: none; border-radius: 6px; background: transparent;
-  color: var(--fg); cursor: pointer;
-}
-.find-btn:hover { background: var(--control-hover); }
-.find-btn:active { background: var(--control-border); }
-.find-btn:disabled { opacity: 0.4; cursor: default; background: transparent; }
-.find-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-@keyframes findbar-in {
-  from { opacity: 0; transform: translateY(-6px); }
-  to { opacity: 1; transform: none; }
-}
-@media (prefers-reduced-motion: reduce) { .findbar { animation: none; } }
-
 /* ---- loading cue + password panel (review fixes) --------------------- */
 .loading-state {
   position: absolute; inset: 0; z-index: 5;

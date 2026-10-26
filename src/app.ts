@@ -96,7 +96,8 @@ export class App {
       rotate: () => this.rotate(90),
       toggleFind: () => this.findBar.toggle(),
       open: () => void this.open(),
-    });
+      moreMenu: (anchor) => void showMenu(anchor, [{ label: 'Open…', shortcut: 'Ctrl+O', action: () => void this.open() }]),
+    }, this.platform.windowControls);
 
     // ---- shortcuts + per-file state ----
     bindShortcuts(window, (action) => this.dispatch(action));
