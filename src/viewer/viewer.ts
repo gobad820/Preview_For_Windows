@@ -68,7 +68,7 @@ interface MountedPage {
   canvasGeneration: number;
 }
 
-const EMPTY_LAYOUT: Layout = { pages: [], totalHeight: 0, contentWidth: 0, padding: PAGE_PADDING };
+const EMPTY_LAYOUT: Layout = { pages: [], rows: [], totalHeight: 0, contentWidth: 0, padding: PAGE_PADDING };
 
 /** Continuous, virtualised page view inside a scroll container. */
 export class PdfViewer {
