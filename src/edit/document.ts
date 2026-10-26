@@ -1,13 +1,28 @@
 import type { PDFPageProxy, TextContent } from 'pdfjs-dist/types/src/display/api';
+import type { Annot } from '../annot/types';
 import { PdfDocument, type OutlineNode, type PageText, type PdfAssets } from '../pdf/document';
 import type { PageSource } from '../pdf/source';
 import type { PageSize } from '../types';
-import { fromSource, idSource, samePages, type Composition, type PageRef } from './composition';
+import {
+  fromSource,
+  idSource,
+  sameOrder,
+  samePages,
+  setPageAnnots,
+  type Composition,
+  type PageRef,
+  type PageSpec,
+} from './composition';
 import { History } from './history';
 import { remapOutline } from './outlineRemap';
 import { writePdf } from './writer';
 
-export type ChangeKind = 'structure' | 'sizes';
+export type ChangeKind = 'structure' | 'sizes' | 'annotations';
+
+/** `positions` lists the pages whose annotations changed ('annotations' only). */
+export type ChangeListener = (kind: ChangeKind, positions?: readonly number[]) => void;
+
+const NO_ANNOTS: readonly Annot[] = Object.freeze([]);
 
 export interface OpenOptions {
   password?: string | undefined;
@@ -24,7 +39,7 @@ export class EditableDocument implements PageSource {
   readonly nextId = idSource();
   private readonly sources = new Map<number, PdfDocument>();
   private readonly outlines = new Map<number, Promise<OutlineNode[]>>();
-  private readonly listeners = new Set<(kind: ChangeKind) => void>();
+  private readonly listeners = new Set<ChangeListener>();
   private readonly history: History<Composition>;
   private nextSrc = 1;
   private currentSizes: PageSize[] = [];
@@ -81,21 +96,24 @@ export class EditableDocument implements PageSource {
 
   /** Makes `next` the current composition; false (and no history entry) when nothing changed. */
   apply(next: Composition): boolean {
-    if (samePages(next, this.pages)) return false;
+    const prev = this.pages;
+    if (samePages(next, prev)) return false;
     this.history.push(next);
-    this.structureChanged();
+    this.changed(prev);
     return true;
   }
 
   undo(): boolean {
+    const prev = this.pages;
     if (!this.history.undo()) return false;
-    this.structureChanged();
+    this.changed(prev);
     return true;
   }
 
   redo(): boolean {
+    const prev = this.pages;
     if (!this.history.redo()) return false;
-    this.structureChanged();
+    this.changed(prev);
     return true;
   }
 
@@ -104,9 +122,41 @@ export class EditableDocument implements PageSource {
     this.history.markSaved(version);
   }
 
-  onChange(cb: (kind: ChangeKind) => void): () => void {
+  onChange(cb: ChangeListener): () => void {
     this.listeners.add(cb);
     return () => this.listeners.delete(cb);
+  }
+
+  // ---- annotations ------------------------------------------------------------
+
+  /** This app's annotations on the page at `index`; null while the file's own ones are not read yet. */
+  annotationsAt(index: number): readonly Annot[] | null {
+    const ref = this.pages[index];
+    if (!ref) return null;
+    return ref.annots ?? NO_ANNOTS;
+  }
+
+  /** Resolves with the page's annotations once they are known. */
+  async loadAnnotations(index: number): Promise<readonly Annot[]> {
+    return this.annotationsAt(index) ?? NO_ANNOTS;
+  }
+
+  /** Replaces the annotations of several pages as one undo step; false when nothing changed. */
+  updateAnnotations(changes: ReadonlyMap<number, readonly Annot[]>): boolean {
+    return this.apply(setPageAnnots(this.pages, changes));
+  }
+
+  setAnnotations(index: number, list: readonly Annot[]): boolean {
+    return this.updateAnnotations(new Map([[index, list]]));
+  }
+
+  /** Changes when the page's canvas must be re-rendered to hide annotations now drawn by an overlay. */
+  hideGeneration(_index: number): number {
+    return 0;
+  }
+
+  newAnnotId(): string {
+    return crypto.randomUUID();
   }
 
   // ---- sources --------------------------------------------------------------
@@ -189,7 +239,7 @@ export class EditableDocument implements PageSource {
   }
 
   /** The given source pages as a standalone PDF (used for copying pages to other windows). */
-  async extract(specs: ReadonlyArray<{ src: number; index: number }>): Promise<Uint8Array> {
+  async extract(specs: ReadonlyArray<PageSpec>): Promise<Uint8Array> {
     const used = [...new Set(specs.map((p) => p.src))];
     const sources = await Promise.all(
       used.map(async (id) => {
@@ -229,7 +279,17 @@ export class EditableDocument implements PageSource {
     return o;
   }
 
-  private structureChanged(): void {
+  /** Reports the step from `prev` to the current composition: annotations only, or structure. */
+  private changed(prev: Composition): void {
+    const next = this.pages;
+    if (sameOrder(prev, next)) {
+      const positions: number[] = [];
+      next.forEach((p, i) => {
+        if (p.annots !== prev[i]!.annots) positions.push(i);
+      });
+      this.emit('annotations', positions);
+      return;
+    }
     this.refreshSizes();
     this.emit('structure');
   }
@@ -238,7 +298,10 @@ export class EditableDocument implements PageSource {
     this.currentSizes = this.pages.map((p) => this.source(p.src).sizes[p.index]!);
   }
 
-  private emit(kind: ChangeKind): void {
-    for (const l of this.listeners) l(kind);
+  private emit(kind: ChangeKind, positions?: readonly number[]): void {
+    for (const l of this.listeners) {
+      if (positions) l(kind, positions);
+      else l(kind);
+    }
   }
 }

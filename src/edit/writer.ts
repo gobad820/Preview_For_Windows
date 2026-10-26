@@ -13,6 +13,7 @@ import {
   type PDFObject,
   type PDFPage,
 } from '@cantoo/pdf-lib';
+import type { Annot } from '../annot/types';
 import { PdfOpenError, type OutlineNode } from '../pdf/document';
 
 /** One input file. `id` matches `PageRef.src`. */
@@ -31,7 +32,7 @@ export interface WriteOptions {
   pageLabels?: Array<string | null>;
 }
 
-type PageSpec = { readonly src: number; readonly index: number };
+type PageSpec = { readonly src: number; readonly index: number; readonly annots?: readonly Annot[] | undefined };
 
 const N = {
   Annots: PDFName.of('Annots'),

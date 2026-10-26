@@ -1,6 +1,6 @@
 import type { Platform } from '../platform/types';
 import type { Store, ViewerState } from '../store';
-import { canDelete, deletePages, insertPages, movePages } from './composition';
+import { canDelete, deletePages, insertPages, movePages, type PageSpec } from './composition';
 import type { EditableDocument } from './document';
 import { Selection } from './selection';
 
@@ -18,8 +18,6 @@ export interface Mods {
   ctrl: boolean;
   shift: boolean;
 }
-
-type PageSpec = { src: number; index: number };
 
 /**
  * Page editing for the current document: thumbnail selection plus move, delete, copy, cut,
@@ -210,7 +208,8 @@ export class Editor {
   private copyIds(ids: ReadonlySet<number>): Promise<boolean> {
     const doc = this.host.doc();
     if (!doc || ids.size === 0) return Promise.resolve(false);
-    const specs = doc.pages.filter((p) => ids.has(p.id)).map((p) => ({ src: p.src, index: p.index }));
+    // Annotation lists are immutable, so the copy can share them with the originals.
+    const specs = doc.pages.filter((p) => ids.has(p.id)).map((p): PageSpec => ({ src: p.src, index: p.index, annots: p.annots }));
     this.clipboard = specs;
     const write = (async () => {
       try {

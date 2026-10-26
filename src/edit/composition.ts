@@ -3,12 +3,25 @@
  * operation is pure and returns the input instance when nothing changes, so
  * callers can skip history entries and re-renders by identity.
  */
+import type { Annot } from '../annot/types';
 
 /** One page position: page `index` of source `src`. `id` is unique per window session. */
 export interface PageRef {
   readonly id: number;
   readonly src: number;
   readonly index: number;
+  /**
+   * This app's annotations on the page. Absent: as they are in the source file; an array
+   * replaces them (the page's markup was edited).
+   */
+  readonly annots?: readonly Annot[];
+}
+
+/** A page to insert: source page plus, optionally, the annotations it carries. */
+export interface PageSpec {
+  readonly src: number;
+  readonly index: number;
+  readonly annots?: readonly Annot[] | undefined;
 }
 
 export type Composition = readonly PageRef[];
@@ -55,17 +68,37 @@ export function deletePages(c: Composition, ids: ReadonlySet<number>): Compositi
 export function insertPages(
   c: Composition,
   gap: number,
-  refs: ReadonlyArray<{ src: number; index: number }>,
+  refs: ReadonlyArray<PageSpec>,
   nextId: () => number,
 ): { pages: Composition; ids: number[] } {
   if (refs.length === 0) return { pages: c, ids: [] };
-  const added = refs.map(({ src, index }) => ({ id: nextId(), src, index }));
+  const added = refs.map(({ src, index, annots }): PageRef =>
+    annots ? { id: nextId(), src, index, annots } : { id: nextId(), src, index },
+  );
   const at = clampGap(c, gap);
   return { pages: [...c.slice(0, at), ...added, ...c.slice(at)], ids: added.map((p) => p.id) };
 }
 
-/** Same ids in the same order. */
+/** Replaces the annotation lists at the given positions; the same instance when none changes. */
+export function setPageAnnots(c: Composition, changes: ReadonlyMap<number, readonly Annot[]>): Composition {
+  let next: PageRef[] | null = null;
+  for (const [pos, annots] of changes) {
+    const ref = c[pos];
+    if (!ref || ref.annots === annots) continue;
+    next ??= [...c];
+    next[pos] = { ...ref, annots };
+  }
+  return next ?? c;
+}
+
+/** Same ids in the same order with the same annotation lists (by identity). */
 export function samePages(a: Composition, b: Composition): boolean {
+  if (a === b) return true;
+  return a.length === b.length && a.every((p, i) => p.id === b[i]?.id && p.annots === b[i]?.annots);
+}
+
+/** Same ids in the same order; annotations may differ. */
+export function sameOrder(a: Composition, b: Composition): boolean {
   if (a === b) return true;
   return a.length === b.length && a.every((p, i) => p.id === b[i]?.id);
 }

@@ -1,4 +1,4 @@
-import { EditableDocument } from './edit/document';
+import { EditableDocument, type ChangeKind } from './edit/document';
 import { Editor } from './edit/editor';
 import { PdfOpenError } from './pdf/document';
 import { PageRenderer } from './pdf/renderer';
@@ -564,11 +564,16 @@ export class App {
     void doc.loadSizes();
   }
 
-  private onDocChange(doc: EditableDocument, kind: 'structure' | 'sizes'): void {
+  private onDocChange(doc: EditableDocument, kind: ChangeKind): void {
     if (this.doc !== doc) return;
     if (kind === 'sizes') {
       this.viewer.sizesChanged();
       this.sidebar.sizesChanged();
+      return;
+    }
+    if (kind === 'annotations') {
+      this.lastPages = doc.pages;
+      this.store.set({ dirty: doc.dirty });
       return;
     }
     const anchor = this.anchorAfterChange(this.lastPages, doc.pages);
