@@ -70,15 +70,14 @@ describe('text markup', () => {
     expect(ap.usesFont).toBe(false);
   });
 
-  it('underlines 1/14 of the line height above the bottom of each quad', () => {
+  it('underlines where the overlay does: 10% of the line height above the bottom, 7.5% thick', () => {
     const ap = buildAppearance(mark('underline'), null)!;
-    expect(ap.content).toContain('10 17 m 110 17 l S');
-    expect(ap.content).toContain('1 w');
-    expect(ap.content).toContain('10 1 m 60 1 l S');
+    expect(ap.content).toContain('1.05 w 10 17.4 m 110 17.4 l S');
+    expect(ap.content).toContain('1.05 w 10 1.4 m 60 1.4 l S');
   });
 
-  it('strikes through the middle of each quad', () => {
-    expect(buildAppearance(mark('strikeout'), null)!.content).toContain('10 23 m 110 23 l S');
+  it('strikes through at 45% of the line height', () => {
+    expect(buildAppearance(mark('strikeout'), null)!.content).toContain('10 22.3 m 110 22.3 l S');
   });
 });
 
@@ -86,7 +85,7 @@ describe('shapes, lines and ink', () => {
   it('strokes a rectangle and fills it when it has a fill', () => {
     const plain = buildAppearance(shape(), null)!;
     expect(plain.content).toMatch(/10 10 100 50 re\s+S/);
-    expect(plain.content).toContain('2 w');
+    expect(plain.content).toContain('1 J 1 j 2 w');
     const filled = buildAppearance(shape({ fill: '#00ff00' }), null)!;
     expect(filled.content).toContain('0 1 0 rg');
     expect(filled.content).toMatch(/re\s+B/);
@@ -113,7 +112,7 @@ describe('shapes, lines and ink', () => {
     expect(count(buildAppearance(line, null)!.content, / m /g)).toBe(1);
   });
 
-  it('smooths ink paths with curves and round joins', () => {
+  it('draws ink paths as polylines with round caps and joins, like the overlay', () => {
     const ink: InkAnnot = {
       ...base,
       id: 'i',
@@ -123,8 +122,7 @@ describe('shapes, lines and ink', () => {
     };
     const ap = buildAppearance(ink, null)!;
     expect(ap.content).toContain('1 J 1 j');
-    expect(ap.content).toMatch(/^.*0 0 m/m);
-    expect(count(ap.content, / c\b/g)).toBeGreaterThanOrEqual(2);
+    expect(ap.content).toContain('0 0 m 10 10 l 20 0 l 30 10 l S');
   });
 
   it('uses the annotation bounds as /Rect for every kind', () => {
@@ -141,8 +139,9 @@ describe('shapes, lines and ink', () => {
 });
 
 describe('text boxes', () => {
-  it('wraps words to the box width, and Hangul between syllables', () => {
+  it('wraps at spaces and keeps Hangul words whole (CSS word-break: keep-all)', () => {
     expect(wrapText('aaa bbb ccc ddd', 56, 10, font)).toEqual(['aaa bbb ccc', 'ddd']);
+    expect(wrapText('가나다 라마바사', 26, 10, font)).toEqual(['가나다', '라마바사']);
     expect(wrapText('가나다라마바사아자차카타', 56, 10, font)).toEqual(['가나다라마바사아자차카', '타']);
     expect(wrapText('one\n\ntwo', 56, 10, font)).toEqual(['one', '', 'two']);
     expect(wrapText('abcdefghijklmnop', 56, 10, font)).toEqual(['abcdefghijk', 'lmnop']);

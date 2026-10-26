@@ -12,18 +12,8 @@ import type { PageGoneListener, PageView, PageViewListener } from '../viewer/vie
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
-/** Text box typography, shared with the text editor (and matched by the saved appearance). */
-export const TEXT_FONT = '"Malgun Gothic", "Apple SD Gothic Neo", sans-serif';
-export const TEXT_LINE_HEIGHT = 1.2;
-/** Padding inside a text box, points. */
-export const TEXT_PADDING = 2;
-
-/** Underline and strikethrough position (fraction of the quad height above its bottom edge) and thickness. */
-export const UNDERLINE_AT = 0.1;
-export const STRIKEOUT_AT = 0.45;
-export const markThickness = (height: number): number => Math.max(0.75, height * 0.075);
-/** Corner radius of a rounded rectangle, points. */
-export const roundedRadius = (r: PdfRect): number => Math.min(r.x1 - r.x0, r.y1 - r.y0) * 0.18;
+export { markThickness, roundedRadius, STRIKEOUT_AT, TEXT_FONT, TEXT_LINE_HEIGHT, TEXT_PADDING, UNDERLINE_AT } from '../annot/style';
+import { markThickness, roundedRadius, STRIKEOUT_AT, UNDERLINE_AT } from '../annot/style';
 
 export interface OverlayOptions {
   /** An annotation being edited in place (text box or note); the editor draws it instead. */

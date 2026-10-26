@@ -4,6 +4,7 @@
  * the identity), so model coordinates are used as they are. Pure: no pdf-lib here.
  */
 import { annotBounds, arrowHead, quadPolygon } from './geometry';
+import { markThickness, roundedRadius, STRIKEOUT_AT, TEXT_LINE_HEIGHT, TEXT_PADDING, UNDERLINE_AT } from './style';
 import type {
   Annot,
   Color,
@@ -40,9 +41,6 @@ export interface Appearance {
   readonly usesFont: boolean;
 }
 
-/** Inner padding of a text box in points, and its line height as a multiple of the font size. */
-export const TEXT_PADDING = 2;
-export const LINE_HEIGHT = 1.2;
 
 const n = (v: number): string => {
   const r = Math.round(v * 1000) / 1000;
@@ -61,25 +59,11 @@ const rgb = (c: Color) => hexToRgb(c).map(n).join(' ');
 /** Bezier constant for quarter circles. */
 const K = 0.5523;
 
-/** Path operators (no painting) for a polyline smoothed through the midpoints of its segments. */
-export function smoothPath(points: readonly PdfPoint[]): string {
+/** Path operators (no painting) for a polyline; a single point becomes a dot. */
+function polyline(points: readonly PdfPoint[]): string {
   if (points.length === 0) return '';
-  const first = points[0]!;
-  if (points.length === 1) return `${pt(first)} m ${pt(first)} l`;
-  if (points.length === 2) return `${pt(first)} m ${pt(points[1]!)} l`;
-  const ops = [`${pt(first)} m`];
-  let start = first;
-  for (let i = 1; i < points.length - 1; i++) {
-    const ctrl = points[i]!;
-    const next = points[i + 1]!;
-    const end = i === points.length - 2 ? next : { x: (ctrl.x + next.x) / 2, y: (ctrl.y + next.y) / 2 };
-    // Quadratic (start, ctrl, end) as a cubic.
-    const c1 = { x: start.x + (2 / 3) * (ctrl.x - start.x), y: start.y + (2 / 3) * (ctrl.y - start.y) };
-    const c2 = { x: end.x + (2 / 3) * (ctrl.x - end.x), y: end.y + (2 / 3) * (ctrl.y - end.y) };
-    ops.push(`${pt(c1)} ${pt(c2)} ${pt(end)} c`);
-    start = end;
-  }
-  return ops.join(' ');
+  if (points.length === 1) return `${pt(points[0]!)} m ${pt(points[0]!)} l`;
+  return `${pt(points[0]!)} m ${points.slice(1).map((p) => `${pt(p)} l`).join(' ')}`;
 }
 
 function roundedRectPath(r: PdfRect, radius: number): string {
@@ -116,11 +100,6 @@ function ovalPath(r: PdfRect): string {
   ].join(' ');
 }
 
-/** Corner radius of a rounded rectangle (Preview-like: proportional, capped). */
-export function cornerRadius(r: PdfRect): number {
-  return Math.min(12, (r.x1 - r.x0) / 4, (r.y1 - r.y0) / 4);
-}
-
 function markup(a: MarkupAnnot): string {
   const ops: string[] = [];
   if (a.kind === 'highlight') {
@@ -140,9 +119,8 @@ function markup(a: MarkupAnnot): string {
     const uy = tl.y - bl.y;
     const h = Math.hypot(ux, uy);
     if (h === 0) continue;
-    const width = Math.max(0.5, h / 14);
-    // Underline: one line width above the bottom edge; strikeout: through the middle.
-    const t = a.kind === 'underline' ? width / h : 0.5;
+    const width = markThickness(h);
+    const t = a.kind === 'underline' ? UNDERLINE_AT : STRIKEOUT_AT;
     const from = { x: bl.x + ux * t, y: bl.y + uy * t };
     const to = { x: br.x + ux * t, y: br.y + uy * t };
     ops.push(`${n(width)} w ${pt(from)} m ${pt(to)} l S`);
@@ -153,11 +131,12 @@ function markup(a: MarkupAnnot): string {
 function shape(a: ShapeAnnot): string {
   const r = a.rect;
   const paint = a.fill !== null ? 'B' : 'S';
-  const head = [`${n(a.width)} w ${rgb(a.color)} RG`];
+  // Round caps and joins, as the overlay strokes shapes.
+  const head = [`1 J 1 j ${n(a.width)} w ${rgb(a.color)} RG`];
   if (a.fill !== null) head.push(`${rgb(a.fill)} rg`);
   let path: string;
   if (a.kind === 'oval') path = ovalPath(r);
-  else if (a.rounded) path = roundedRectPath(r, cornerRadius(r));
+  else if (a.rounded) path = roundedRectPath(r, roundedRadius(r));
   else path = `${n(r.x0)} ${n(r.y0)} ${n(r.x1 - r.x0)} ${n(r.y1 - r.y0)} re`;
   return `${head.join(' ')}\n${path} ${paint}`;
 }
@@ -171,7 +150,7 @@ function line(a: LineAnnot): string {
 
 function ink(a: InkAnnot): string {
   const ops = [`1 J 1 j ${n(a.width)} w ${rgb(a.color)} RG`];
-  for (const path of a.paths) if (path.length > 0) ops.push(`${smoothPath(path)} S`);
+  for (const path of a.paths) if (path.length > 0) ops.push(`${polyline(path)} S`);
   return ops.join('\n');
 }
 
@@ -209,27 +188,18 @@ export function textFrameWidth(r: PdfRect, angle: TextAngle): number {
   return angle % 180 === 0 ? r.x1 - r.x0 : r.y1 - r.y0;
 }
 
-const CJK = /[ᄀ-ᇿ⺀-〿぀-ヿ㄰-㆏㐀-䶿一-鿿가-힯豈-﫿＀-￯]/u;
 
 /**
  * Breaks `text` into lines no wider than `width`, like the overlay's CSS (`white-space:
- * pre-wrap`): hard breaks at newlines, soft breaks at spaces and between CJK/Hangul
- * characters, words longer than a line split by character, trailing spaces hang.
+ * pre-wrap; word-break: keep-all; overflow-wrap: anywhere`): hard breaks at newlines, soft
+ * breaks at spaces only (Hangul words stay whole), a word longer than a line split by
+ * character, trailing spaces hang.
  */
 export function wrapText(text: string, width: number, size: number, font: Pick<AppearanceFont, 'widthOf'>): string[] {
   const out: string[] = [];
   for (const para of text.replace(/\r\n?/g, '\n').split('\n')) {
-    const tokens = para.match(/\s+|[^\s]/gu) ?? [];
-    // Group non-space, non-CJK characters into words.
-    const merged: string[] = [];
-    for (const t of tokens) {
-      const prev = merged[merged.length - 1];
-      const word = !/\s/u.test(t) && !CJK.test(t);
-      if (word && prev !== undefined && !/\s/u.test(prev) && !CJK.test(prev)) merged[merged.length - 1] = prev + t;
-      else merged.push(t);
-    }
     let line = '';
-    for (const t of merged) {
+    for (const t of para.match(/\s+|\S+/gu) ?? []) {
       if (/^\s+$/u.test(t)) {
         line += t;
         continue;
@@ -286,7 +256,7 @@ function textBox(a: TextBoxAnnot, font: AppearanceFont | null): { content: strin
     ops.push(`${n(b.x)} ${n(b.y)} ${n(u.x)} ${n(u.y)} ${pt(o)} cm`);
     ops.push(`BT /${font.name} ${n(size)} Tf ${rgb(a.color)} rg`);
     // CSS line box: half the leading above the font's ascent.
-    const lineH = LINE_HEIGHT * size;
+    const lineH = TEXT_LINE_HEIGHT * size;
     const halfLeading = (lineH - (font.ascent - font.descent) * size) / 2;
     encoded.forEach((hex, i) => {
       if (lines[i] === '') return;
