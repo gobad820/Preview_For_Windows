@@ -17,6 +17,11 @@ import { showMenu, type MenuItem } from './ui/menu';
 import { PdfViewer } from './viewer/viewer';
 import { zoomIn, zoomOut } from './viewer/zoom';
 import type { Composition } from './edit/composition';
+import { MarkupBar, openHighlightMenu } from './markup/bar';
+import { OverlayHost } from './markup/overlay';
+import { MarkupController } from './markup/controller';
+import { MarkupState, type MarkKind, type Styles } from './markup/state';
+import type { Color } from './annot/types';
 
 /** Horizontal pan per arrow-key press when the page is wider than the viewport (CSS px). */
 const PAN_STEP = 80;
@@ -33,6 +38,13 @@ export class App {
   readonly sidebar: Sidebar;
   readonly findBar: FindBar;
   readonly editor: Editor;
+  /** Markup tool and default styles for this window. */
+  readonly markup = new MarkupState();
+  readonly markupBar: MarkupBar;
+  /** Annotation drawing over document pages and thumbnails. */
+  readonly overlays: OverlayHost;
+  /** Markup tools, editing and the selected annotation in the document view. */
+  readonly markupController: MarkupController;
   readonly metrics: AppMetrics = { openStart: 0, firstPaint: 0 };
   private doc: EditableDocument | null = null;
   /** Composition before the latest change, to keep the viewer on the same page across edits. */
@@ -114,14 +126,30 @@ export class App {
       open: () => void this.open(),
       moreMenu: (anchor) => this.moreMenu(anchor),
       toggleMarkup: () => this.store.set({ markupOpen: !this.store.get().markupOpen }),
-      highlight: () => {},
-      highlightMenu: () => {},
+      highlight: () => this.highlightButton(),
+      highlightMenu: (anchor) =>
+        openHighlightMenu(anchor, root.querySelector('#toolbar [data-action="highlight-menu"]'), this.markup, (kind, color) =>
+          this.pickMark(kind, color),
+        ),
       viewMenu: (anchor) => this.viewMenu(anchor),
     }, this.platform.windowControls);
     const markupBar = this.el('markupbar');
+    this.markupBar = new MarkupBar(markupBar, this.markup, {
+      highlight: () => this.highlightButton(),
+      pickMark: (kind, color) => this.pickMark(kind, color),
+      applyStyles: (patch) => this.applyStyles(patch),
+    });
     this.store.select('markupOpen', (open) => {
       markupBar.hidden = !open;
+      // Hiding the markup toolbar puts its tools away, like Preview.
+      if (!open) this.markup.setTool('select');
     });
+    const syncHighlight = () => {
+      const { styles, highlightMode } = this.markup;
+      this.toolbar.setHighlight({ on: highlightMode, color: styles.markColor, kind: styles.markKind });
+    };
+    this.markup.onChange(syncHighlight);
+    syncHighlight();
 
     // ---- page editing ----
     this.editor = new Editor({
@@ -164,6 +192,16 @@ export class App {
       aside.hidden = !open;
     });
 
+    this.overlays = new OverlayHost(() => this.doc, [this.viewer, this.sidebar.thumbnails]);
+    this.markupController = new MarkupController({
+      doc: () => this.doc,
+      viewer: this.viewer,
+      container: this.el('viewer'),
+      state: this.markup,
+      store: this.store,
+      overlays: this.overlays,
+    });
+
     // ---- find bar ----
     this.findBar = new FindBar(this.el('findbar'), this.store, { viewer: this.viewer, doc: null });
 
@@ -176,6 +214,7 @@ export class App {
       findBar: this.findBar,
       editor: this.editor,
       metrics: this.metrics,
+      markup: { state: this.markup, overlays: this.overlays, controller: this.markupController },
     };
     (window as unknown as { __pfwUi: unknown }).__pfwUi = { showMenu, showAlert };
   }
@@ -197,6 +236,7 @@ export class App {
         if (hasDoc) this.findBar.open();
         return;
       case 'close-find':
+        if (this.markupEscape()) return;
         if (s.findOpen) this.findBar.close();
         return;
       case 'find-next':
@@ -239,6 +279,15 @@ export class App {
         break;
       case 'delete-pages':
         this.editor.deleteSelection();
+        break;
+      case 'toggle-markup':
+        this.store.set({ markupOpen: !s.markupOpen });
+        break;
+      case 'delete-annotation':
+        this.markupController.deleteSelected();
+        break;
+      case 'duplicate-annotation':
+        this.markupController.duplicateSelected();
         break;
       case 'zoom-in':
         this.viewer.setZoom('custom', zoomIn(s.scale));
@@ -347,11 +396,13 @@ export class App {
 
   /** Ctrl+S: writes over the opened file. Nothing happens when there is nothing to save. */
   save(): Promise<boolean> {
+    this.markupController.commitEditing();
     return this.queueSave(() => this.saveNow());
   }
 
   /** Ctrl+Shift+S: writes a copy and keeps editing the copy. */
   saveAs(): Promise<boolean> {
+    this.markupController.commitEditing();
     return this.queueSave(() => this.saveAsNow());
   }
 
@@ -451,6 +502,8 @@ export class App {
    * caller may proceed (saved or discarded).
    */
   async confirmDiscard(): Promise<boolean> {
+    // Text still in an open text box or note editor counts as an edit.
+    this.markupController.commitEditing();
     if (!this.doc?.dirty) return true;
     const choice = await this.askUnsaved(this.store.get().fileName ?? 'Untitled');
     if (choice === 'cancel') return false;
@@ -469,6 +522,32 @@ export class App {
       ],
     });
     return value === 'save' || value === 'discard' ? value : 'cancel';
+  }
+
+  // ---- markup -----------------------------------------------------------------
+
+  /** Esc ends editing, disarms a tool or deselects before it closes find; true when it did one. */
+  private markupEscape(): boolean {
+    return this.markupController.handleEscape();
+  }
+
+  /** The highlight button's main part: marks selected text and turns highlight mode on, or toggles the mode. */
+  private highlightButton(): void {
+    if (this.markupController.markSelection()) this.markup.setHighlightMode(true);
+    else this.markup.setHighlightMode(!this.markup.highlightMode);
+  }
+
+  /** A color or kind picked from a highlight menu becomes the mark style and restyles selected markup, or turns highlight mode on and marks selected text. */
+  private pickMark(kind: MarkKind, color?: Color): void {
+    this.markup.setMark(kind, color);
+    // With text markup selected, the pick restyles it; otherwise it arms highlight mode.
+    if (this.markupController.restyleSelectedMark(kind, color)) return;
+    this.markup.setHighlightMode(true);
+    this.markupController.markSelection();
+  }
+
+  private applyStyles(patch: Partial<Styles>): void {
+    this.markupController.applyStyles(patch);
   }
 
   /** Right-click on a thumbnail. */
@@ -607,6 +686,7 @@ export class App {
       return;
     }
     const old = this.doc;
+    this.markupController.reset();
     this.doc = doc;
     this.lastPages = doc.pages;
     doc.onChange((kind) => this.onDocChange(doc, kind));
@@ -656,6 +736,8 @@ export class App {
       this.lastPages = doc.pages;
       this.viewer.annotationsChanged();
       this.sidebar.thumbnails.annotationsChanged();
+      this.overlays.refresh();
+      this.markupController.documentChanged();
       this.store.set({ dirty: doc.dirty });
       return;
     }
@@ -665,6 +747,8 @@ export class App {
     this.viewer.structureChanged(anchor, 'center');
     this.sidebar.structureChanged();
     this.editor.structureChanged();
+    this.overlays.refresh();
+    this.markupController.documentChanged();
     this.store.set({ numPages: doc.numPages, dirty: doc.dirty });
   }
 

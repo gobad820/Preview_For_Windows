@@ -187,6 +187,7 @@ export class PdfViewer {
         this.emitGone(mp.el);
       }
     }
+    this.keepDomOrder();
     if (this.store.get().scale !== this.scale) this.store.set({ scale: this.scale });
     this.updateMounted();
     this.syncCurrentPage();
@@ -585,10 +586,27 @@ export class PdfViewer {
       viewKey: null,
       canvasGeneration: -1,
     };
-    this.layer.append(el);
+    this.layer.insertBefore(el, this.elementAfter(index));
     this.mounted.set(index, mp);
     this.position(mp, index);
     return mp;
+  }
+
+  /**
+   * The mounted page element that follows position `index`, so page elements stay in page
+   * order in the DOM (a text selection across pages follows DOM order).
+   */
+  private elementAfter(index: number): HTMLElement | null {
+    let best: MountedPage | null = null;
+    for (const [i, mp] of this.mounted) if (i > index && (!best || i < best.index)) best = mp;
+    return best?.el ?? null;
+  }
+
+  /** Re-sorts reused page elements after a structure change, when their order changed. */
+  private keepDomOrder(): void {
+    const sorted = [...this.mounted.values()].sort((a, b) => a.index - b.index);
+    const inOrder = sorted.every((mp, i) => i === 0 || sorted[i - 1]!.el.compareDocumentPosition(mp.el) & Node.DOCUMENT_POSITION_FOLLOWING);
+    if (!inOrder) for (const mp of sorted) this.layer.insertBefore(mp.el, null);
   }
 
   private unmount(mp: MountedPage, index: number): void {

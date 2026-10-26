@@ -33,7 +33,10 @@ export type Action =
   | 'copy-pages'
   | 'cut-pages'
   | 'paste-pages'
-  | 'delete-pages';
+  | 'delete-pages'
+  | 'toggle-markup'
+  | 'duplicate-annotation'
+  | 'delete-annotation';
 
 export interface KeyLike {
   key: string;
@@ -69,6 +72,7 @@ function resolveCtrl(k: KeyLike): Action | null {
   if (k.shiftKey) {
     if (ch === 'l') return 'rotate-ccw';
     if (ch === 's') return 'save-as';
+    if (ch === 'a') return 'toggle-markup';
     if (ch === 'z') return k.inTextField ? null : 'redo';
     return null;
   }
@@ -85,6 +89,7 @@ function resolveCtrl(k: KeyLike): Action | null {
     case 'z': return k.inTextField ? null : 'undo';
     case 'y': return k.inTextField ? null : 'redo';
     case 'v': return k.inTextField ? null : 'paste-pages';
+    case 'd': return k.inTextField ? null : 'duplicate-annotation';
     case 'a': return pages ? 'select-all-pages' : null;
     case 'c': return pages ? 'copy-pages' : null;
     case 'x': return pages ? 'cut-pages' : null;
@@ -122,6 +127,9 @@ export function resolveShortcut(k: KeyLike): Action | null {
     }
   }
   switch (k.key) {
+    case 'Delete':
+    case 'Backspace':
+      return 'delete-annotation';
     case 'PageDown': return 'scroll-down';
     case 'PageUp': return 'scroll-up';
     case 'Home': return 'first-page';

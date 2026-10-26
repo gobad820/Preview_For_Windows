@@ -847,3 +847,183 @@ button, input { font: inherit; color: inherit; letter-spacing: inherit; }
   cursor: default; -webkit-user-select: none; user-select: none;
 }
 .textLayer.selecting .endOfContent { top: 0; }
+
+/* ---- markup (src/markup/) ---------------------------------------------- */
+/* markup toolbar row: tool buttons, separators, highlight split button, style controls */
+.markupbar .mk-btn[aria-pressed="true"],
+.markupbar .tb-split-main[aria-pressed="true"] { background: var(--fill-pressed); color: var(--text); }
+.markupbar .mk-menu { width: auto; min-width: 40px; padding: 0 4px 0 6px; gap: 1px; }
+.markupbar .mk-menu > svg:last-child { width: 10px; height: 10px; stroke-width: 2.8; color: var(--text-secondary); }
+.markupbar .mk-menu[aria-expanded="true"] { background: var(--fill-pressed); }
+.markupbar .mk-glyph { display: inline-flex; }
+.mk-sep { flex: none; width: 1px; height: 18px; margin: 0 6px; background: var(--hairline); }
+.mk-btn .mk-nofill { display: none; }
+.mk-btn[data-nofill] .mk-nofill { display: inline; }
+[data-markup="text-style"] svg:first-child path { stroke: var(--swatch, currentColor); }
+.tb-swatch[data-kind="underline"], .tb-swatch[data-kind="strikeout"] { height: 2px; bottom: 4.5px; }
+
+/* menu rows with an icon or a color swatch before the label */
+.menu-icon { flex: none; width: 22px; margin-right: 4px; display: flex; align-items: center; justify-content: center; }
+.menu-icon svg { width: 16px; height: 16px; }
+.menu-swatch {
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--swatch);
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.25);
+}
+.menu-mark {
+  font-size: 13px; font-weight: 600; line-height: 1;
+  text-decoration-line: underline; text-decoration-color: var(--swatch);
+  text-decoration-thickness: 2px; text-underline-offset: 2px;
+}
+.menu-mark[data-kind="strikeout"] { text-decoration-line: line-through; text-underline-offset: 0; }
+.menu-width { width: 18px; height: var(--w); border-radius: 1px; background: currentColor; }
+.menu-item:focus .menu-swatch { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.85); }
+
+/* color and text style popovers */
+.markup-palette {
+  position: fixed; z-index: 1000;
+  padding: 10px;
+  color: var(--text);
+  background: var(--menu-bg);
+  -webkit-backdrop-filter: blur(28px) saturate(1.8);
+  backdrop-filter: blur(28px) saturate(1.8);
+  border-radius: 10px;
+  box-shadow: var(--menu-ring), var(--menu-shadow);
+  outline: none;
+  animation: pfw-fade-in 100ms ease-out;
+}
+.palette-grid { display: grid; grid-template-columns: repeat(var(--columns, 6), 22px); gap: 7px; }
+.palette-swatch {
+  width: 22px; height: 22px; padding: 0;
+  border: 0; border-radius: 50%;
+  background: var(--swatch);
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.22);
+  outline: none;
+  transition: transform 80ms ease;
+}
+.palette-swatch:hover { transform: scale(1.08); }
+.palette-swatch[aria-checked="true"] { box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.22), 0 0 0 2px var(--menu-bg), 0 0 0 3.5px var(--accent); }
+.palette-swatch:focus-visible { box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.22), var(--focus-ring); }
+.palette-row {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; height: 26px; margin-bottom: 8px; padding: 0 6px;
+  border: 0; border-radius: 5px;
+  background: transparent;
+  outline: none;
+}
+.palette-row:hover, .palette-row:focus-visible { background: var(--fill-hover); }
+.palette-row[aria-checked="true"] { background: var(--fill-pressed); }
+.palette-nofill {
+  position: relative; width: 16px; height: 16px; border-radius: 4px;
+  background: #ffffff; box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+.palette-nofill::after {
+  content: ''; position: absolute; left: -2px; right: -2px; top: 7.25px; height: 1.5px;
+  background: #ff3b30; transform: rotate(-45deg);
+}
+.palette-size { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+.palette-size-label { flex: 1; color: var(--text-secondary); }
+.palette-size-value { min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 500; }
+.palette-step {
+  width: 24px; height: 22px; padding: 0;
+  border: 0; border-radius: 5px;
+  font-size: 15px; line-height: 1;
+  color: var(--text);
+  background: var(--control-raised);
+  box-shadow: var(--control-shadow);
+  outline: none;
+}
+.palette-step:active:not(:disabled) { filter: brightness(0.92); }
+.palette-step:disabled { color: var(--text-tertiary); }
+.palette-step:focus-visible { box-shadow: var(--control-shadow), var(--focus-ring); }
+
+/* annotation overlays (src/markup/overlay.ts): no z-index on the overlay itself, so its layers
+   stack with the text layer and the marks can multiply onto the canvas */
+.markup-overlay { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.markup-overlay > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.markup-overlay .mk-marks { z-index: 2; mix-blend-mode: multiply; }
+.markup-overlay .mk-shapes { z-index: 3; }
+.markup-overlay .mk-shapes path, .markup-overlay .mk-shapes rect, .markup-overlay .mk-shapes ellipse {
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.markup-overlay .mk-html { position: absolute; inset: 0; z-index: 3; }
+.markup-overlay .mk-handles { z-index: 4; }
+.mk-text {
+  position: absolute; box-sizing: border-box;
+  margin: 0; padding: 2px;
+  transform-origin: 50% 50%;
+  font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+  font-weight: 400; line-height: 1.2; letter-spacing: 0; text-align: left;
+  white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere;
+  overflow: hidden;
+  -webkit-font-smoothing: auto;
+}
+.mk-note {
+  position: absolute; box-sizing: border-box;
+  transform-origin: 50% 50%;
+  border-radius: 2px;
+  background:
+    linear-gradient(rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0.28)) 4px 6px / 12px 1.2px no-repeat,
+    linear-gradient(rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0.28)) 4px 9.5px / 12px 1.2px no-repeat,
+    linear-gradient(rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0.28)) 4px 13px / 8px 1.2px no-repeat,
+    var(--note, #ffd60a);
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+.markup-overlay .mk-outline { fill: none; stroke: var(--accent); stroke-width: 1; shape-rendering: crispEdges; }
+
+/* armed markup tool: pages take the pointer, text cannot be selected */
+.viewer.mk-armed .page { cursor: crosshair; }
+.viewer.mk-armed .textLayer,
+.viewer.mk-armed .textLayer :is(span, br) { pointer-events: none; -webkit-user-select: none; user-select: none; cursor: inherit; }
+
+/* in-place text box editor: the same box as the drawn text, plus a focus ring */
+.mk-text.mk-text-editor {
+  z-index: 5;
+  display: block;
+  border: 0; border-radius: 0;
+  resize: none; outline: none;
+  pointer-events: auto;
+  -webkit-user-select: text; user-select: text;
+  caret-color: currentColor;
+  box-shadow: 0 0 0 0.75px var(--accent), 0 0 0 2.5px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* note popup: a small pad beside the icon, in the page layer so the page edge does not clip it */
+.mk-note-popup {
+  position: absolute; z-index: 6;
+  width: 220px; height: 150px; padding: 8px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--note, #ffd60a) 28%, #fffdf2);
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.18), 0 8px 24px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.1);
+  animation: pfw-fade-in 100ms ease-out;
+}
+.mk-note-popup textarea {
+  display: block; width: 100%; height: 100%; margin: 0; padding: 0;
+  border: 0; outline: none; resize: none;
+  font: 13px/1.35 var(--font);
+  color: #1d1d1f;
+  background: transparent;
+  -webkit-user-select: text; user-select: text;
+}
+.mk-note-popup textarea::placeholder { color: rgba(0, 0, 0, 0.3); }
+
+/* text layer in rotated views (pdf.js viewer rules): pdf.js lays the layer out unrotated at the
+   page's own size and tags it with the view rotation, so text selection, find and highlights
+   from the selection follow the rotated page */
+.page { --scale-round-x: 1px; --scale-round-y: 1px; }
+.textLayer[data-main-rotation="90"] { transform: rotate(90deg) translateY(-100%); }
+.textLayer[data-main-rotation="180"] { transform: rotate(180deg) translate(-100%, -100%); }
+.textLayer[data-main-rotation="270"] { transform: rotate(270deg) translateX(-100%); }
+
+/* selection handles and hover cursor */
+.markup-overlay .mk-handles [data-handle] { pointer-events: all; }
+.mk-handle-hit { fill: transparent; stroke: none; }
+.mk-handle-dot { fill: #ffffff; stroke: var(--accent); stroke-width: 1; filter: drop-shadow(0 0.5px 1px rgba(0, 0, 0, 0.3)); }
+.mk-handles [data-handle="nw"], .mk-handles [data-handle="se"] { cursor: nwse-resize; }
+.mk-handles [data-handle="ne"], .mk-handles [data-handle="sw"] { cursor: nesw-resize; }
+.mk-handles [data-handle="n"], .mk-handles [data-handle="s"] { cursor: ns-resize; }
+.mk-handles [data-handle="e"], .mk-handles [data-handle="w"] { cursor: ew-resize; }
+.mk-handles [data-handle="from"], .mk-handles [data-handle="to"] { cursor: move; }
+.viewer[data-hover="move"] .page,
+.viewer[data-hover="move"] .textLayer :is(span, br) { cursor: move; }

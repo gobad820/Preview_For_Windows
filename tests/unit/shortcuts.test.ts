@@ -51,8 +51,21 @@ describe('resolveShortcut', () => {
     ['Ctrl+A outside the sidebar → null', ctrl('a'), null],
     ['Ctrl+C outside the sidebar → null', ctrl('c'), null],
     ['Ctrl+X outside the sidebar → null', ctrl('x'), null],
-    ['Delete outside the sidebar → null', key('Delete'), null],
-    ['Backspace outside the sidebar → null', key('Backspace'), null],
+    ['Delete outside the sidebar → delete-annotation', key('Delete'), 'delete-annotation'],
+    ['Backspace outside the sidebar → delete-annotation', key('Backspace'), 'delete-annotation'],
+    ['Delete in a text field → null', inField('Delete'), null],
+    ['Backspace in a text field → null', inField('Backspace'), null],
+    ['Backspace in find → null', inFind('Backspace'), null],
+    ['Shift+Delete outside the sidebar → null', key('Delete', { shiftKey: true }), null],
+    ['Ctrl+Shift+A → toggle-markup', ctrl('A', { shiftKey: true }), 'toggle-markup'],
+    ['Ctrl+Shift+A with a Korean IME key value resolves via code', ctrl('ㅁ', { shiftKey: true, code: 'KeyA' }), 'toggle-markup'],
+    ['Ctrl+Shift+A in a text field → toggle-markup', inField('A', { ctrlKey: true, shiftKey: true }), 'toggle-markup'],
+    ['Ctrl+Shift+A in the sidebar → toggle-markup', inSidebar('A', { ctrlKey: true, shiftKey: true }), 'toggle-markup'],
+    ['Ctrl+D → duplicate-annotation', ctrl('d'), 'duplicate-annotation'],
+    ['Ctrl+D with a Korean IME key value resolves via code', ctrl('ㅇ', { code: 'KeyD' }), 'duplicate-annotation'],
+    ['Ctrl+D in a text field → null', inField('d', { ctrlKey: true }), null],
+    ['Ctrl+D in find → null', inFind('d', { ctrlKey: true }), null],
+    ['Ctrl+Shift+D → null', ctrl('D', { shiftKey: true }), null],
     ['Ctrl+Shift+O → null', ctrl('O', { shiftKey: true }), null],
     ['Ctrl+G → goto-page', ctrl('g'), 'goto-page'],
     ['Ctrl+L with a Korean IME key value resolves via code', ctrl('ㅣ', { code: 'KeyL' }), 'rotate-cw'],
@@ -176,6 +189,16 @@ function fakeEvent(init: Partial<KeyboardEvent> & { key: string }, target: FakeT
 }
 
 describe('bindShortcuts', () => {
+  it('Delete deletes pages in the thumbnail list and the selected annotation elsewhere', () => {
+    const { win, dispatch } = fakeWindow();
+    const handler = vi.fn();
+    bindShortcuts(win, handler);
+    dispatch(fakeEvent({ key: 'Delete' }, { tagName: 'DIV', within: ['#sidebar [role="listbox"]'] }));
+    dispatch(fakeEvent({ key: 'Delete' }, { tagName: 'MAIN' }));
+    dispatch(fakeEvent({ key: 'Backspace' }, { tagName: 'TEXTAREA' }));
+    expect(handler.mock.calls.map((c) => c[0])).toEqual(['delete-pages', 'delete-annotation']);
+  });
+
   it('calls the handler with the resolved action and prevents default', () => {
     const { win, dispatch } = fakeWindow();
     const handler = vi.fn();
@@ -223,10 +246,9 @@ describe('bindShortcuts', () => {
     const handler = vi.fn();
     bindShortcuts(win, handler);
     dispatch(fakeEvent({ key: 'Delete' }, { tagName: 'DIV' }));
-    expect(handler).not.toHaveBeenCalled();
     // The Contents tab and the tab strip are in #sidebar but must not delete pages.
     dispatch(fakeEvent({ key: 'Delete' }, { tagName: 'BUTTON', within: ['#sidebar'] }));
-    expect(handler).not.toHaveBeenCalled();
+    expect(handler.mock.calls.map((c) => c[0])).toEqual(['delete-annotation', 'delete-annotation']);
     const e = fakeEvent({ key: 'Delete' }, { tagName: 'DIV', within: ['#sidebar', '#sidebar [role="listbox"]'] });
     dispatch(e);
     expect(handler).toHaveBeenCalledWith('delete-pages', e);

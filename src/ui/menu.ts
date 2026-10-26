@@ -2,7 +2,16 @@ import type { Point } from '../platform/types';
 import { icons } from './icons';
 
 export type MenuItem =
-  | { label: string; shortcut?: string; disabled?: boolean; checked?: boolean; radio?: boolean; action: () => void }
+  | {
+      label: string;
+      shortcut?: string;
+      disabled?: boolean;
+      checked?: boolean;
+      radio?: boolean;
+      /** Trusted HTML (an icon or a color swatch) shown before the label. */
+      icon?: string;
+      action: () => void;
+    }
   | 'separator';
 
 type Entry = Exclude<MenuItem, 'separator'>;
@@ -60,7 +69,15 @@ export function showMenu(at: DOMRect | Point, items: MenuItem[], opts: { minWidt
       const label = document.createElement('span');
       label.className = 'menu-label';
       label.textContent = item.label;
-      el.append(check, label);
+      el.append(check);
+      if (item.icon) {
+        const icon = document.createElement('span');
+        icon.className = 'menu-icon';
+        icon.setAttribute('aria-hidden', 'true');
+        icon.innerHTML = item.icon;
+        el.append(icon);
+      }
+      el.append(label);
       if (item.shortcut) {
         el.setAttribute('aria-keyshortcuts', item.shortcut);
         const key = document.createElement('span');
