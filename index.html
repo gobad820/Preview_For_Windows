@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Preview</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="app" class="app" data-status="empty">
+      <header id="toolbar" class="toolbar"></header>
+      <div class="body">
+        <aside id="sidebar" class="sidebar" hidden></aside>
+        <main id="viewer" class="viewer" tabindex="0">
+          <section class="empty-state">
+            <div class="empty-glyph" aria-hidden="true"></div>
+            <h1>Open a PDF</h1>
+            <p><button type="button" class="btn primary" data-action="open">Open…</button></p>
+            <p class="hint">or drop a file here &nbsp;·&nbsp; <kbd>Ctrl</kbd>+<kbd>O</kbd></p>
+          </section>
+        </main>
+      </div>
+      <div id="findbar" class="findbar" hidden></div>
+      <div class="drop-overlay" hidden><span>Drop to open</span></div>
+      <div class="error-banner" role="alert" hidden></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
