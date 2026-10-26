@@ -67,7 +67,10 @@ interface Gesture {
   tool: Tool;
   pageId: number;
   id: string;
+  /** Where the press was, on the screen at the time. */
   start: Client;
+  /** Where the press was on the page; the anchor stays there when the view scrolls or zooms. */
+  startPdf: PdfPoint;
   last: Client;
   shift: boolean;
   moved: boolean;
@@ -117,6 +120,10 @@ export class MarkupController {
     // Selection and focus changes come from mousedown; a press markup handles must not make them.
     c.addEventListener('mousedown', this.onMouseDown, true);
     c.addEventListener('dblclick', this.onDoubleClick);
+    // The page moves under a drag that scrolls (wheel, or zoom): its draft follows.
+    c.addEventListener('scroll', () => {
+      if (this.gesture) this.drawDraft();
+    }, { passive: true });
     c.addEventListener('contextmenu', this.onContextMenu);
     // In highlight mode, finishing a text selection marks it; a click on text markup selects it.
     document.addEventListener('pointerup', this.onSelectionEnd);
@@ -140,7 +147,7 @@ export class MarkupController {
   /** Esc: ends editing, cancels a drag, disarms a tool, then deselects. True when it did one of these. */
   handleEscape(): boolean {
     if (this.editing) {
-      this.endEditing('escape');
+      this.endEditing('keep');
       return true;
     }
     if (this.gesture) {
@@ -156,6 +163,11 @@ export class MarkupController {
       return true;
     }
     return false;
+  }
+
+  /** Commits an open text box editor or note popup (before saving or closing), keeping it selected. */
+  commitEditing(): void {
+    if (this.editing) this.endEditing('keep');
   }
 
   /**
@@ -211,7 +223,8 @@ export class MarkupController {
     const a = sel && this.find(sel);
     if (!sel || !doc || !a || this.editing) return false;
     const view = this.viewOf(sel.pageId);
-    const d = view ? this.screenVector(view, DUPLICATE_OFFSET, DUPLICATE_OFFSET) : { x: DUPLICATE_OFFSET, y: -DUPLICATE_OFFSET };
+    const offset = view ? this.screenVector(view, DUPLICATE_OFFSET, DUPLICATE_OFFSET) : { x: DUPLICATE_OFFSET, y: -DUPLICATE_OFFSET };
+    const d = view ? clampDelta(annotBox(a), offset, this.pageBox(view)) : offset;
     const copy = translateAnnot({ ...a, id: doc.newAnnotId(), modified: now() }, d.x, d.y);
     this.add(sel.pageId, copy);
     return true;
@@ -223,8 +236,8 @@ export class MarkupController {
     const a = sel && this.find(sel);
     const view = sel && this.viewOf(sel.pageId);
     if (!sel || !a || !view || this.editing) return false;
-    const d = this.screenVector(view, dx, dy);
-    this.replace(sel.pageId, translateAnnot({ ...a, modified: now() }, d.x, d.y));
+    const d = clampDelta(annotBox(a), this.screenVector(view, dx, dy), this.pageBox(view));
+    if (d.x !== 0 || d.y !== 0) this.replace(sel.pageId, translateAnnot({ ...a, modified: now() }, d.x, d.y));
     return true;
   }
 
@@ -356,6 +369,35 @@ export class MarkupController {
     return order.find(({ a }) => a.id !== editing && hitTest(a, q, tol))?.a ?? null;
   }
 
+  /** The client point where a PDF point of `view`'s page is now. */
+  private toClient(view: PageView, q: PdfPoint): Client {
+    const r = view.el.getBoundingClientRect();
+    const vp = view.viewport;
+    const [x, y] = vp.convertToViewportPoint(q.x, q.y) as [number, number];
+    return { x: r.left + x * (vp.width > 0 ? r.width / vp.width : 1), y: r.top + y * (vp.height > 0 ? r.height / vp.height : 1) };
+  }
+
+  /** The gesture's press point on screen now. */
+  private anchor(g: Gesture, view: PageView): Client {
+    return this.toClient(view, g.startPdf);
+  }
+
+  /** PDF point under a client point, kept on the page. */
+  private toPdfOnPage(view: PageView, p: Client): PdfPoint {
+    const vp = view.viewport;
+    const q = this.toViewport(view, p);
+    const [x, y] = vp.convertToPdfPoint(Math.min(Math.max(q.x, 0), vp.width), Math.min(Math.max(q.y, 0), vp.height)) as [number, number];
+    return { x, y };
+  }
+
+  /** The page's visible box in PDF space. */
+  private pageBox(view: PageView): PdfRect {
+    const vp = view.viewport;
+    const [ax, ay] = vp.convertToPdfPoint(0, 0) as [number, number];
+    const [bx, by] = vp.convertToPdfPoint(vp.width, vp.height) as [number, number];
+    return normRect({ x: ax, y: ay }, { x: bx, y: by });
+  }
+
   /** Client point → the viewport's CSS px for `view`. */
   private toViewport(view: PageView, p: Client): Client {
     const r = view.el.getBoundingClientRect();
@@ -394,8 +436,10 @@ export class MarkupController {
     if (!this.selection || this.editing || e.isComposing || e.ctrlKey || e.altKey || e.metaKey) return;
     const dir = ({ ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] } as Record<string, [number, number]>)[e.key];
     if (!dir) return;
+    // Only while the document view (or nothing in particular) has focus: arrows elsewhere navigate.
     const t = e.target as HTMLElement | null;
-    if (t?.isContentEditable || t?.closest?.('input, textarea, select, #sidebar [role="listbox"]')) return;
+    const inDocument = !t || t === document.body || t === document.documentElement || this.deps.container.contains(t);
+    if (!inDocument || t?.isContentEditable || t?.closest?.('input, textarea, select')) return;
     const step = e.shiftKey ? 10 : 1;
     if (this.nudge(dir[0] * step, dir[1] * step)) {
       e.preventDefault();
@@ -415,7 +459,7 @@ export class MarkupController {
   };
 
   private readonly onContextMenu = (e: MouseEvent): void => {
-    if (this.deps.state.tool !== 'select') return;
+    if (this.deps.state.tool !== 'select' || this.inEditor(e.target)) return;
     const doc = this.deps.doc();
     const p = { x: e.clientX, y: e.clientY };
     const view = this.viewAt(p);
@@ -470,8 +514,13 @@ export class MarkupController {
     if (this.gesture) e.preventDefault();
   };
 
+  /** True for events inside the open text box editor or note popup, which handle them natively. */
+  private inEditor(target: EventTarget | null): boolean {
+    return !!this.editing && target instanceof Node && this.editing.el.contains(target);
+  }
+
   private readonly onPointerDown = (e: PointerEvent): void => {
-    if (e.button !== 0 || !e.isPrimary) return;
+    if (e.button !== 0 || !e.isPrimary || this.inEditor(e.target)) return;
     const doc = this.deps.doc();
     if (!doc) return;
     const tool = this.deps.state.tool;
@@ -496,6 +545,7 @@ export class MarkupController {
       pageId: ref.id,
       id: doc.newAnnotId(),
       start: p,
+      startPdf: this.toPdf(view, p),
       last: p,
       shift: e.shiftKey,
       moved: false,
@@ -538,6 +588,7 @@ export class MarkupController {
     this.deps.container.focus({ preventScroll: true });
     this.deps.container.setPointerCapture?.(e.pointerId);
     const p = { x: e.clientX, y: e.clientY };
+    const view = this.viewOf(pageId);
     this.gesture = {
       kind,
       pointerId: e.pointerId,
@@ -545,6 +596,7 @@ export class MarkupController {
       pageId,
       id: a.id,
       start: p,
+      startPdf: view ? this.toPdf(view, p) : { x: 0, y: 0 },
       last: p,
       shift: e.shiftKey,
       moved: false,
@@ -581,11 +633,11 @@ export class MarkupController {
 
   private track(g: Gesture, p: Client): void {
     g.last = p;
-    if (!g.moved && Math.hypot(p.x - g.start.x, p.y - g.start.y) >= CLICK_SLOP) g.moved = true;
-    if (g.tool !== 'draw') return;
     const view = this.viewOf(g.pageId);
-    if (!view) return;
-    const q = this.toPdf(view, p);
+    const a = view ? this.anchor(g, view) : g.start;
+    if (!g.moved && Math.hypot(p.x - a.x, p.y - a.y) >= CLICK_SLOP) g.moved = true;
+    if (g.tool !== 'draw' || !view) return;
+    const q = this.toPdfOnPage(view, p);
     const prev = g.ink[g.ink.length - 1];
     if (!prev || Math.hypot(q.x - prev.x, q.y - prev.y) >= INK_MIN_STEP) g.ink.push(q);
   }
@@ -618,12 +670,14 @@ export class MarkupController {
   private dragged(g: Gesture, view: PageView): Annot {
     const a = g.original!;
     if (g.kind === 'move') {
-      const p = this.toPdf(view, g.start);
+      const p = g.startPdf;
       const q = this.toPdf(view, g.last);
-      return translateAnnot({ ...a, modified: now() }, q.x - p.x, q.y - p.y);
+      const d = clampDelta(annotBox(a), { x: q.x - p.x, y: q.y - p.y }, this.pageBox(view));
+      return translateAnnot({ ...a, modified: now() }, d.x, d.y);
     }
     const vp = view.viewport;
-    const pt = this.toViewport(view, g.last);
+    const raw = this.toViewport(view, g.last);
+    const pt = { x: Math.min(Math.max(raw.x, 0), vp.width), y: Math.min(Math.max(raw.y, 0), vp.height) };
     if (a.kind === 'line' || a.kind === 'arrow') {
       let end = pt;
       if (g.shift) {
@@ -633,7 +687,7 @@ export class MarkupController {
         const len = Math.hypot(pt.x - ox, pt.y - oy);
         end = { x: ox + len * Math.cos(angle), y: oy + len * Math.sin(angle) };
       }
-      const [x, y] = vp.convertToPdfPoint(end.x, end.y) as [number, number];
+      const [x, y] = vp.convertToPdfPoint(Math.min(Math.max(end.x, 0), vp.width), Math.min(Math.max(end.y, 0), vp.height)) as [number, number];
       return { ...a, [g.handle === 'from' ? 'from' : 'to']: { x, y }, modified: now() };
     }
     const box = annotBox(a);
@@ -735,38 +789,41 @@ export class MarkupController {
   /** Dragged box (Shift: square on screen), or a default-size box centered on a click. */
   private shapeRect(g: Gesture, view: PageView): PdfRect {
     const k = this.pxPerPt(view);
+    const s = this.anchor(g, view);
+    const at = (p: Client) => this.toPdfOnPage(view, p);
     if (!g.moved) {
       const hw = (CLICK_SHAPE.width / 2) * k;
       const hh = (CLICK_SHAPE.height / 2) * k;
-      const c = g.start;
-      return normRect(this.toPdf(view, { x: c.x - hw, y: c.y - hh }), this.toPdf(view, { x: c.x + hw, y: c.y + hh }));
+      return normRect(at({ x: s.x - hw, y: s.y - hh }), at({ x: s.x + hw, y: s.y + hh }));
     }
     let end = g.last;
     if (g.shift) {
-      const dx = end.x - g.start.x;
-      const dy = end.y - g.start.y;
+      const dx = end.x - s.x;
+      const dy = end.y - s.y;
       const m = Math.max(Math.abs(dx), Math.abs(dy));
-      end = { x: g.start.x + (dx < 0 ? -m : m), y: g.start.y + (dy < 0 ? -m : m) };
+      end = { x: s.x + (dx < 0 ? -m : m), y: s.y + (dy < 0 ? -m : m) };
     }
-    return normRect(this.toPdf(view, g.start), this.toPdf(view, end));
+    return normRect(at(s), at(end));
   }
 
   /** Dragged line (Shift: snapped to 45°), or a default-length horizontal line centered on a click. */
   private lineEnds(g: Gesture, view: PageView): [PdfPoint, PdfPoint] {
+    const s = this.anchor(g, view);
+    const at = (p: Client) => this.toPdfOnPage(view, p);
     if (!g.moved) {
       const half = (CLICK_LINE / 2) * this.pxPerPt(view);
-      return [this.toPdf(view, { x: g.start.x - half, y: g.start.y }), this.toPdf(view, { x: g.start.x + half, y: g.start.y })];
+      return [at({ x: s.x - half, y: s.y }), at({ x: s.x + half, y: s.y })];
     }
     let end = g.last;
     if (g.shift) {
-      const dx = end.x - g.start.x;
-      const dy = end.y - g.start.y;
+      const dx = end.x - s.x;
+      const dy = end.y - s.y;
       const step = Math.PI / 4;
       const angle = Math.round(Math.atan2(dy, dx) / step) * step;
       const len = Math.hypot(dx, dy);
-      end = { x: g.start.x + len * Math.cos(angle), y: g.start.y + len * Math.sin(angle) };
+      end = { x: s.x + len * Math.cos(angle), y: s.y + len * Math.sin(angle) };
     }
-    return [this.toPdf(view, g.start), this.toPdf(view, end)];
+    return [at(s), at(end)];
   }
 
   private newTextBox(g: Gesture, view: PageView): TextBoxAnnot {
@@ -774,11 +831,12 @@ export class MarkupController {
     const k = this.pxPerPt(view);
     const lineBox = s.fontSize * TEXT_LINE_HEIGHT + 2 * TEXT_PADDING;
     const page = view.el.getBoundingClientRect();
-    let a = g.start;
+    const start = this.anchor(g, view);
+    let a = start;
     let b: Client;
     if (g.moved) {
-      a = { x: Math.min(g.start.x, g.last.x), y: Math.min(g.start.y, g.last.y) };
-      b = { x: Math.max(g.start.x, g.last.x), y: Math.max(g.start.y, g.last.y, a.y + lineBox * k) };
+      a = { x: Math.min(start.x, g.last.x), y: Math.min(start.y, g.last.y) };
+      b = { x: Math.max(start.x, g.last.x), y: Math.max(start.y, g.last.y, a.y + lineBox * k) };
       b.x = Math.max(b.x, a.x + 2 * s.fontSize * k);
     } else {
       // A click puts the box's top-left corner there; it is as wide as fits, up to TEXT_BOX_WIDTH.
@@ -792,7 +850,7 @@ export class MarkupController {
       color: s.textColor,
       opacity: 1,
       modified: now(),
-      rect: normRect(this.toPdf(view, a), this.toPdf(view, b)),
+      rect: normRect(this.toPdfOnPage(view, a), this.toPdfOnPage(view, b)),
       text: PLACEHOLDER,
       fontSize: s.fontSize,
       fill: null,
@@ -803,8 +861,10 @@ export class MarkupController {
   }
 
   private newNote(g: Gesture, view: PageView): NoteAnnot {
-    const c = this.toPdf(view, g.start);
     const h = NOTE_SIZE / 2;
+    const pb = this.pageBox(view);
+    const keep = (v: number, lo: number, hi: number) => (hi - lo < NOTE_SIZE ? v : Math.min(Math.max(v, lo + h), hi - h));
+    const c = { x: keep(g.startPdf.x, pb.x0, pb.x1), y: keep(g.startPdf.y, pb.y0, pb.y1) };
     return {
       id: g.id,
       kind: 'note',
@@ -862,11 +922,14 @@ export class MarkupController {
       if (e.key === 'Escape' && !e.isComposing) {
         e.preventDefault();
         e.stopPropagation();
-        this.endEditing('escape');
+        this.endEditing('keep');
       }
     };
+    // A press elsewhere in the document ends editing; one on the toolbars, a menu or a popover
+    // (to restyle the box, say) keeps the box selected.
     const onOutside = (e: PointerEvent) => {
-      if (!el.contains(e.target as Node)) this.endEditing('outside');
+      if (el.contains(e.target as Node)) return;
+      this.endEditing(this.deps.container.contains(e.target as Node) ? 'outside' : 'keep');
     };
     input.addEventListener('keydown', onKey);
     input.addEventListener('input', () => this.grow());
@@ -924,7 +987,7 @@ export class MarkupController {
   }
 
   /** Commits the editor: one undo step, or none when nothing changed; an empty box or note is removed. */
-  private endEditing(how: 'escape' | 'outside'): void {
+  private endEditing(how: 'keep' | 'outside'): void {
     if (this.editing) this.grow();
     const e = this.teardownEditing();
     if (!e) return;
@@ -942,12 +1005,19 @@ export class MarkupController {
           this.updatePage(ref.pageId, (list) => list.map((a) => (a.id === ref.annotId ? next : a)));
         }
       }
-      if (how === 'escape') this.select(ref);
+      if (how === 'keep') this.select(ref);
     }
     if (e.input === document.activeElement || !document.activeElement || document.activeElement === document.body) {
       this.deps.container.focus({ preventScroll: true });
     }
   }
+}
+
+/** `d` reduced so that `box` moved by it stays inside `page` (on an axis where it fits). */
+function clampDelta(box: PdfRect, d: PdfPoint, page: PdfRect): PdfPoint {
+  const axis = (lo: number, hi: number, min: number, max: number, v: number) =>
+    hi - lo > max - min ? v : Math.min(Math.max(v, min - lo), max - hi);
+  return { x: axis(box.x0, box.x1, page.x0, page.x1, d.x), y: axis(box.y0, box.y1, page.y0, page.y1, d.y) };
 }
 
 /** Extends `r` by `d` points on the side that is down for text turned `angle`. */
