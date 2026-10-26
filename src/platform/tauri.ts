@@ -70,7 +70,14 @@ export function tauriPlatform(material: 'mica' | 'none' = 'none'): Platform {
     }
   });
 
+  let annotationFont: Promise<Uint8Array | null> | null = null;
+
   return {
+    loadAnnotationFont() {
+      // Malgun Gothic ships with every Windows 10/11 and allows editable embedding.
+      annotationFont ??= this.readFile('C:\\Windows\\Fonts\\malgun.ttf').catch(() => null);
+      return annotationFont;
+    },
     async readFile(path) {
       const buf = await invoke<ArrayBuffer>('read_file', { path });
       return new Uint8Array(buf);

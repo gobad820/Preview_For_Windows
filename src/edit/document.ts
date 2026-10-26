@@ -1,4 +1,6 @@
 import type { PDFPageProxy, TextContent } from 'pdfjs-dist/types/src/display/api';
+import type { FontLoader } from '../annot/pdfWrite';
+import { readOwnAnnotations } from '../annot/reader';
 import type { Annot } from '../annot/types';
 import { PdfDocument, type OutlineNode, type PageText, type PdfAssets } from '../pdf/document';
 import type { PageSource } from '../pdf/source';
@@ -27,6 +29,21 @@ const NO_ANNOTS: readonly Annot[] = Object.freeze([]);
 export interface OpenOptions {
   password?: string | undefined;
   assets?: PdfAssets | undefined;
+  /** Font for text box appearances when saving (Malgun Gothic). */
+  font?: FontLoader | undefined;
+}
+
+/**
+ * This app's annotations as they are in one source file. 'none': the file has none (no
+ * parsing needed); 'pending': not read yet (pdf.js still draws them); 'ready': read, hidden
+ * from pdf.js and drawn by overlays; 'failed': unreadable, so left to pdf.js and not editable.
+ */
+interface OwnState {
+  status: 'none' | 'pending' | 'ready' | 'failed';
+  pages: ReadonlyArray<readonly Annot[]>;
+  /** Bumped once when the annotations become hidden from pdf.js. */
+  generation: number;
+  reading: Promise<void> | null;
 }
 
 /**
@@ -41,6 +58,7 @@ export class EditableDocument implements PageSource {
   private readonly outlines = new Map<number, Promise<OutlineNode[]>>();
   private readonly listeners = new Set<ChangeListener>();
   private readonly history: History<Composition>;
+  private readonly own = new Map<number, OwnState>();
   private nextSrc = 1;
   private currentSizes: PageSize[] = [];
   private destroyed = false;
@@ -48,15 +66,17 @@ export class EditableDocument implements PageSource {
   private constructor(
     primary: PdfDocument,
     private readonly assets: PdfAssets | undefined,
+    private readonly font: FontLoader | undefined,
   ) {
     this.sources.set(0, primary);
+    this.own.set(0, ownState(primary));
     this.history = new History(fromSource(0, primary.numPages, this.nextId));
     this.refreshSizes();
   }
 
   static async open(data: Uint8Array, opts: OpenOptions = {}): Promise<EditableDocument> {
     const primary = await PdfDocument.load(data, { password: opts.password, assets: opts.assets });
-    return new EditableDocument(primary, opts.assets);
+    return new EditableDocument(primary, opts.assets, opts.font);
   }
 
   // ---- composition and history ------------------------------------------------
@@ -132,17 +152,39 @@ export class EditableDocument implements PageSource {
   /** This app's annotations on the page at `index`; null while the file's own ones are not read yet. */
   annotationsAt(index: number): readonly Annot[] | null {
     const ref = this.pages[index];
-    if (!ref) return null;
-    return ref.annots ?? NO_ANNOTS;
+    return ref ? this.annotationsOf(ref) : null;
   }
 
-  /** Resolves with the page's annotations once they are known. */
+  /** Resolves with the page's annotations once they are known; rejects when the file's cannot be read. */
   async loadAnnotations(index: number): Promise<readonly Annot[]> {
-    return this.annotationsAt(index) ?? NO_ANNOTS;
+    const ref = this.ref(index);
+    if (ref.annots) return ref.annots;
+    await this.readOwn(ref.src);
+    // The page may have moved or been edited meanwhile; answer for the same page.
+    const now = this.pages.find((p) => p.id === ref.id) ?? ref;
+    const list = this.annotationsOf(now);
+    if (!list) throw new Error('The annotations of this page could not be read.');
+    return list;
   }
 
-  /** Replaces the annotations of several pages as one undo step; false when nothing changed. */
+  /** Reads the annotations this app wrote into the open files (call once the first page is on screen). */
+  async readAnnotations(): Promise<void> {
+    await Promise.all([...this.own.keys()].map((src) => this.readOwn(src)));
+  }
+
+  /**
+   * Replaces the annotations of several pages as one undo step; false when nothing changed or
+   * when a page's own annotations are not known yet (`loadAnnotations` first), since a list
+   * written without them would delete them on save.
+   */
   updateAnnotations(changes: ReadonlyMap<number, readonly Annot[]>): boolean {
+    for (const pos of changes.keys()) {
+      const ref = this.pages[pos];
+      if (ref && !ref.annots && this.annotationsOf(ref) === null) {
+        console.warn(`page ${pos + 1}: annotations are not loaded yet; change ignored`);
+        return false;
+      }
+    }
     return this.apply(setPageAnnots(this.pages, changes));
   }
 
@@ -151,8 +193,9 @@ export class EditableDocument implements PageSource {
   }
 
   /** Changes when the page's canvas must be re-rendered to hide annotations now drawn by an overlay. */
-  hideGeneration(_index: number): number {
-    return 0;
+  hideGeneration(index: number): number {
+    const ref = this.pages[index];
+    return ref ? (this.own.get(ref.src)?.generation ?? 0) : 0;
   }
 
   newAnnotId(): string {
@@ -171,6 +214,8 @@ export class EditableDocument implements PageSource {
     await doc.loadSizes();
     const id = this.nextSrc++;
     this.sources.set(id, doc);
+    this.own.set(id, ownState(doc));
+    void this.readOwn(id);
     return id;
   }
 
@@ -235,7 +280,7 @@ export class EditableDocument implements PageSource {
     const pageLabels = [...labels.values()].some((l) => l !== null)
       ? pages.map((p) => labels.get(p.src)?.[p.index] ?? null)
       : undefined;
-    return writePdf(sources, pages, { outline, metaFrom: used.includes(0) ? 0 : pages[0]!.src, pageLabels });
+    return writePdf(sources, pages, { outline, metaFrom: used.includes(0) ? 0 : pages[0]!.src, pageLabels, font: this.font });
   }
 
   /** The given source pages as a standalone PDF (used for copying pages to other windows). */
@@ -247,7 +292,7 @@ export class EditableDocument implements PageSource {
         return { id, bytes: await doc.getData(), password: doc.password };
       }),
     );
-    return writePdf(sources, specs, { outline: [], metaFrom: specs[0]?.src });
+    return writePdf(sources, specs, { outline: [], metaFrom: specs[0]?.src, font: this.font });
   }
 
   async destroy(): Promise<void> {
@@ -257,6 +302,37 @@ export class EditableDocument implements PageSource {
   }
 
   // ---- internals ------------------------------------------------------------
+
+  private annotationsOf(ref: PageRef): readonly Annot[] | null {
+    if (ref.annots) return ref.annots;
+    const st = this.own.get(ref.src);
+    if (!st || st.status === 'none') return NO_ANNOTS;
+    return st.status === 'ready' ? (st.pages[ref.index] ?? NO_ANNOTS) : null;
+  }
+
+  /** Reads source `src`'s own annotations once, hides them from pdf.js and reports the pages. */
+  private readOwn(src: number): Promise<void> {
+    const st = this.own.get(src);
+    if (!st || st.status !== 'pending') return st?.reading ?? Promise.resolve();
+    st.reading ??= (async () => {
+      const doc = this.source(src);
+      try {
+        const pages = await readOwnAnnotations(await doc.getData(), doc.password);
+        if (this.destroyed) return;
+        doc.hideAnnotations(pages.flatMap((list) => list.map((p) => p.ref)));
+        st.pages = pages.map((list) => Object.freeze(list.map((p) => p.annot)));
+        st.generation++;
+        st.status = 'ready';
+      } catch (e) {
+        console.warn(`annotations of source ${src} could not be read`, e);
+        st.status = 'failed';
+        return;
+      }
+      const positions = this.pages.flatMap((p, i) => (p.src === src ? [i] : []));
+      if (positions.length > 0) this.emit('annotations', positions);
+    })();
+    return st.reading;
+  }
 
   private ref(index: number): PageRef {
     const ref = this.pages[index];
@@ -304,4 +380,8 @@ export class EditableDocument implements PageSource {
       else l(kind);
     }
   }
+}
+
+function ownState(doc: PdfDocument): OwnState {
+  return { status: doc.ownMarker ? 'pending' : 'none', pages: [], generation: 0, reading: null };
 }

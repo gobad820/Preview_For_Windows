@@ -45,6 +45,8 @@ export class App {
   /** The close prompt that is showing, so repeated close requests share it. */
   private closing: Promise<boolean> | null = null;
   private readonly overlay: HTMLElement;
+  /** Runs once the first page of the document being opened is on screen. */
+  private afterFirstPaint: (() => void) | null = null;
 
   constructor(
     private readonly platform: Platform,
@@ -56,6 +58,9 @@ export class App {
     this.viewer = new PdfViewer(this.el('viewer'), this.store, {
       onFirstPaint: () => {
         if (!this.metrics.firstPaint) this.metrics.firstPaint = performance.now();
+        const then = this.afterFirstPaint;
+        this.afterFirstPaint = null;
+        then?.();
       },
     });
 
@@ -538,7 +543,7 @@ export class App {
     seq: number,
     password?: string,
   ): Promise<void> {
-    const doc = await EditableDocument.open(data, { password });
+    const doc = await EditableDocument.open(data, { password, font: () => this.platform.loadAnnotationFont() });
     if (seq !== this.openSeq) {
       void doc.destroy();
       return;
@@ -570,6 +575,16 @@ export class App {
     if (old) void old.destroy();
     if (restored && restored.page > 1) this.viewer.goToPage(restored.page - 1);
     void doc.loadSizes();
+    // Annotations this app wrote are read (only files that have them parse at all) after the
+    // first page is on screen, so they never delay it; pdf.js draws them until then.
+    const read = () => {
+      if (this.doc === doc) void doc.readAnnotations();
+    };
+    if (this.metrics.firstPaint) read();
+    else {
+      this.afterFirstPaint = read;
+      window.setTimeout(read, 2000);
+    }
   }
 
   private onDocChange(doc: EditableDocument, kind: ChangeKind): void {

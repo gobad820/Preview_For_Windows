@@ -7,18 +7,7 @@ import { PdfOpenError } from '../pdf/document';
 import { isOwnAnnotation } from './pdfWrite';
 import type { Annot, PdfPoint, PdfRect, Quad, TextAngle } from './types';
 
-const MARKER = new TextEncoder().encode('/PFWAnnot');
-
-/** True when the bytes contain `/PFWAnnot` (stream dictionaries are never compressed). */
-export function hasOwnMarker(bytes: Uint8Array): boolean {
-  const first = MARKER[0]!;
-  for (let i = bytes.indexOf(first); i !== -1; i = bytes.indexOf(first, i + 1)) {
-    let k = 1;
-    while (k < MARKER.length && bytes[i + k] === MARKER[k]) k++;
-    if (k === MARKER.length) return true;
-  }
-  return false;
-}
+export { hasOwnMarker } from './marker';
 
 export interface OwnAnnotation {
   annot: Annot;

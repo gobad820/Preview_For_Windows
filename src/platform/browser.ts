@@ -13,6 +13,8 @@ interface TestHooks {
   __pfwClipboardDelayMs?: number;
   /** Makes the system clipboard write fail, as it can on Windows. */
   __pfwClipboardFail?: boolean;
+  /** Font for text box appearances; tests may provide one (none by default). */
+  __pfwAnnotFont?: Uint8Array | null;
 }
 
 const sleep = (ms: number | undefined) => new Promise((r) => setTimeout(r, ms ?? 0));
@@ -176,5 +178,8 @@ export function browserPlatform(): Platform {
     },
     windowControls: null,
     material: 'none',
+    async loadAnnotationFont() {
+      return hooks.__pfwAnnotFont ?? null;
+    },
   };
 }
