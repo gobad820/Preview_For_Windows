@@ -1,5 +1,6 @@
 import { PdfDocument, PdfOpenError } from './pdf/document';
 import type { Platform } from './platform/types';
+import { FindBar } from './search/findbar';
 import { loadFileState } from './state/fileState';
 import { createStore, initialState, type Store, type ViewerState } from './store';
 import { PdfViewer } from './viewer/viewer';
@@ -12,6 +13,7 @@ export interface AppMetrics {
 export class App {
   readonly store: Store<ViewerState> = createStore(initialState);
   readonly viewer: PdfViewer;
+  readonly findBar: FindBar;
   readonly metrics: AppMetrics = { openStart: 0, firstPaint: 0 };
   private doc: PdfDocument | null = null;
   private openSeq = 0;
@@ -53,6 +55,11 @@ export class App {
       viewer: this.viewer,
       metrics: this.metrics,
     };
+
+    // ---- find bar (Task 12) --------------------------------------------------
+    this.findBar = new FindBar(this.el('findbar'), this.store, { viewer: this.viewer, doc: this.doc });
+    (window as unknown as { __pfw: { findBar?: FindBar } }).__pfw.findBar = this.findBar;
+    // ---- end find bar ----------------------------------------------------------
   }
 
   async start(): Promise<void> {
@@ -112,6 +119,7 @@ export class App {
       currentPage: 1,
     });
     await this.viewer.setDocument(doc);
+    this.findBar.setDocument(doc); // find bar (Task 12)
     if (old) void old.destroy();
     if (restored && restored.page > 1) this.viewer.goToPage(restored.page - 1);
     void doc.loadSizes(() => {
