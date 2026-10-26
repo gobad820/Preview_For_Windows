@@ -1,6 +1,7 @@
 import { PdfDocument, PdfOpenError } from './pdf/document';
 import type { Platform } from './platform/types';
-import { loadFileState } from './state/fileState';
+import { bindShortcuts, type Action } from './shortcuts';
+import { loadFileState, saveFileState } from './state/fileState';
 import { createStore, initialState, type Store, type ViewerState } from './store';
 import { Toolbar } from './toolbar/toolbar';
 import type { Rotation } from './types';
@@ -19,6 +20,7 @@ export class App {
   readonly metrics: AppMetrics = { openStart: 0, firstPaint: 0 };
   private doc: PdfDocument | null = null;
   private openSeq = 0;
+  private saveTimer = 0;
 
   constructor(
     private readonly platform: Platform,
@@ -64,12 +66,97 @@ export class App {
       open: () => void this.open(),
     });
 
+    // ---- shortcuts + per-file state ----
+    bindShortcuts(window, (action) => this.dispatch(action));
+    this.store.subscribe((s, prev) => {
+      if (
+        s.status === 'ready' &&
+        s.filePath &&
+        (s.currentPage !== prev.currentPage ||
+          s.scale !== prev.scale ||
+          s.zoomMode !== prev.zoomMode ||
+          s.rotation !== prev.rotation)
+      ) {
+        this.scheduleSave();
+      }
+    });
+    window.addEventListener('pagehide', () => this.flushSave());
+    window.addEventListener('beforeunload', () => this.flushSave());
+
     (window as unknown as { __pfw: unknown }).__pfw = {
       store: this.store,
       viewer: this.viewer,
       toolbar: this.toolbar,
       metrics: this.metrics,
     };
+  }
+
+  /** Routes a resolved keyboard shortcut to the matching behaviour. */
+  dispatch(action: Action): void {
+    const s = this.store.get();
+    const hasDoc = s.status === 'ready' && s.numPages > 0;
+    switch (action) {
+      case 'open':
+        void this.open();
+        return;
+      case 'find':
+        if (hasDoc) this.store.set({ findOpen: true });
+        return;
+      case 'close-find':
+        if (s.findOpen) this.store.set({ findOpen: false });
+        return;
+      case 'find-next':
+      case 'find-prev':
+        return; // handled by the find bar's own input listener
+      case 'toggle-sidebar':
+        this.store.set({ sidebarOpen: !s.sidebarOpen });
+        return;
+      default:
+        break;
+    }
+    if (!hasDoc) return;
+    switch (action) {
+      case 'zoom-in':
+        this.viewer.setZoom('custom', zoomIn(s.scale));
+        break;
+      case 'zoom-out':
+        this.viewer.setZoom('custom', zoomOut(s.scale));
+        break;
+      case 'zoom-100':
+        this.viewer.setZoom('custom', 1);
+        break;
+      case 'fit-width':
+      case 'fit-page':
+        this.viewer.setZoom(action);
+        break;
+      case 'rotate-cw':
+        this.rotate(90);
+        break;
+      case 'rotate-ccw':
+        this.rotate(-90);
+        break;
+      case 'goto-page':
+        this.toolbar.focusPageInput();
+        break;
+      case 'next-page':
+        this.viewer.goToPage(s.currentPage);
+        break;
+      case 'prev-page':
+        this.viewer.goToPage(s.currentPage - 2);
+        break;
+      case 'first-page':
+        this.viewer.goToPage(0);
+        break;
+      case 'last-page':
+        this.viewer.goToPage(s.numPages - 1);
+        break;
+      case 'scroll-down':
+        this.viewer.scrollByViewport(1);
+        break;
+      case 'scroll-up':
+        this.viewer.scrollByViewport(-1);
+        break;
+    }
   }
 
   async start(): Promise<void> {
@@ -121,23 +208,43 @@ export class App {
     const old = this.doc;
     this.doc = doc;
     const restored = path ? loadFileState(path) : null;
-    const s = this.store.get();
+    this.flushSave();
     this.store.set({
       filePath: path,
       fileName: name,
       numPages: doc.numPages,
       status: 'ready',
       error: null,
-      zoomMode: restored?.zoomMode ?? s.zoomMode,
-      scale: restored?.scale ?? s.scale,
-      rotation: restored?.rotation ?? s.rotation,
+      // A file without saved state starts from the defaults, not the previous document's view.
+      zoomMode: restored?.zoomMode ?? initialState.zoomMode,
+      scale: restored?.scale ?? initialState.scale,
+      rotation: restored?.rotation ?? initialState.rotation,
       currentPage: 1,
+      findOpen: false,
     });
     await this.viewer.setDocument(doc);
     if (old) void old.destroy();
     if (restored && restored.page > 1) this.viewer.goToPage(restored.page - 1);
     void doc.loadSizes(() => {
       if (this.doc === doc) this.viewer.sizesChanged();
+    });
+  }
+
+  private scheduleSave(): void {
+    clearTimeout(this.saveTimer);
+    this.saveTimer = window.setTimeout(() => this.flushSave(), 300);
+  }
+
+  private flushSave(): void {
+    clearTimeout(this.saveTimer);
+    this.saveTimer = 0;
+    const s = this.store.get();
+    if (s.status !== 'ready' || !s.filePath || s.currentPage < 1) return;
+    saveFileState(s.filePath, {
+      page: s.currentPage,
+      zoomMode: s.zoomMode,
+      scale: s.scale,
+      rotation: s.rotation,
     });
   }
 
