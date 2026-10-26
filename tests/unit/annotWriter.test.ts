@@ -9,6 +9,7 @@ import * as pdfjs from 'pdfjs-dist';
 import { describe, expect, test } from 'vitest';
 import { annotBounds } from '../../src/annot/geometry';
 import type { Annot } from '../../src/annot/types';
+import { readOwnAnnotations } from '../../src/annot/reader';
 import { writePdf, type WriterSource } from '../../src/edit/writer';
 import { base, sample } from './annotSamples';
 
@@ -156,13 +157,18 @@ describe('writing annotations', () => {
     expect(out.length).toBe(1);
   });
 
-  test('text boxes without a usable font fall back to Helvetica or omit the appearance', async () => {
+  test('text boxes without a usable font fall back to Helvetica, or to a box without text that stays ours', async () => {
     const box = sample()[8]! as Extract<Annot, { kind: 'text' }>;
     const latin = await annotsOf(await write(await fx('simple.pdf'), [{ src: 0, index: 0, annots: [box] }]));
-    expect(latin[0]!.lookup(PDFName.of('AP'))).toBeInstanceOf(PDFDict);
-    const korean = await annotsOf(await write(await fx('simple.pdf'), [{ src: 0, index: 0, annots: [{ ...box, text: '안녕' }] }]));
-    expect(korean[0]!.has(PDFName.of('AP'))).toBe(false);
+    const latinAp = (latin[0]!.lookup(PDFName.of('AP'), PDFDict) as PDFDict).lookup(PDFName.of('N')) as PDFStream;
+    expect((latinAp.dict.lookup(PDFName.of('Resources'), PDFDict) as PDFDict).has(PDFName.of('Font'))).toBe(true);
+    const out = await write(await fx('simple.pdf'), [{ src: 0, index: 0, annots: [{ ...box, text: '안녕' }] }]);
+    const korean = await annotsOf(out);
+    const ap = (korean[0]!.lookup(PDFName.of('AP'), PDFDict) as PDFDict).lookup(PDFName.of('N')) as PDFStream;
+    expect(ap.dict.get(PDFName.of('PFWAnnot'))?.toString()).toBe('true');
+    expect((ap.dict.lookup(PDFName.of('Resources'), PDFDict) as PDFDict).has(PDFName.of('Font'))).toBe(false);
     expect(text(korean[0]!, 'Contents')).toBe('안녕');
+    expect((await readOwnAnnotations(out))[0]!.map((o) => o.annot.id)).toEqual(['tx']);
   });
 
   test.skipIf(!existsSync(MALGUN))('Hangul text embeds a small subset of Malgun Gothic', async () => {

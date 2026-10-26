@@ -163,7 +163,7 @@ async function annotDict(out: PDFDocument, page: PDFPage, a: Annot, fonts: Annot
   const ctx = out.context;
   const font = a.kind === 'text' ? await fonts.forText(a.text) : null;
   const ap = buildAppearance(a, font?.font ?? null);
-  const rect = ap?.rect ?? (a.kind === 'text' || a.kind === 'note' ? a.rect : undefined);
+  const rect = ap.rect;
   const color = (c: string) => hexToRgb(c);
   const d: Record<string, PDFObject> = {
     Type: PDFName.of('Annot'),
@@ -176,7 +176,7 @@ async function annotDict(out: PDFDocument, page: PDFPage, a: Annot, fonts: Annot
     P: page.ref,
     PFW: text(JSON.stringify(a)),
   };
-  if (rect) d['Rect'] = ctx.obj([rect.x0, rect.y0, rect.x1, rect.y1]);
+  d['Rect'] = ctx.obj([rect.x0, rect.y0, rect.x1, rect.y1]);
   switch (a.kind) {
     case 'highlight':
     case 'underline':
@@ -216,7 +216,7 @@ async function annotDict(out: PDFDocument, page: PDFPage, a: Annot, fonts: Annot
       d['Open'] = PDFBool.False;
       break;
   }
-  if (ap) d['AP'] = ctx.obj({ N: appearanceStream(out, ap, font) });
+  d['AP'] = ctx.obj({ N: appearanceStream(out, ap, font) });
   return ctx.obj(d);
 }
 

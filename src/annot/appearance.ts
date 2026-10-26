@@ -257,13 +257,19 @@ export function wrapText(text: string, width: number, size: number, font: Pick<A
   return out;
 }
 
-function textBox(a: TextBoxAnnot, font: AppearanceFont | null): { content: string; usesFont: boolean } | null {
-  if (!font) return null;
+/**
+ * A text box: fill, border and the wrapped text. Without a font that can show the text only the
+ * box is drawn (the text stays in /Contents), so the annotation keeps its marker and stays editable.
+ */
+function textBox(a: TextBoxAnnot, font: AppearanceFont | null): { content: string; usesFont: boolean } {
   const r = a.rect;
   const size = a.fontSize;
-  const lines = a.text.trim() === '' ? [] : wrapText(a.text, textFrameWidth(r, a.angle) - 2 * TEXT_PADDING, size, font);
-  const encoded = lines.map((l) => font.encode(l));
-  if (encoded.some((e) => e === null)) return null;
+  let lines = font && a.text.trim() !== '' ? wrapText(a.text, textFrameWidth(r, a.angle) - 2 * TEXT_PADDING, size, font) : [];
+  let encoded = lines.map((l) => font?.encode(l) ?? null);
+  if (encoded.some((e) => e === null)) {
+    lines = [];
+    encoded = [];
+  }
   const ops = ['q'];
   const box = `${n(r.x0)} ${n(r.y0)} ${n(r.x1 - r.x0)} ${n(r.y1 - r.y0)} re`;
   if (a.fill !== null) ops.push(`${rgb(a.fill)} rg ${box} f`);
@@ -273,7 +279,7 @@ function textBox(a: TextBoxAnnot, font: AppearanceFont | null): { content: strin
       `${n(a.borderWidth)} w ${rgb(a.border)} RG ${n(r.x0 + h)} ${n(r.y0 + h)} ${n(r.x1 - r.x0 - a.borderWidth)} ${n(r.y1 - r.y0 - a.borderWidth)} re S`,
     );
   }
-  if (lines.length > 0) {
+  if (font && lines.length > 0) {
     ops.push(`${box} W n`);
     const { b, u } = frame(a.angle);
     const o = frameOrigin(r, a.angle);
@@ -317,11 +323,8 @@ function note(a: NoteAnnot): string {
   ].join('\n');
 }
 
-/**
- * The appearance of `a`. Null only for a text box whose text `font` cannot show (or when
- * there is no font): the writer then omits the stream and viewers regenerate it from /DA.
- */
-export function buildAppearance(a: Annot, font: AppearanceFont | null): Appearance | null {
+/** The appearance of `a`; `font` is only used by text boxes. */
+export function buildAppearance(a: Annot, font: AppearanceFont | null): Appearance {
   let content: string;
   let usesFont = false;
   switch (a.kind) {
@@ -343,7 +346,6 @@ export function buildAppearance(a: Annot, font: AppearanceFont | null): Appearan
       break;
     case 'text': {
       const t = textBox(a, font);
-      if (!t) return null;
       content = t.content;
       usesFont = t.usesFont;
       break;

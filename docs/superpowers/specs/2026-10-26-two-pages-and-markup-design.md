@@ -163,9 +163,12 @@ saved. Types:
   license flags allow editable embedding (OS/2 `fsType` = 8, checked on this
   machine). At save time the app reads `C:\Windows\Fonts\malgun.ttf` and embeds a
   subset with only the glyphs used. Without that font (browser tests, other
-  OS), text that WinAnsi can encode falls back to Helvetica, and other text is
-  written without an appearance stream, relying on the viewer to regenerate it
-  from `/DA` (documented limitation).
+  OS), text that WinAnsi can encode falls back to Helvetica; for other text the
+  appearance draws only the box (fill and border) and the text stays in
+  `/Contents`, so the annotation keeps its marker and stays editable here
+  (documented limitation: other viewers then show an empty box). *Changed during
+  the build:* the first version omitted the appearance, which made such a box
+  foreign, and so no longer editable, after reopening.
 
 ## How it gets made (decided)
 

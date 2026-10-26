@@ -169,9 +169,14 @@ describe('text boxes', () => {
     expect(ap.content).toContain('0 1 -1 0 100 100 cm');
   });
 
-  it('has no appearance without a font that can encode the text', () => {
-    expect(buildAppearance(textBox(), null)).toBeNull();
-    expect(buildAppearance(textBox(), { ...font, encode: () => null })).toBeNull();
+  it('draws only the box, without text, when no font can show the text', () => {
+    for (const f of [null, { ...font, encode: () => null }]) {
+      const ap = buildAppearance(textBox({ fill: '#ffff00' }), f);
+      expect(ap.usesFont).toBe(false);
+      expect(ap.content).not.toContain('Tj');
+      expect(ap.content).toContain('1 1 0 rg');
+      expect(ap.rect).toEqual({ x0: 100, y0: 100, x1: 160, y1: 140 });
+    }
   });
 });
 
