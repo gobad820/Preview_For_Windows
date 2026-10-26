@@ -375,3 +375,73 @@ test.describe('sidebar look', () => {
     await expect(row.locator('.outline-toggle')).toBeVisible();
   });
 });
+
+test.describe('window states', () => {
+  test('empty window: app icon tile, title, blue Open… button and a hint', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'light' });
+    await boot(page);
+    const glyph = page.locator('.empty-state .empty-glyph');
+    await expect(glyph).toBeVisible();
+    expect(await style(page, '.empty-state .empty-glyph', 'background-image')).toMatch(/^url\(/);
+    const g = (await glyph.boundingBox())!;
+    expect(g.width).toBe(96);
+    expect(g.height).toBe(96);
+    await expect(page.getByRole('heading', { name: 'Open a PDF' })).toBeVisible();
+    const button = page.locator('.empty-state [data-action="open"]');
+    await expect(button).toHaveText('Open…');
+    expect(await style(page, '.empty-state [data-action="open"]', 'background-color')).toBe('rgb(0, 122, 255)');
+    expect(await style(page, '.empty-state [data-action="open"]', 'color')).toBe('rgb(255, 255, 255)');
+    await expect(page.locator('.empty-state .hint')).toBeVisible();
+  });
+
+  test('errors appear as a translucent toast at the top center with an icon', async ({ page }) => {
+    await open(page, 'simple.pdf');
+    await page.evaluate(() => (window as any).__pfw.app.openPath('fixtures/broken.pdf'));
+    const toast = page.locator('.error-banner');
+    await expect(toast).toBeVisible();
+    await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished)));
+    const box = (await toast.boundingBox())!;
+    expect(Math.abs(box.x + box.width / 2 - 600)).toBeLessThanOrEqual(1);
+    expect(box.y).toBeGreaterThanOrEqual(52);
+    expect(box.y).toBeLessThanOrEqual(76);
+    expect(await style(page, '.error-banner', 'border-top-left-radius')).toBe('10px');
+    expect(await style(page, '.error-banner', 'backdrop-filter')).not.toBe('none');
+    const bg = await style(page, '.error-banner', 'background-color');
+    expect(bg).toMatch(/^rgba\(.*, 0\.\d+\)$/);
+    const icon = await toast.evaluate((el) => {
+      const s = getComputedStyle(el, '::before');
+      return { content: s.content, width: s.width, mask: s.maskImage || s.webkitMaskImage };
+    });
+    expect(icon.content).not.toBe('none');
+    expect(icon.width).toBe('16px');
+    expect(icon.mask).toMatch(/^url\(/);
+  });
+
+  test('loading shows a Mac activity indicator', async ({ page }) => {
+    await boot(page);
+    await page.evaluate(() => (window as any).__pfw.store.set({ status: 'loading' }));
+    await expect(page.locator('.loading-state')).toBeVisible();
+    await expect(page.locator('.loading-state .spinner svg')).toBeVisible();
+    expect(await style(page, '.loading-state .spinner', 'animation-name')).not.toBe('none');
+  });
+
+  test('the password prompt looks like a Mac alert', async ({ page }) => {
+    await page.goto('/?file=fixtures/encrypted.pdf');
+    const panel = page.locator('.password-panel');
+    await expect(panel).toBeVisible();
+    await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished)));
+    const p = (await panel.boundingBox())!;
+    expect(p.width).toBe(260);
+    expect(Math.abs(p.x + p.width / 2 - 600)).toBeLessThanOrEqual(1);
+    expect(await style(page, '.password-panel', 'border-top-left-radius')).toBe('12px');
+    expect(await panel.evaluate((el) => getComputedStyle(el, '::before').backgroundImage)).toMatch(/^url\(/);
+    const input = (await page.locator('[data-password-input]').boundingBox())!;
+    const open = (await page.locator('.password-panel button[type="submit"]').boundingBox())!;
+    const cancel = (await page.locator('[data-password-cancel]').boundingBox())!;
+    expect(input.y + input.height).toBeLessThan(open.y);
+    expect(Math.round(open.y)).toBe(Math.round(cancel.y));
+    expect(open.x).toBeGreaterThan(cancel.x);
+    expect(Math.round(open.width)).toBe(Math.round(cancel.width));
+    expect(Math.round(input.width)).toBe(Math.round(open.x + open.width - cancel.x));
+  });
+});

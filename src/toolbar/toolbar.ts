@@ -100,6 +100,7 @@ export class Toolbar {
     this.zoomButton.addEventListener('click', () => this.openZoomMenu());
 
     this.pageInput.addEventListener('focus', () => this.pageInput.select());
+    this.pageInput.addEventListener('input', () => this.fitPageInput());
     this.pageInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
@@ -116,7 +117,6 @@ export class Toolbar {
     this.unsubscribe.push(
       store.select('numPages', (n) => {
         this.pageTotal.textContent = n > 0 ? String(n) : '–';
-        this.pageInput.style.width = `calc(${String(Math.max(n, 1)).length}ch + 6px)`;
         const disabled = n === 0;
         this.pageInput.disabled = disabled;
         this.zoomButton.disabled = disabled;
@@ -148,6 +148,7 @@ export class Toolbar {
   destroy(): void {
     for (const u of this.unsubscribe) u();
     if (this.zoomMenuOpen) closeMenus();
+    this.host.classList.remove('has-caption', 'find-open');
     this.host.innerHTML = '';
   }
 
@@ -180,6 +181,12 @@ export class Toolbar {
 
   private syncPage(page: number): void {
     this.pageInput.value = page > 0 ? String(page) : '';
+    this.fitPageInput();
+  }
+
+  /** Sizes the page field to its digits so "Page 3 of 12" reads as one line of text. */
+  private fitPageInput(): void {
+    this.pageInput.style.width = `calc(${Math.max(1, this.pageInput.value.length)}ch + 6px)`;
   }
 
   private commitPage(): void {
