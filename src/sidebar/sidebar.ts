@@ -16,7 +16,7 @@ export interface SidebarDeps {
 
 const TABS: { id: SidebarTab; label: string }[] = [
   { id: 'thumbnails', label: 'Thumbnails' },
-  { id: 'outline', label: 'Outline' },
+  { id: 'outline', label: 'Contents' },
 ];
 
 /**

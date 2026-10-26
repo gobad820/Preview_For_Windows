@@ -1,5 +1,6 @@
 import type { PageSource } from '../pdf/source';
 import type { Store, ViewerState } from '../store';
+import { icons } from '../ui/icons';
 import type { PdfViewer } from '../viewer/viewer';
 import {
   buildPageIndex,
@@ -81,23 +82,19 @@ function textIndex(doc: PageSource): Promise<PageTextIndex[]> {
 
 // ---- DOM helpers --------------------------------------------------------------
 
-const svg = (path: string): string =>
-  `<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" ` +
-  `stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
-const ICON_SEARCH = svg('<circle cx="7" cy="7" r="4.25"/><path d="m10.25 10.25 3.25 3.25"/>');
-const ICON_UP = svg('<path d="m3.5 10 4.5-4.5 4.5 4.5"/>');
-const ICON_DOWN = svg('<path d="m3.5 6 4.5 4.5L12.5 6"/>');
-const ICON_CLOSE = svg('<path d="m4 4 8 8M12 4l-8 8"/>');
-
+/** Rounded search field (glyph, input, count, end-search button) followed by previous / next. */
 const TEMPLATE = `
-  <span class="find-glyph" aria-hidden="true">${ICON_SEARCH}</span>
-  <input type="text" data-find-input placeholder="Find" aria-label="Find in document"
-         autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
-  <span class="find-count" data-find-count aria-live="polite"></span>
-  <span class="find-sep" aria-hidden="true"></span>
-  <button type="button" class="find-btn" data-action="find-prev" title="Previous match (Shift+Enter)" aria-label="Previous match">${ICON_UP}</button>
-  <button type="button" class="find-btn" data-action="find-next" title="Next match (Enter)" aria-label="Next match">${ICON_DOWN}</button>
-  <button type="button" class="find-btn" data-action="find-close" title="Close (Esc)" aria-label="Close find bar">${ICON_CLOSE}</button>
+  <div class="find-field">
+    <span class="find-glyph" aria-hidden="true">${icons.search}</span>
+    <input type="text" data-find-input placeholder="Search" aria-label="Find in document"
+           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+    <span class="find-count" data-find-count aria-live="polite"></span>
+    <button type="button" class="find-clear" data-action="find-close" title="Done (Esc)" aria-label="Close find bar">${icons.xmarkCircleFill}</button>
+  </div>
+  <div class="find-nav">
+    <button type="button" class="find-btn" data-action="find-prev" title="Previous match (Shift+Enter)" aria-label="Previous match">${icons.chevronUp}</button>
+    <button type="button" class="find-btn" data-action="find-next" title="Next match (Enter)" aria-label="Next match">${icons.chevronDown}</button>
+  </div>
 `;
 
 function must<T extends Element>(root: ParentNode, selector: string): T {

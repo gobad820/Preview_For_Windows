@@ -90,7 +90,7 @@ const scenes = {
       ghost.style.left = '120px';
       ghost.style.top = '240px';
       document.body.append(ghost);
-      list.focus();
+      thumb(2).focus();
     });
   },
 
