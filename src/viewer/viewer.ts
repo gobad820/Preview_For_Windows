@@ -1,5 +1,5 @@
 import type { PDFPageProxy } from 'pdfjs-dist/types/src/display/api';
-import type { PdfDocument } from '../pdf/document';
+import type { PageSource } from '../pdf/source';
 import { CSS_UNITS, PageRenderer, type RenderHandle } from '../pdf/renderer';
 import { mountTextLayer, type TextLayerHandle } from '../pdf/textlayer';
 import type { Store, ViewerState } from '../store';
@@ -13,6 +13,7 @@ import {
   fitWidthScale,
   scrollTopForPage,
   visibleRange,
+  yForDocPoint,
   type DocPoint,
   type Layout,
 } from './layout';
@@ -31,6 +32,10 @@ export interface ViewerHooks {
 }
 
 interface MountedPage {
+  /** Current position; changes when the document's structure changes. */
+  index: number;
+  /** `PageSource.pageKey` of the page this element shows. */
+  key: string;
   el: HTMLElement;
   canvas: HTMLCanvasElement;
   textHost: HTMLElement;
@@ -45,11 +50,11 @@ const EMPTY_LAYOUT: Layout = { pages: [], totalHeight: 0, contentWidth: 0, paddi
 
 /** Continuous, virtualised page view inside a scroll container. */
 export class PdfViewer {
-  private doc: PdfDocument | null = null;
+  private doc: PageSource | null = null;
   private renderer: PageRenderer | null = null;
   private layout: Layout = EMPTY_LAYOUT;
   private readonly layer: HTMLElement;
-  private readonly mounted = new Map<number, MountedPage>();
+  private mounted = new Map<number, MountedPage>();
   private readonly textListeners = new Set<TextLayerListener>();
   private scale = 1;
   private zoomMode: ZoomMode = 'fit-width';
@@ -77,7 +82,7 @@ export class PdfViewer {
 
   // ---- document lifecycle -------------------------------------------------
 
-  async setDocument(doc: PdfDocument | null): Promise<void> {
+  async setDocument(doc: PageSource | null): Promise<void> {
     this.unmountAll();
     this.renderer?.cancelAll();
     this.doc = doc;
@@ -100,7 +105,64 @@ export class PdfViewer {
     this.syncCurrentPage();
   }
 
-  /** Call after `PdfDocument.loadSizes` updates a batch so placeholders take their real size. */
+  /**
+   * Call after pages were moved, inserted or deleted. Elements of pages that are still near
+   * the viewport are reused (no re-render); `anchor` is the document point to keep at the
+   * top of the viewport, in new positions.
+   */
+  structureChanged(anchor?: DocPoint): void {
+    const doc = this.doc;
+    if (!doc) return;
+    const old = [...this.mounted.values()];
+    for (const mp of old) {
+      if (mp.render) {
+        mp.render.cancel();
+        mp.render = null;
+        mp.renderingKey = null;
+      }
+    }
+    this.mounted = new Map();
+    if (this.zoomMode !== 'custom') this.scale = this.computeScale(this.zoomMode, this.scale);
+    this.relayout(null);
+    if (anchor && this.layout.pages.length > 0) {
+      this.container.scrollTop = Math.max(0, yForDocPoint(this.layout, anchor));
+    }
+    const spare = new Map<string, MountedPage[]>();
+    for (const mp of old) {
+      const list = spare.get(mp.key) ?? [];
+      list.push(mp);
+      spare.set(mp.key, list);
+    }
+    const { scrollTop, clientHeight } = this.container;
+    const range = visibleRange(this.layout, scrollTop, clientHeight, clientHeight * OVERSCAN_VIEWPORTS);
+    if (range) {
+      for (let i = range.first; i <= range.last; i++) {
+        const mp = spare.get(doc.pageKey(i))?.pop();
+        if (!mp) continue;
+        mp.index = i;
+        mp.el.dataset['page'] = String(i + 1);
+        this.position(mp, i);
+        this.mounted.set(i, mp);
+        if (mp.textDivs.length > 0) for (const l of this.textListeners) l(i, mp.el, mp.textDivs);
+      }
+    }
+    for (const list of spare.values()) {
+      for (const mp of list) {
+        mp.text?.cancel();
+        mp.el.remove();
+      }
+    }
+    if (this.store.get().scale !== this.scale) this.store.set({ scale: this.scale });
+    this.updateMounted();
+    this.syncCurrentPage();
+  }
+
+  /** The document point at the top edge of the viewport. */
+  topAnchor(): DocPoint {
+    return docPointAt(this.layout, this.container.scrollTop);
+  }
+
+  /** Call after `loadSizes` updates a batch so placeholders take their real size. */
   sizesChanged(): void {
     if (!this.doc) return;
     if (this.zoomMode !== 'custom') this.scale = this.computeScale(this.zoomMode, this.scale);
@@ -334,6 +396,8 @@ export class PdfViewer {
     textHost.className = 'textLayer';
     el.append(canvas, textHost);
     const mp: MountedPage = {
+      index,
+      key: this.doc!.pageKey(index),
       el,
       canvas,
       textHost,
@@ -354,17 +418,18 @@ export class PdfViewer {
     mp.text?.cancel();
     mp.el.remove();
     this.mounted.delete(index);
-    this.releasePage(index);
+    this.releasePage(index, mp.key);
   }
 
   /** Frees the page's operator list and decoded images once nothing on screen uses it. */
-  private releasePage(index: number): void {
+  private releasePage(index: number, key: string): void {
     const doc = this.doc;
-    if (!doc) return;
+    if (!doc || index >= doc.numPages) return;
     void doc
       .getPage(index)
       .then((page) => {
-        if (this.doc !== doc || this.mounted.has(index)) return;
+        if (this.doc !== doc) return;
+        for (const mp of this.mounted.values()) if (mp.key === key) return;
         page.cleanup(); // returns false (no-op) while another render, e.g. a thumbnail, is pending
       })
       .catch(() => {});
@@ -389,6 +454,7 @@ export class PdfViewer {
     const canvas = document.createElement('canvas');
     const handle = this.renderer.render({
       index,
+      slot: mp,
       scale: this.scale,
       rotation: this.rotation,
       canvas,
@@ -397,7 +463,7 @@ export class PdfViewer {
     mp.render = handle;
     handle.done
       .then(() => {
-        if (mp.render !== handle || this.mounted.get(index) !== mp) return;
+        if (mp.render !== handle || this.mounted.get(mp.index) !== mp) return;
         if (this.renderKey() !== key) return; // stale: a newer render is on its way
         mp.canvas.replaceWith(canvas);
         mp.canvas = canvas;
@@ -407,7 +473,7 @@ export class PdfViewer {
         mp.renderingKey = null;
         mp.render = null;
         this.firstPaint();
-        void this.mountText(mp, index, key);
+        void this.mountText(mp, key);
       })
       .catch((err: unknown) => {
         mp.renderingKey = null;
@@ -421,14 +487,15 @@ export class PdfViewer {
     this.hooks.onFirstPaint?.();
   }
 
-  private async mountText(mp: MountedPage, index: number, key: string): Promise<void> {
+  private async mountText(mp: MountedPage, key: string): Promise<void> {
     const doc = this.doc;
     if (!doc) return;
+    const index = mp.index;
     let page: PDFPageProxy;
     try {
       page = await doc.getPage(index);
       const content = await doc.getTextContent(index);
-      if (this.mounted.get(index) !== mp || mp.renderedKey !== key) return;
+      if (this.mounted.get(mp.index) !== mp || mp.renderedKey !== key || mp.index !== index) return;
       const viewport = page.getViewport({
         scale: this.scale * CSS_UNITS,
         rotation: (page.rotate + this.rotation) % 360,
@@ -436,9 +503,9 @@ export class PdfViewer {
       const handle = mountTextLayer(page, content, viewport, mp.textHost);
       mp.text = handle;
       const divs = await handle.done;
-      if (mp.text !== handle || this.mounted.get(index) !== mp) return;
+      if (mp.text !== handle || this.mounted.get(mp.index) !== mp) return;
       mp.textDivs = divs;
-      for (const l of this.textListeners) l(index, mp.el, divs);
+      for (const l of this.textListeners) l(mp.index, mp.el, divs);
     } catch (err) {
       console.error(`text layer failed for page ${index + 1}`, err);
     }

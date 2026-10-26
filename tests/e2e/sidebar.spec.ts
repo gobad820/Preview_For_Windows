@@ -69,7 +69,7 @@ test.describe('sidebar', () => {
     expect(box!.height).toBeGreaterThan(box!.width);
   });
 
-  test('clicking a thumbnail navigates without stealing focus', async ({ page }) => {
+  test('clicking a thumbnail navigates and focuses the page list, like Preview', async ({ page }) => {
     await open(page, 'long300.pdf');
     await openSidebar(page);
     await page.locator('#viewer').focus();
@@ -77,7 +77,9 @@ test.describe('sidebar', () => {
     await page.locator('#sidebar .thumb[data-page="42"]').click();
     await expect.poll(async () => (await state(page)).currentPage).toBe(42);
     await expect(page.locator('#sidebar .thumb.current')).toHaveAttribute('data-page', '42');
-    expect(await activeId(page)).toBe('viewer');
+    await expect(page.locator('#sidebar .thumb.selected')).toHaveAttribute('data-page', '42');
+    // Focus sits on the list (so Delete and Ctrl+C act on pages), never on a single thumbnail.
+    expect(await page.evaluate(() => document.activeElement?.getAttribute('role'))).toBe('listbox');
     expect(await page.evaluate(() => document.querySelector('#sidebar .thumb')?.getAttribute('tabindex'))).toBe('-1');
   });
 

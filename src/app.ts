@@ -1,6 +1,8 @@
-import { PdfDocument, PdfOpenError } from './pdf/document';
+import { EditableDocument } from './edit/document';
+import { Editor } from './edit/editor';
+import { PdfOpenError } from './pdf/document';
 import { PageRenderer } from './pdf/renderer';
-import type { Platform } from './platform/types';
+import type { Platform, Point } from './platform/types';
 import { FindBar } from './search/findbar';
 import { Sidebar } from './sidebar/sidebar';
 import { bindShortcuts, type Action } from './shortcuts';
@@ -8,8 +10,10 @@ import { loadFileState, saveFileState } from './state/fileState';
 import { createStore, initialState, type Store, type ViewerState } from './store';
 import { Toolbar } from './toolbar/toolbar';
 import type { Rotation } from './types';
+import type { DocPoint } from './viewer/layout';
 import { PdfViewer } from './viewer/viewer';
 import { zoomIn, zoomOut } from './viewer/zoom';
+import type { Composition } from './edit/composition';
 
 /** Horizontal pan per arrow-key press when the page is wider than the viewport (CSS px). */
 const PAN_STEP = 80;
@@ -25,15 +29,21 @@ export class App {
   readonly toolbar: Toolbar;
   readonly sidebar: Sidebar;
   readonly findBar: FindBar;
+  readonly editor: Editor;
   readonly metrics: AppMetrics = { openStart: 0, firstPaint: 0 };
-  private doc: PdfDocument | null = null;
+  private doc: EditableDocument | null = null;
+  /** Composition before the latest change, to keep the viewer on the same page across edits. */
+  private lastPages: Composition = [];
   private openSeq = 0;
   private saveTimer = 0;
-  /** File waiting for a password after a PasswordException. */
-  private pendingPassword: { path: string; name: string } | null = null;
+  private saving = false;
+  /** Resolves the password prompt that is currently shown. */
+  private passwordReply: ((password: string | null) => void) | null = null;
   private readonly passwordForm: HTMLFormElement;
   private readonly passwordInput: HTMLInputElement;
+  private readonly passwordTitle: HTMLElement | null;
   private readonly passwordMessage: HTMLElement;
+  private readonly overlay: HTMLElement;
 
   constructor(
     private readonly platform: Platform,
@@ -41,19 +51,21 @@ export class App {
   ) {
     const appEl = this.el('app');
     const banner = this.el('.error-banner');
-    const overlay = this.el('.drop-overlay');
+    this.overlay = this.el('.drop-overlay');
     this.passwordForm = this.el<HTMLFormElement>('.password-panel');
     this.passwordInput = this.el<HTMLInputElement>('[data-password-input]');
+    this.passwordTitle = this.root.querySelector<HTMLElement>('.password-title');
     this.passwordMessage = this.el('[data-password-message]');
     this.passwordForm.addEventListener('submit', (e) => {
       e.preventDefault();
-      this.submitPassword();
+      if (this.passwordInput.value) this.answerPassword(this.passwordInput.value);
     });
-    this.el('[data-password-cancel]').addEventListener('click', () => this.cancelPassword());
+    this.el('[data-password-cancel]').addEventListener('click', () => this.answerPassword(null));
     this.passwordInput.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        this.cancelPassword();
+        e.stopPropagation();
+        this.answerPassword(null);
       }
     });
     this.viewer = new PdfViewer(this.el('viewer'), this.store, {
@@ -69,16 +81,21 @@ export class App {
       banner.hidden = !e;
       banner.textContent = e ?? '';
     });
-    this.store.select('fileName', (name) => {
-      void this.platform.setTitle(name ?? 'Preview');
+    this.store.subscribe((s, prev) => {
+      if (s.fileName !== prev.fileName || s.dirty !== prev.dirty) this.updateTitle();
     });
+    this.updateTitle();
     banner.addEventListener('click', () => this.store.set({ error: null }));
-    this.platform.onFileDrop((paths) => {
-      const first = paths[0];
-      if (first) void this.openOrSpawn(first);
-    });
+    this.platform.onFileDrop((paths, point) => void this.onDrop(paths, point));
     this.platform.onDragState((state) => {
-      overlay.hidden = !state.over;
+      const overList = !!(this.doc && state.over && state.point && this.sidebar.thumbnails.containsPoint(state.point));
+      this.overlay.hidden = !state.over || overList;
+      if (overList && state.point) {
+        this.sidebar.thumbnails.autoScrollFor(state.point);
+        this.sidebar.thumbnails.showIndicator(this.sidebar.thumbnails.gapAt(state.point.y));
+      } else {
+        this.sidebar.thumbnails.showIndicator(null);
+      }
     });
     for (const b of root.querySelectorAll<HTMLElement>('.empty-state [data-action="open"]')) {
       b.addEventListener('click', () => void this.open());
@@ -94,6 +111,16 @@ export class App {
       rotate: () => this.rotate(90),
       toggleFind: () => this.findBar.toggle(),
       open: () => void this.open(),
+    });
+
+    // ---- page editing ----
+    this.editor = new Editor({
+      doc: () => this.doc,
+      platform: this.platform,
+      store: this.store,
+      goToPage: (index) => this.viewer.goToPage(index),
+      loadSource: (path) => this.loadSource(path),
+      notify: (message) => this.store.set({ error: message }),
     });
 
     // ---- shortcuts + per-file state ----
@@ -112,37 +139,45 @@ export class App {
     });
     window.addEventListener('pagehide', () => this.flushSave());
     window.addEventListener('beforeunload', () => this.flushSave());
+    this.platform.onCloseRequested(() => this.confirmClose());
+
+    // ---- sidebar ----
+    const aside = this.el('sidebar');
+    this.sidebar = new Sidebar(aside, this.store, {
+      doc: null,
+      renderer: null,
+      goToPage: (index, top) => this.viewer.goToPage(index, top),
+      editor: this.editor,
+      contextMenu: (point) => this.pageContextMenu(point),
+    });
+    this.store.select('sidebarOpen', (open) => {
+      aside.hidden = !open;
+    });
+
+    // ---- find bar ----
+    this.findBar = new FindBar(this.el('findbar'), this.store, { viewer: this.viewer, doc: null });
 
     (window as unknown as { __pfw: unknown }).__pfw = {
       app: this,
       store: this.store,
       viewer: this.viewer,
       toolbar: this.toolbar,
+      sidebar: this.sidebar,
+      findBar: this.findBar,
+      editor: this.editor,
       metrics: this.metrics,
     };
+  }
 
-    // ---- sidebar wiring (Task 11) ----------------------------------------
-    const aside = this.el('sidebar');
-    this.sidebar = new Sidebar(aside, this.store, {
-      doc: null,
-      renderer: null,
-      goToPage: (index, top) => this.viewer.goToPage(index, top),
-    });
-    this.store.select('sidebarOpen', (open) => {
-      aside.hidden = !open;
-    });
-    Object.assign((window as unknown as { __pfw: object }).__pfw, { sidebar: this.sidebar });
-    // ---- end sidebar wiring ----------------------------------------------
-    // ---- find bar (Task 12) --------------------------------------------------
-    this.findBar = new FindBar(this.el('findbar'), this.store, { viewer: this.viewer, doc: this.doc });
-    (window as unknown as { __pfw: { findBar?: FindBar } }).__pfw.findBar = this.findBar;
-    // ---- end find bar ----------------------------------------------------------
+  /** The document being edited, if any. */
+  get document(): EditableDocument | null {
+    return this.doc;
   }
 
   /** Routes a resolved keyboard shortcut to the matching behaviour. */
   dispatch(action: Action): void {
     const s = this.store.get();
-    const hasDoc = s.status === 'ready' && s.numPages > 0;
+    const hasDoc = s.status === 'ready' && s.numPages > 0 && this.doc !== null;
     switch (action) {
       case 'open':
         void this.open();
@@ -159,11 +194,41 @@ export class App {
       case 'toggle-sidebar':
         this.store.set({ sidebarOpen: !s.sidebarOpen });
         return;
+      case 'close-window':
+        void this.platform.windowControls?.close();
+        return;
       default:
         break;
     }
     if (!hasDoc) return;
     switch (action) {
+      case 'save':
+        void this.save();
+        break;
+      case 'save-as':
+        void this.saveAs();
+        break;
+      case 'undo':
+        this.editor.undo();
+        break;
+      case 'redo':
+        this.editor.redo();
+        break;
+      case 'select-all-pages':
+        this.editor.selectAll();
+        break;
+      case 'copy-pages':
+        void this.editor.copySelection();
+        break;
+      case 'cut-pages':
+        void this.editor.cutSelection();
+        break;
+      case 'paste-pages':
+        void this.editor.paste();
+        break;
+      case 'delete-pages':
+        this.editor.deleteSelection();
+        break;
       case 'zoom-in':
         this.viewer.setZoom('custom', zoomIn(s.scale));
         break;
@@ -227,24 +292,145 @@ export class App {
   /** Like Preview: an empty window loads the file; a window with a document opens a new one. */
   async openOrSpawn(path: string): Promise<void> {
     if (this.doc && (await this.platform.openInNewWindow(path))) return;
+    if (this.doc && !(await this.confirmDiscard())) return;
     await this.openPath(path);
   }
 
+  /** Opens `path` in this window, asking for a password when the file needs one. */
   async openPath(path: string, password?: string): Promise<void> {
     const seq = ++this.openSeq;
     this.metrics.openStart = performance.now();
     this.metrics.firstPaint = 0;
-    if (!password) this.hidePasswordPanel();
+    const name = this.platform.fileName(path);
     this.store.set({ status: this.doc ? 'ready' : 'loading', error: null });
     try {
       // pdf.js transfers the buffer to its worker, so a password retry re-reads the file.
       const data = await this.platform.readFile(path);
       if (seq !== this.openSeq) return;
-      await this.load(this.platform.fileName(path), data, path, seq, password);
+      await this.load(name, data, path, seq, password);
     } catch (e) {
-      if (seq === this.openSeq) this.fail(this.platform.fileName(path), e, path);
+      if (seq !== this.openSeq) return;
+      if (e instanceof PdfOpenError && e.kind === 'password') {
+        this.store.set({ error: null, status: this.doc ? 'ready' : 'error' });
+        const retry = await this.askPassword(name, password !== undefined);
+        if (retry !== null && seq === this.openSeq) await this.openPath(path, retry);
+        return;
+      }
+      this.fail(name, e);
     }
   }
+
+  // ---- saving ---------------------------------------------------------------
+
+  /** Ctrl+S: writes over the opened file. */
+  async save(): Promise<boolean> {
+    const path = this.store.get().filePath;
+    if (!this.doc) return false;
+    if (!path) return this.saveAs();
+    return this.writeTo(path);
+  }
+
+  /** Ctrl+Shift+S: writes a copy and keeps editing the copy. */
+  async saveAs(): Promise<boolean> {
+    if (!this.doc) return false;
+    const s = this.store.get();
+    const suggested = s.filePath ?? s.fileName ?? 'Untitled.pdf';
+    let path = await this.platform.saveFileDialog(suggested);
+    if (!path) return false;
+    if (!/\.pdf$/i.test(path)) path += '.pdf';
+    if (!(await this.writeTo(path))) return false;
+    this.store.set({ filePath: path, fileName: this.platform.fileName(path) });
+    this.flushSave();
+    return true;
+  }
+
+  private async writeTo(path: string): Promise<boolean> {
+    const doc = this.doc;
+    if (!doc || this.saving) return false;
+    this.saving = true;
+    const name = this.platform.fileName(path);
+    try {
+      const bytes = await doc.save();
+      await this.platform.writeFile(path, bytes);
+      if (this.doc === doc) {
+        doc.markSaved();
+        this.store.set({ dirty: doc.dirty, error: null });
+      }
+      return true;
+    } catch (e) {
+      const reason = e instanceof Error ? e.message : String(e);
+      this.store.set({ error: `Couldn't save ${name}: ${reason}` });
+      return false;
+    } finally {
+      this.saving = false;
+    }
+  }
+
+  /** Before the window closes: true when it may close. */
+  private async confirmClose(): Promise<boolean> {
+    this.flushSave();
+    return this.confirmDiscard();
+  }
+
+  /**
+   * Unsaved changes would be lost: ask Save / Don't Save / Cancel. Resolves true when the
+   * caller may proceed (saved or discarded).
+   */
+  async confirmDiscard(): Promise<boolean> {
+    if (!this.doc?.dirty) return true;
+    const choice = await this.askUnsaved(this.store.get().fileName ?? 'Untitled');
+    if (choice === 'cancel') return false;
+    if (choice === 'discard') return true;
+    return this.save();
+  }
+
+  /** Replaced by the Mac-style alert once the UI branch lands. */
+  protected async askUnsaved(name: string): Promise<'save' | 'discard' | 'cancel'> {
+    const save = window.confirm(`Do you want to save the changes made to the document “${name}”?`);
+    return save ? 'save' : 'discard';
+  }
+
+  /** Thumbnail context menu; filled in once the menu component is available. */
+  protected pageContextMenu(_point: Point): void {}
+
+  // ---- merging ----------------------------------------------------------------
+
+  private async onDrop(paths: string[], point: Point | null): Promise<void> {
+    this.sidebar.thumbnails.showIndicator(null);
+    this.overlay.hidden = true;
+    if (this.doc && point && this.sidebar.thumbnails.containsPoint(point)) {
+      await this.editor.insertFiles(paths, this.sidebar.thumbnails.gapAt(point.y));
+      return;
+    }
+    const first = paths[0];
+    if (first) await this.openOrSpawn(first);
+  }
+
+  /** Adds the PDF at `path` to the current document as a new source; null when skipped. */
+  private async loadSource(path: string): Promise<number | null> {
+    const doc = this.doc;
+    if (!doc) return null;
+    const name = this.platform.fileName(path);
+    let password: string | undefined;
+    for (;;) {
+      try {
+        const data = await this.platform.readFile(path);
+        return await doc.addSource(data, { password });
+      } catch (e) {
+        if (e instanceof PdfOpenError && e.kind === 'password') {
+          const answer = await this.askPassword(name, password !== undefined);
+          if (answer === null) return null;
+          password = answer;
+          continue;
+        }
+        const reason = e instanceof Error ? e.message : String(e);
+        this.store.set({ error: `Can't add ${name}: ${reason}` });
+        return null;
+      }
+    }
+  }
+
+  // ---- document lifecycle ---------------------------------------------------
 
   private async load(
     name: string,
@@ -253,14 +439,15 @@ export class App {
     seq: number,
     password?: string,
   ): Promise<void> {
-    const doc = await PdfDocument.load(data, { password });
+    const doc = await EditableDocument.open(data, { password });
     if (seq !== this.openSeq) {
       void doc.destroy();
       return;
     }
-    this.hidePasswordPanel();
     const old = this.doc;
     this.doc = doc;
+    this.lastPages = doc.pages;
+    doc.onChange((kind) => this.onDocChange(doc, kind));
     const restored = path ? loadFileState(path) : null;
     this.flushSave();
     this.store.set({
@@ -269,6 +456,7 @@ export class App {
       numPages: doc.numPages,
       status: 'ready',
       error: null,
+      dirty: false,
       // A file without saved state starts from the defaults, not the previous document's view.
       zoomMode: restored?.zoomMode ?? initialState.zoomMode,
       scale: restored?.scale ?? initialState.scale,
@@ -277,15 +465,47 @@ export class App {
       findOpen: false,
     });
     await this.viewer.setDocument(doc);
-    this.sidebar.setDocument(doc, new PageRenderer(doc)); // sidebar (Task 11)
-    this.findBar.setDocument(doc); // find bar (Task 12)
+    this.sidebar.setDocument(doc, new PageRenderer(doc));
+    this.findBar.setDocument(doc);
+    this.editor.documentChanged();
     if (old) void old.destroy();
     if (restored && restored.page > 1) this.viewer.goToPage(restored.page - 1);
-    void doc.loadSizes(() => {
-      if (this.doc !== doc) return;
+    void doc.loadSizes();
+  }
+
+  private onDocChange(doc: EditableDocument, kind: 'structure' | 'sizes'): void {
+    if (this.doc !== doc) return;
+    if (kind === 'sizes') {
       this.viewer.sizesChanged();
       this.sidebar.sizesChanged();
-    });
+      return;
+    }
+    const anchor = this.anchorAfterChange(this.lastPages, doc.pages);
+    this.lastPages = doc.pages;
+    this.findBar.structureChanged();
+    this.viewer.structureChanged(anchor);
+    this.sidebar.structureChanged();
+    this.editor.structureChanged();
+    this.store.set({ numPages: doc.numPages, dirty: doc.dirty });
+  }
+
+  /** Keeps the page at the top of the viewport in view; if it was deleted, the next surviving page. */
+  private anchorAfterChange(prev: Composition, next: Composition): DocPoint {
+    const top = this.viewer.topAnchor();
+    const positions = new Map(next.map((p, i) => [p.id, i]));
+    const kept = prev[top.index] ? positions.get(prev[top.index]!.id) : undefined;
+    if (kept !== undefined) return { index: kept, fraction: top.fraction };
+    for (let i = Math.max(0, top.index); i < prev.length; i++) {
+      const j = positions.get(prev[i]!.id);
+      if (j !== undefined) return { index: j, fraction: 0 };
+    }
+    return { index: Math.max(0, next.length - 1), fraction: 0 };
+  }
+
+  private updateTitle(): void {
+    const s = this.store.get();
+    const name = s.fileName ?? 'Preview';
+    void this.platform.setTitle(s.dirty ? `${name} — Edited` : name);
   }
 
   private scheduleSave(): void {
@@ -306,44 +526,37 @@ export class App {
     });
   }
 
-  private fail(name: string, e: unknown, path?: string): void {
+  private fail(name: string, e: unknown): void {
     const reason = e instanceof PdfOpenError ? e.message : e instanceof Error ? e.message : String(e);
-    if (e instanceof PdfOpenError && e.kind === 'password' && path) {
-      this.pendingPassword = { path, name };
-      this.store.set({ error: null, status: this.doc ? 'ready' : 'error' });
-      this.showPasswordPanel(reason.toLowerCase().includes('incorrect') ? 'Incorrect password. Try again.' : '');
-      return;
-    }
     this.store.set({
       error: `Can't open ${name}: ${reason}`,
       status: this.doc ? 'ready' : 'error',
     });
-    if (!this.doc) this.sidebar.setDocument(null, null); // sidebar (Task 11)
+    if (!this.doc) this.sidebar.setDocument(null, null);
   }
 
-  private showPasswordPanel(message: string): void {
-    this.passwordMessage.textContent = message;
+  // ---- password prompt --------------------------------------------------------
+
+  /** Shows the password prompt for `name`; resolves with the password, or null when cancelled. */
+  private askPassword(name: string, retry: boolean): Promise<string | null> {
+    this.passwordReply?.(null);
+    if (this.passwordTitle) this.passwordTitle.textContent = `“${name}” is password protected.`;
+    this.passwordMessage.textContent = retry ? 'Incorrect password. Try again.' : '';
     this.passwordForm.hidden = false;
     this.passwordInput.value = '';
     this.passwordInput.focus();
+    return new Promise((resolve) => {
+      this.passwordReply = resolve;
+    });
   }
 
-  private hidePasswordPanel(): void {
-    this.pendingPassword = null;
+  private answerPassword(password: string | null): void {
+    const reply = this.passwordReply;
+    this.passwordReply = null;
     this.passwordForm.hidden = true;
     this.passwordMessage.textContent = '';
-  }
-
-  private submitPassword(): void {
-    const pending = this.pendingPassword;
-    const password = this.passwordInput.value;
-    if (!pending || !password) return;
-    void this.openPath(pending.path, password);
-  }
-
-  private cancelPassword(): void {
-    this.hidePasswordPanel();
-    this.el('viewer').focus();
+    if (password === null) this.el('viewer').focus();
+    reply?.(password);
   }
 
   private el<T extends HTMLElement = HTMLElement>(idOrSelector: string): T {

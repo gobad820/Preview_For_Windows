@@ -1,13 +1,17 @@
-import type { PdfDocument } from '../pdf/document';
+import type { Editor } from '../edit/editor';
+import type { PageSource } from '../pdf/source';
+import type { Point } from '../platform/types';
 import type { PageRenderer } from '../pdf/renderer';
 import type { SidebarTab, Store, ViewerState } from '../store';
 import { OutlineTree } from './outline';
 import { ThumbnailList } from './thumbnails';
 
 export interface SidebarDeps {
-  doc: PdfDocument | null;
+  doc: PageSource | null;
   renderer: PageRenderer | null;
   goToPage(index: number, top?: number): void;
+  editor: Editor;
+  contextMenu(point: Point): void;
 }
 
 const TABS: { id: SidebarTab; label: string }[] = [
@@ -23,7 +27,7 @@ const TABS: { id: SidebarTab; label: string }[] = [
 export class Sidebar {
   readonly thumbnails: ThumbnailList;
   readonly outline: OutlineTree;
-  private doc: PdfDocument | null = null;
+  private doc: PageSource | null = null;
   private readonly tabs = new Map<SidebarTab, HTMLButtonElement>();
   private readonly panels = new Map<SidebarTab, HTMLElement>();
   private readonly unsubscribers: (() => void)[] = [];
@@ -64,7 +68,8 @@ export class Sidebar {
     });
 
     this.thumbnails = new ThumbnailList(this.panels.get('thumbnails')!, store, {
-      goToPage: (index) => deps.goToPage(index),
+      editor: deps.editor,
+      contextMenu: (point) => deps.contextMenu(point),
     });
     this.outline = new OutlineTree(this.panels.get('outline')!, {
       goToPage: (index, top) => deps.goToPage(index, top),
@@ -83,17 +88,31 @@ export class Sidebar {
   }
 
   /** Swaps the document shown; `renderer` must be a separate instance from the viewer's. */
-  setDocument(doc: PdfDocument | null, renderer: PageRenderer | null): void {
+  setDocument(doc: PageSource | null, renderer: PageRenderer | null): void {
     this.doc = doc;
     this.thumbnails.setDocument(doc, renderer);
     this.outline.setOutline([]);
     this.setOutlineAvailable(false);
+    this.reloadOutline();
+  }
+
+  /** Call after pages were moved, inserted or deleted. */
+  structureChanged(): void {
+    this.thumbnails.structureChanged();
+    this.reloadOutline();
+  }
+
+  private outlineSeq = 0;
+
+  private reloadOutline(): void {
+    const doc = this.doc;
     if (!doc) return;
+    const seq = ++this.outlineSeq;
     doc
       .getOutline()
       .catch(() => [])
       .then((nodes) => {
-        if (this.doc !== doc) return;
+        if (this.doc !== doc || seq !== this.outlineSeq) return;
         this.outline.setOutline(nodes);
         this.setOutlineAvailable(nodes.length > 0);
       });

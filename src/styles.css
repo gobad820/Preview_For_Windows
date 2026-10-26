@@ -404,3 +404,24 @@ kbd {
   -webkit-user-select: text; user-select: text;
 }
 .password-row input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+/* ---- page editing: functional layout (look refined by the Mac UI styles) ---- */
+.sidebar-panel.thumbnails { position: relative; }
+.sidebar-panel.thumbnails:focus { outline: none; }
+.thumb.selected canvas { outline: 3px solid var(--accent); outline-offset: 2px; }
+.thumb.dragging { opacity: 0.4; }
+.drop-indicator {
+  position: absolute; left: 14px; right: 14px; height: 3px; margin-top: -1.5px;
+  border-radius: 2px; background: var(--accent); pointer-events: none; z-index: 2;
+}
+.drop-indicator[hidden] { display: none; }
+.drag-ghost { position: fixed; left: 0; top: 0; z-index: 100; pointer-events: none; }
+.drag-ghost canvas {
+  position: absolute; left: calc(var(--n) * 5px); top: calc(var(--n) * 5px);
+  border-radius: 3px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+}
+.drag-count {
+  position: absolute; left: 60px; top: -8px; min-width: 22px; height: 22px; padding: 0 6px;
+  border-radius: 11px; background: #ff3b30; color: #fff; font-size: 12px; font-weight: 600;
+  line-height: 22px; text-align: center; z-index: 1;
+}

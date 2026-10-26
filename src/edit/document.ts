@@ -178,6 +178,18 @@ export class EditableDocument implements PageSource {
     return writePdf(sources, pages, { outline, metaFrom: used.includes(0) ? 0 : pages[0]!.src });
   }
 
+  /** The given source pages as a standalone PDF (used for copying pages to other windows). */
+  async extract(specs: ReadonlyArray<{ src: number; index: number }>): Promise<Uint8Array> {
+    const used = [...new Set(specs.map((p) => p.src))];
+    const sources = await Promise.all(
+      used.map(async (id) => {
+        const doc = this.source(id);
+        return { id, bytes: await doc.getData(), password: doc.password };
+      }),
+    );
+    return writePdf(sources, specs, { outline: [], metaFrom: specs[0]?.src });
+  }
+
   async destroy(): Promise<void> {
     if (this.destroyed) return;
     this.destroyed = true;

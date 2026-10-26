@@ -1,7 +1,7 @@
 import * as pdfjs from 'pdfjs-dist';
 import type { RenderTask } from 'pdfjs-dist/types/src/display/api';
 import type { Rotation } from '../types';
-import type { PdfDocument } from './document';
+import type { PageSource } from './source';
 
 /** CSS pixels per PDF point at 100% (pdf.js convention: 96 dpi / 72 dpi). */
 export const CSS_UNITS = 96 / 72;
@@ -14,6 +14,8 @@ export const MAX_CANVAS_PIXELS = 2 ** 24;
 
 export interface RenderRequest {
   index: number;
+  /** Identifies the render target; a new render for the same slot cancels the previous one. Defaults to `index`. */
+  slot?: unknown;
   scale: number;
   rotation: Rotation;
   canvas: HTMLCanvasElement;
@@ -33,14 +35,15 @@ interface Entry {
 
 /** Renders pages into canvases; at most one in-flight render per page index. */
 export class PageRenderer {
-  private readonly inflight = new Map<number, Entry>();
+  private readonly inflight = new Map<unknown, Entry>();
 
-  constructor(private readonly doc: PdfDocument) {}
+  constructor(private readonly doc: PageSource) {}
 
   render(req: RenderRequest): RenderHandle {
-    this.cancel(req.index);
+    const slot = req.slot ?? req.index;
+    this.cancel(slot);
     const entry: Entry = { task: null, cancelled: false };
-    this.inflight.set(req.index, entry);
+    this.inflight.set(slot, entry);
 
     const done = (async () => {
       try {
@@ -67,7 +70,7 @@ export class PageRenderer {
         if (entry.cancelled || e instanceof pdfjs.RenderingCancelledException) return;
         throw e;
       } finally {
-        if (this.inflight.get(req.index) === entry) this.inflight.delete(req.index);
+        if (this.inflight.get(slot) === entry) this.inflight.delete(slot);
       }
     })();
 
@@ -80,16 +83,16 @@ export class PageRenderer {
     };
   }
 
-  cancel(index: number): void {
-    const prev = this.inflight.get(index);
+  cancel(slot: unknown): void {
+    const prev = this.inflight.get(slot);
     if (prev) {
       prev.cancelled = true;
       prev.task?.cancel();
-      this.inflight.delete(index);
+      this.inflight.delete(slot);
     }
   }
 
   cancelAll(): void {
-    for (const index of [...this.inflight.keys()]) this.cancel(index);
+    for (const slot of [...this.inflight.keys()]) this.cancel(slot);
   }
 }
