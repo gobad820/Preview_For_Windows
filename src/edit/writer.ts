@@ -13,6 +13,7 @@ import {
   type PDFObject,
   type PDFPage,
 } from '@cantoo/pdf-lib';
+import { AnnotFonts, writePageAnnotations, type FontLoader } from '../annot/pdfWrite';
 import type { Annot } from '../annot/types';
 import { PdfOpenError, type OutlineNode } from '../pdf/document';
 
@@ -30,8 +31,11 @@ export interface WriteOptions {
   metaFrom?: number;
   /** Page label of every output page (as shown by viewers), or omitted when no source has labels. */
   pageLabels?: Array<string | null>;
+  /** Font for text box appearances (Malgun Gothic); loaded only when a text box needs it. */
+  font?: FontLoader;
 }
 
+/** `annots`: this app's annotations for the page; absent = the page's annotations as they are. */
 type PageSpec = { readonly src: number; readonly index: number; readonly annots?: readonly Annot[] | undefined };
 
 const N = {
@@ -183,6 +187,11 @@ export async function writePdf(
     });
     page.node.set(N.Annots, out.context.obj(keep));
   });
+
+  const fonts = new AnnotFonts(out, opts.font);
+  for (const [i, p] of pages.entries()) {
+    if (p.annots) await writePageAnnotations(out, outPages[i]!, p.annots, fonts);
+  }
 
   writeOutline(out, outPages, opts.outline);
   if (opts.pageLabels?.some((l) => l !== null)) writePageLabels(out, opts.pageLabels);

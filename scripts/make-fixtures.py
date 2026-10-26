@@ -244,10 +244,12 @@ def forms_actions(src, path):
 
 
 def rotated(path):
-    """Page 1 has /Rotate 90 (shown landscape, text running down the screen); page 2 is upright."""
+    """Page 1 has /Rotate 90: its user space is A4 landscape (842 x 595 pt) and viewers show it
+    portrait, with the text running down the screen. Page 2 is upright A4."""
     c = canvas.Canvas(path, pagesize=A4)
+    # reportlab writes a rotated page's MediaBox swapped, so user space is 842 wide and 595 tall.
     c.setPageRotation(90)
-    body(c, ["Rotated page one", "The quick brown fox jumps over the lazy dog."])
+    body(c, ["Rotated page one", "The quick brown fox jumps over the lazy dog."], y_start=180 * mm)
     c.showPage()
     c.setPageRotation(0)
     body(c, ["Upright page two", "Pack my box with five dozen liquor jugs."])
