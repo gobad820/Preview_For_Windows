@@ -44,8 +44,13 @@ public static class PfwGuard {
     i.u.mi.flags = flags | 0x8000 | 0x4000;
     SendInput(1, new[] { i }, Marshal.SizeOf(typeof(INPUT)));
   }
+  [DllImport("user32.dll")] static extern uint MapVirtualKey(uint code, uint type);
   static void Key(ushort vk, bool up) {
-    var i = new INPUT { type = 1 }; i.u.ki.vk = vk; i.u.ki.flags = up ? 2u : 0u;
+    // The Windows key and the arrows are extended keys; without the flag Left arrives as
+    // numpad 4 and the shell does not treat Win+Left as the snap shortcut.
+    bool extended = vk == 0x5B || (vk >= 0x25 && vk <= 0x28);
+    var i = new INPUT { type = 1 }; i.u.ki.vk = vk; i.u.ki.scan = (ushort)MapVirtualKey(vk, 0);
+    i.u.ki.flags = (up ? 2u : 0u) | (extended ? 1u : 0u);
     SendInput(1, new[] { i }, Marshal.SizeOf(typeof(INPUT)));
   }
   static bool down;
