@@ -123,6 +123,11 @@ export class Sidebar {
     this.thumbnails.sizesChanged();
   }
 
+  /** False while the document has no outline (the Contents tab is disabled). */
+  get outlineAvailable(): boolean {
+    return !this.tabs.get('outline')!.disabled;
+  }
+
   destroy(): void {
     for (const u of this.unsubscribers) u();
     this.thumbnails.destroy();

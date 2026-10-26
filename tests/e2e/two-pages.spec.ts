@@ -215,3 +215,85 @@ test.describe('two pages', () => {
     await expect(page.locator('#sidebar .thumb.current')).toHaveAttribute('data-page', '2');
   });
 });
+
+test.describe('View menu', () => {
+  const viewMenu = (page: Page) => page.locator('[data-action="view-menu"]');
+  const item = (page: Page, name: string) => page.locator('.menu .menu-item', { hasText: name });
+
+  test('choosing Two Pages switches the layout and survives a reload', async ({ page }) => {
+    await open(page, 'simple.pdf');
+    await expect(viewMenu(page)).toHaveAttribute('aria-expanded', 'false');
+    await viewMenu(page).click();
+    await expect(viewMenu(page)).toHaveAttribute('aria-expanded', 'true');
+    await expect(item(page, 'Continuous Scroll')).toHaveAttribute('aria-checked', 'true');
+    await expect(item(page, 'Two Pages')).toHaveAttribute('aria-checked', 'false');
+    await item(page, 'Two Pages').click();
+    await expect(page.locator('.menu')).toHaveCount(0);
+    await expect(viewMenu(page)).toHaveAttribute('aria-expanded', 'false');
+    await waitForPairs(page);
+    expect((await state(page)).displayMode).toBe('two-pages');
+
+    await page.reload();
+    await page.waitForFunction(() => (window as any).__pfw?.store.get().status === 'ready');
+    await waitForPairs(page);
+    await viewMenu(page).click();
+    await expect(item(page, 'Two Pages')).toHaveAttribute('aria-checked', 'true');
+    await page.keyboard.press('Escape');
+
+    // And back: the choice is remembered both ways.
+    await viewMenu(page).click();
+    await item(page, 'Continuous Scroll').click();
+    await page.reload();
+    await page.waitForFunction(() => (window as any).__pfw?.store.get().status === 'ready');
+    expect((await state(page)).displayMode).toBe('continuous');
+    expect(await page.evaluate(() => (window as any).__pfw.viewer.getLayout().rows[0]?.last)).toBe(0);
+  });
+
+  test('Book Mode is disabled in Continuous Scroll and toggles in Two Pages', async ({ page }) => {
+    await open(page, 'simple.pdf');
+    await viewMenu(page).click();
+    await expect(item(page, 'Book Mode')).toHaveAttribute('aria-disabled', 'true');
+    await expect(item(page, 'Book Mode')).toHaveAttribute('aria-checked', 'false');
+    await item(page, 'Book Mode').click({ force: true });
+    expect((await state(page)).bookMode).toBe(false);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.menu')).toHaveCount(0);
+
+    await page.evaluate(() => (window as any).__pfw.store.set({ displayMode: 'two-pages' }));
+    await viewMenu(page).click();
+    await expect(item(page, 'Book Mode')).not.toHaveAttribute('aria-disabled', 'true');
+    await item(page, 'Book Mode').click();
+    await expect.poll(async () => (await state(page)).bookMode).toBe(true);
+    await expect
+      .poll(() => page.evaluate(() => (window as any).__pfw.viewer.getLayout().rows.slice(0, 2).map((r: any) => [r.first, r.last])))
+      .toEqual([[0, 0], [1, 2]]);
+  });
+
+  test('sidebar entries show, hide and switch the sidebar', async ({ page }) => {
+    await open(page, 'outline.pdf');
+    await expect(page.locator('#sidebar [data-tab="outline"]')).toBeEnabled();
+    await viewMenu(page).click();
+    await expect(item(page, 'Show Sidebar')).toHaveAttribute('aria-keyshortcuts', 'Ctrl+Alt+S');
+    await expect(item(page, 'Thumbnails')).toHaveAttribute('aria-checked', 'false');
+    await item(page, 'Table of Contents').click();
+    await expect(page.locator('#sidebar')).toBeVisible();
+    expect(await state(page)).toMatchObject({ sidebarOpen: true, sidebarTab: 'outline' });
+    await expect(page.locator('#sidebar [data-tab="outline"]')).toHaveAttribute('aria-selected', 'true');
+
+    await viewMenu(page).click();
+    await expect(item(page, 'Table of Contents')).toHaveAttribute('aria-checked', 'true');
+    await item(page, 'Thumbnails').click();
+    expect(await state(page)).toMatchObject({ sidebarOpen: true, sidebarTab: 'thumbnails' });
+
+    await viewMenu(page).click();
+    await item(page, 'Hide Sidebar').click();
+    await expect(page.locator('#sidebar')).toBeHidden();
+  });
+
+  test('Table of Contents is disabled for a document without an outline', async ({ page }) => {
+    await open(page, 'simple.pdf');
+    await expect(page.locator('#sidebar [data-tab="outline"]')).toBeDisabled();
+    await viewMenu(page).click();
+    await expect(item(page, 'Table of Contents')).toHaveAttribute('aria-disabled', 'true');
+  });
+});
