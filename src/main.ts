@@ -1,5 +1,8 @@
 import { App } from './app';
 import { browserPlatform } from './platform/browser';
+import { hardenWebview, isTauri, tauriPlatform } from './platform/tauri';
 
-const app = new App(browserPlatform(), document);
+const tauri = isTauri();
+if (tauri) hardenWebview(document);
+const app = new App(tauri ? tauriPlatform() : browserPlatform(), document);
 void app.start();
