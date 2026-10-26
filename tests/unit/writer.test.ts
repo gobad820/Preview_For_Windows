@@ -1,6 +1,19 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { PDFDict, PDFDocument, PDFName } from '@cantoo/pdf-lib';
+import {
+  PDFArray,
+  PDFDict,
+  PDFDocument,
+  PDFHexString,
+  PDFName,
+  PDFNumber,
+  PDFRawStream,
+  PDFRef,
+  PDFStream,
+  PDFString,
+  decodePDFRawStream,
+  type PDFObject,
+} from '@cantoo/pdf-lib';
 import { describe, expect, test } from 'vitest';
 import { PdfDocument, type OutlineNode, type PdfAssets } from '../../src/pdf/document';
 import { writePdf, type WriterSource } from '../../src/edit/writer';
@@ -43,6 +56,75 @@ async function linkTargets(bytes: Uint8Array, page: number): Promise<Array<numbe
     out.push((await doc.resolveDest(a.dest ?? null))?.pageIndex ?? null);
   }
   await doc.destroy();
+  return out;
+}
+
+
+/** Indirect objects that nothing reachable from the trailer refers to. */
+async function unreachable(bytes: Uint8Array): Promise<number> {
+  const doc = await PDFDocument.load(bytes);
+  const ctx = doc.context;
+  const seen = new Set<string>();
+  const stack: PDFObject[] = [ctx.trailerInfo.Root, ctx.trailerInfo.Info].filter(Boolean) as PDFObject[];
+  while (stack.length > 0) {
+    const o = stack.pop()!;
+    if (o instanceof PDFRef) {
+      if (seen.has(o.tag)) continue;
+      seen.add(o.tag);
+      const v = ctx.lookup(o);
+      if (v) stack.push(v);
+    } else if (o instanceof PDFDict) for (const [, v] of o.entries()) stack.push(v);
+    else if (o instanceof PDFArray) stack.push(...o.asArray());
+    else if (o instanceof PDFStream) for (const [, v] of o.dict.entries()) stack.push(v);
+  }
+  // Object and cross-reference streams belong to the file structure, not the document.
+  const structural = (o: PDFObject) =>
+    o instanceof PDFStream && ['/ObjStm', '/XRef'].includes(String(o.dict.get(PDFName.of('Type'))));
+  return ctx.enumerateIndirectObjects().filter(([ref, o]) => !seen.has(ref.tag) && !structural(o)).length;
+}
+
+/** Every string and decoded stream in the file, joined, to search for leaked content. */
+async function allText(bytes: Uint8Array): Promise<string> {
+  const doc = await PDFDocument.load(bytes);
+  const parts: string[] = [];
+  for (const [, obj] of doc.context.enumerateIndirectObjects()) {
+    if (obj instanceof PDFRawStream) {
+      try {
+        parts.push(new TextDecoder('latin1').decode(decodePDFRawStream(obj).decode()));
+      } catch {
+        /* undecodable filters are not text */
+      }
+      parts.push(obj.dict.toString());
+    } else {
+      parts.push(obj.toString());
+    }
+  }
+  return parts.join('\n');
+}
+
+/** Actions reachable from page `page`'s annotations: [subtype, path, target page or null]. */
+async function annotActions(bytes: Uint8Array, page: number): Promise<string[]> {
+  const doc = await PDFDocument.load(bytes);
+  const pages = doc.getPages().map((p) => p.ref.toString());
+  const out: string[] = [];
+  const annots = doc.getPages()[page]!.node.lookupMaybe(PDFName.of('Annots'), PDFArray);
+  if (!annots) return out;
+  const describe = (action: PDFDict | undefined, path: string) => {
+    for (let a = action, p = path; a; ) {
+      const d = a.lookupMaybe(PDFName.of('D'), PDFArray);
+      const ref = d?.get(0);
+      out.push(`${p}->${ref instanceof PDFRef ? pages.indexOf(ref.toString()) : 'none'}`);
+      a = a.lookupMaybe(PDFName.of('Next'), PDFDict);
+      p += '.Next';
+    }
+  };
+  for (let i = 0; i < annots.size(); i++) {
+    const annot = doc.context.lookup(annots.get(i), PDFDict);
+    const sub = String(annot.get(PDFName.of('Subtype'))).slice(1);
+    describe(annot.lookupMaybe(PDFName.of('A'), PDFDict), `${sub}.A`);
+    const aa = annot.lookupMaybe(PDFName.of('AA'), PDFDict);
+    for (const [k] of aa?.entries() ?? []) describe(aa!.lookupMaybe(k, PDFDict), `${sub}.AA${k.toString()}`);
+  }
   return out;
 }
 
@@ -136,6 +218,71 @@ describe('writePdf', () => {
     expect(await linkTargets(out, 0)).toEqual([2]);
     expect(await linkTargets(out, 1)).toEqual([2]);
     expect(await orphanPages(out)).toBe(0);
+  });
+
+
+  for (const name of ['restricted-rc4.pdf', 'restricted-aes.pdf']) {
+    test(`saves a file protected only by an owner password (${name})`, async () => {
+      const out = await writePdf([await source(0, name)], refs(0, 1, 0), noOutline);
+      expect((await firstLines(out)).map((l) => l.slice(0, 18))).toEqual(['Hello world page 2', 'Hello world page 1']);
+    });
+  }
+
+  test('deleted pages leave nothing behind through actions or form fields', async () => {
+    const out = await writePdf([await source(0, 'forms-actions.pdf')], refs(0, 0, 2), noOutline);
+    expect(await orphanPages(out)).toBe(0);
+    expect(await unreachable(out)).toBe(0);
+    const text = await allText(out);
+    expect(text).not.toContain('PAGE2-ONLY');
+    expect(text).not.toContain('Hello world page 2');
+    expect(text).toContain('PAGE1-SHOWN');
+    // The link still goes to old page 3 (now 2nd); its chained action to deleted page 2 is gone,
+    // and the button's actions to page 2 are removed.
+    expect(await annotActions(out, 0)).toEqual(['Link.A->1']);
+  });
+
+  test('actions follow moved pages', async () => {
+    const out = await writePdf([await source(0, 'forms-actions.pdf')], refs(0, 2, 1, 0), noOutline);
+    expect(await annotActions(out, 2)).toEqual(['Link.A->0', 'Link.A.Next->1', 'Widget.A->1', 'Widget.AA/E->1']);
+    expect(await orphanPages(out)).toBe(0);
+    expect(await unreachable(out)).toBe(0);
+  });
+
+  test('keeps outline entries that open a web address', async () => {
+    const outline: OutlineNode[] = [
+      { title: 'Website', pageIndex: null, top: null, url: 'https://example.com/', children: [] },
+      { title: 'Start', pageIndex: 0, top: null, children: [] },
+    ];
+    const out = await writePdf([await source(0, 'simple.pdf')], refs(0, 0, 1), { outline });
+    const doc = await PDFDocument.load(out);
+    const root = doc.catalog.lookup(PDFName.of('Outlines'), PDFDict);
+    const first = root.lookup(PDFName.of('First'), PDFDict);
+    const action = first.lookup(PDFName.of('A'), PDFDict);
+    expect(String(action.get(PDFName.of('S')))).toBe('/URI');
+    expect((action.lookup(PDFName.of('URI')) as PDFString | PDFHexString).decodeText()).toBe('https://example.com/');
+  });
+
+  test('outline offsets are measured from the crop box', async () => {
+    const src = await PDFDocument.create();
+    const page = src.addPage([600, 800]);
+    page.setCropBox(0, 0, 600, 700);
+    src.addPage([600, 800]);
+    const bytes = await src.save();
+    const outline: OutlineNode[] = [{ title: 'Here', pageIndex: 0, top: 100, children: [] }];
+    const out = await writePdf([{ id: 0, bytes }], refs(0, 0, 1), { outline });
+    const doc = await view(out);
+    expect((await doc.getOutline())[0]!.top).toBeCloseTo(100, 0);
+    await doc.destroy();
+  });
+
+  test('writes page labels', async () => {
+    const out = await writePdf([await source(0, 'simple.pdf')], refs(0, 2, 0, 1), {
+      outline: [],
+      pageLabels: ['1', 'i', 'ii'],
+    });
+    const doc = await view(out);
+    expect(await doc.getPageLabels()).toEqual(['1', 'i', 'ii']);
+    await doc.destroy();
   });
 
   test('keeps document metadata from the first source', async () => {

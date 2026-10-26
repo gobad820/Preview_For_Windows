@@ -32,6 +32,8 @@ export interface OutlineNode {
   pageIndex: number | null;
   /** Offset from the page's top edge in PDF points, or null when unspecified. */
   top: number | null;
+  /** Web address for entries that open a link instead of a page. */
+  url?: string | null;
   children: OutlineNode[];
 }
 
@@ -100,6 +102,15 @@ export class PdfDocument implements PageSource {
     return doc;
   }
 
+  /** Page labels ("i", "ii", "1", …) or null when the document defines none. */
+  async getPageLabels(): Promise<string[] | null> {
+    try {
+      return await this.proxy.getPageLabels();
+    } catch {
+      return null;
+    }
+  }
+
   /** Raw file bytes as pdf.js received them (still encrypted if the file was). */
   getData(): Promise<Uint8Array> {
     return this.proxy.getData();
@@ -145,6 +156,7 @@ export class PdfDocument implements PageSource {
             title: item.title,
             pageIndex: target?.pageIndex ?? null,
             top: target?.top ?? null,
+            url: item.url ?? null,
             children: await convert(item.items ?? []),
           };
         }),

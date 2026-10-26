@@ -8,6 +8,7 @@ import {
   PDFNull,
   PDFNumber,
   PDFRef,
+  PDFStream,
   PDFString,
   type PDFObject,
   type PDFPage,
@@ -26,6 +27,8 @@ export interface WriteOptions {
   outline: OutlineNode[];
   /** Source whose title, author, subject, keywords and creation date are kept; defaults to the first page's source. */
   metaFrom?: number;
+  /** Page label of every output page (as shown by viewers), or omitted when no source has labels. */
+  pageLabels?: Array<string | null>;
 }
 
 type PageSpec = { readonly src: number; readonly index: number };
@@ -55,13 +58,32 @@ const N = {
   Count: PDFName.of('Count'),
   XYZ: PDFName.of('XYZ'),
   Fit: PDFName.of('Fit'),
+  AA: PDFName.of('AA'),
+  Next: PDFName.of('Next'),
+  Widget: PDFName.of('Widget'),
+  URI: PDFName.of('URI'),
+  PageLabels: PDFName.of('PageLabels'),
+  Nums: PDFName.of('Nums'),
 };
+
+/** A key in a dictionary or an index in an array, on the way from an annotation to an action. */
+type Step = PDFName | number;
+
+/** A GoTo action found under an annotation, with the source page it pointed at. */
+interface ActionInfo {
+  path: Step[];
+  target: number | null;
+  rest: PDFObject[];
+}
 
 /** What the pre-pass learned about one annotation, in the page's /Annots order. */
 interface AnnotInfo {
   hadP: boolean;
-  /** Set for GoTo links: target page in the same source (null = unresolvable) and the rest of the destination. */
-  link: { via: 'Dest' | 'A'; target: number | null; rest: PDFObject[] } | null;
+  isLink: boolean;
+  /** A link's own /Dest: target page in the same source (null = unresolvable) and the rest of it. */
+  dest: { target: number | null; rest: PDFObject[] } | null;
+  /** GoTo actions in /A, /AA and /Next chains. */
+  actions: ActionInfo[];
 }
 
 interface Prepared {
@@ -120,7 +142,7 @@ export async function writePdf(
     if (!firstPos.has(key)) firstPos.set(key, i);
   });
 
-  // Post-pass: restore /P and retarget or remove links.
+  // Post-pass: restore /P, retarget destinations and actions, or remove what pointed at dropped pages.
   pages.forEach((p, i) => {
     const infos = prepared.get(p.src)!.annots[p.index] ?? [];
     if (infos.length === 0) return;
@@ -128,35 +150,55 @@ export async function writePdf(
     const annots = page.node.lookupMaybe(N.Annots, PDFArray);
     if (!annots) return;
     const keep: PDFObject[] = [];
+    const posOf = (target: number | null) =>
+      target === null ? undefined : firstPos.get(`${p.src}:${target}`);
     infos.forEach((info, k) => {
       const entry = annots.get(k);
       const annot = entry ? out.context.lookupMaybe(entry, PDFDict) : undefined;
       if (!entry || !annot) return;
       if (info.hadP) annot.set(N.P, page.ref);
-      if (info.link) {
-        const pos = info.link.target === null ? undefined : firstPos.get(`${p.src}:${info.link.target}`);
-        if (pos === undefined) return; // target page is not in the output: drop the link
-        const dest = out.context.obj([outPages[pos]!.ref, ...info.link.rest]);
-        if (info.link.via === 'Dest') annot.set(N.Dest, dest);
-        else annot.lookup(N.A, PDFDict).set(N.D, dest);
+      let drop = false;
+      if (info.dest) {
+        const pos = posOf(info.dest.target);
+        if (pos === undefined) drop = true;
+        else annot.set(N.Dest, out.context.obj([outPages[pos]!.ref, ...info.dest.rest]));
       }
-      keep.push(entry);
+      // Deepest paths first, so removing an array entry never shifts one still to be visited.
+      const actions = [...info.actions].sort((a, b) => b.path.length - a.path.length || compareSteps(b.path, a.path));
+      for (const action of actions) {
+        const at = followPath(out, annot, action.path);
+        if (!at) continue;
+        const pos = posOf(action.target);
+        if (pos !== undefined) {
+          at.dict.set(N.D, out.context.obj([outPages[pos]!.ref, ...action.rest]));
+        } else if (info.isLink && action.path.length === 1) {
+          drop = true; // a link whose own action leads nowhere
+        } else if (at.parent instanceof PDFDict) {
+          at.parent.delete(at.step as PDFName);
+        } else {
+          at.parent.remove(at.step as number);
+        }
+      }
+      if (!drop) keep.push(entry);
     });
     page.node.set(N.Annots, out.context.obj(keep));
   });
 
   writeOutline(out, outPages, opts.outline);
+  if (opts.pageLabels?.some((l) => l !== null)) writePageLabels(out, opts.pageLabels);
 
   const metaSrc = prepared.get(opts.metaFrom ?? pages[0]!.src)?.doc;
   if (metaSrc) copyMetadata(metaSrc, out);
 
+  sweepUnreachable(out);
   return out.save();
 }
 
 async function loadSource(src: WriterSource): Promise<PDFDocument> {
   try {
     return await PDFDocument.load(src.bytes, {
-      password: src.password,
+      // Files restricted only by an owner password open with the empty user password.
+      password: src.password ?? '',
       updateMetadata: false,
       ignoreEncryption: false,
     });
@@ -170,42 +212,107 @@ async function loadSource(src: WriterSource): Promise<PDFDocument> {
 
 /**
  * Detaches everything that would let the object copier reach other pages: annotation /P
- * back-references, article beads, and GoTo link destinations (remembered for the post-pass).
+ * back-references, widget links into the form field tree, article beads, page-level actions,
+ * link destinations and every GoTo action (remembered for the post-pass).
  */
 function prepare(doc: PDFDocument): Prepared {
   const pageIndexByRef = new Map<string, number>();
   const pageList = doc.getPages();
   pageList.forEach((p, i) => pageIndexByRef.set(p.ref.toString(), i));
+  // Shared annotations and actions are visited once; later visits reuse what was learned.
+  const seenAnnots = new Map<PDFDict, AnnotInfo>();
+  const seenActions = new Map<PDFDict, { target: number | null; rest: PDFObject[] }>();
+
+  const collect = (annot: PDFDict): ActionInfo[] => {
+    const found: ActionInfo[] = [];
+    const visit = (action: PDFDict | undefined, path: Step[], depth: number): void => {
+      if (!action || depth > 16) return;
+      if (action.get(N.S) === N.GoTo) {
+        let known = seenActions.get(action);
+        if (!known) {
+          known = resolveDest(doc, action.get(N.D) ?? PDFNull, pageIndexByRef);
+          seenActions.set(action, known);
+          action.set(N.D, PDFNull);
+        }
+        found.push({ path, ...known });
+      }
+      const next = lookupAny(doc, action.get(N.Next));
+      if (next instanceof PDFDict) visit(next, [...path, N.Next], depth + 1);
+      else if (next instanceof PDFArray) {
+        for (let i = 0; i < next.size(); i++) {
+          visit(doc.context.lookupMaybe(next.get(i), PDFDict), [...path, N.Next, i], depth + 1);
+        }
+      }
+    };
+    visit(annot.lookupMaybe(N.A, PDFDict), [N.A], 0);
+    const aa = annot.lookupMaybe(N.AA, PDFDict);
+    for (const [key] of aa?.entries() ?? []) visit(aa!.lookupMaybe(key, PDFDict), [N.AA, key], 0);
+    return found;
+  };
+
   const annots: AnnotInfo[][] = pageList.map((page) => {
     page.node.delete(N.B);
+    page.node.delete(N.AA);
     const arr = page.node.lookupMaybe(N.Annots, PDFArray);
     if (!arr) return [];
     const infos: AnnotInfo[] = [];
     for (let k = 0; k < arr.size(); k++) {
       const annot = doc.context.lookupMaybe(arr.get(k), PDFDict);
       if (!annot) {
-        infos.push({ hadP: false, link: null });
+        infos.push({ hadP: false, isLink: false, dest: null, actions: [] });
+        continue;
+      }
+      const known = seenAnnots.get(annot);
+      if (known) {
+        infos.push(known);
         continue;
       }
       const hadP = annot.has(N.P);
       annot.delete(N.P);
-      let link: AnnotInfo['link'] = null;
-      if (annot.get(N.Subtype) === N.Link) {
-        const dest = annot.get(N.Dest);
-        const action = annot.lookupMaybe(N.A, PDFDict);
-        if (dest !== undefined) {
-          link = { via: 'Dest', ...resolveDest(doc, dest, pageIndexByRef) };
-          annot.set(N.Dest, PDFNull);
-        } else if (action && action.get(N.S) === N.GoTo) {
-          link = { via: 'A', ...resolveDest(doc, action.get(N.D) ?? PDFNull, pageIndexByRef) };
-          action.set(N.D, PDFNull);
-        }
+      const subtype = annot.get(N.Subtype);
+      if (subtype === N.Widget) annot.delete(N.Parent); // forms are not kept interactive
+      let dest: AnnotInfo['dest'] = null;
+      if (subtype === N.Link && annot.get(N.Dest) !== undefined) {
+        dest = resolveDest(doc, annot.get(N.Dest)!, pageIndexByRef);
+        annot.set(N.Dest, PDFNull);
       }
-      infos.push({ hadP, link });
+      const info: AnnotInfo = { hadP, isLink: subtype === N.Link, dest, actions: collect(annot) };
+      seenAnnots.set(annot, info);
+      infos.push(info);
     }
     return infos;
   });
   return { doc, annots };
+}
+
+function lookupAny(doc: PDFDocument, value: PDFObject | undefined): PDFObject | undefined {
+  return value instanceof PDFRef ? doc.context.lookup(value) : value;
+}
+
+/** Follows `path` from an annotation to an action dictionary in the output. */
+function followPath(
+  out: PDFDocument,
+  annot: PDFDict,
+  path: Step[],
+): { parent: PDFDict | PDFArray; step: Step; dict: PDFDict } | null {
+  let parent: PDFDict | PDFArray = annot;
+  let current: PDFObject | undefined = annot;
+  let step: Step = path[0]!;
+  for (step of path) {
+    if (!(current instanceof PDFDict || current instanceof PDFArray)) return null;
+    parent = current;
+    current = lookupAny(out, typeof step === 'number' ? (current as PDFArray).get(step) : (current as PDFDict).get(step));
+  }
+  return current instanceof PDFDict ? { parent, step, dict: current } : null;
+}
+
+function compareSteps(a: Step[], b: Step[]): number {
+  for (let i = 0; i < Math.min(a.length, b.length); i++) {
+    const x = a[i]!;
+    const y = b[i]!;
+    if (typeof x === 'number' && typeof y === 'number' && x !== y) return x - y;
+  }
+  return 0;
 }
 
 /** Resolves an explicit, named or string destination to a page index in `doc`. */
@@ -261,7 +368,7 @@ function lookupNameTree(doc: PDFDocument, node: PDFDict, key: string, depth: num
 
 function writeOutline(out: PDFDocument, pages: PDFPage[], outline: OutlineNode[]): void {
   const usable = (nodes: OutlineNode[]): OutlineNode[] =>
-    nodes.filter((n) => (n.pageIndex !== null && pages[n.pageIndex]) || usable(n.children).length > 0);
+    nodes.filter((n) => (n.pageIndex !== null && pages[n.pageIndex]) || !!n.url || usable(n.children).length > 0);
   const top = usable(outline);
   if (top.length === 0) return;
   const ctx = out.context;
@@ -278,9 +385,12 @@ function writeOutline(out: PDFDocument, pages: PDFPage[], outline: OutlineNode[]
       if (i < nodes.length - 1) dict.set(N.Next, refs[i + 1]!);
       const index = n.pageIndex ?? firstPageIndex(n.children);
       const page = index === null ? undefined : pages[index];
-      if (page) {
+      if (n.pageIndex === null && n.url) {
+        dict.set(N.A, ctx.obj({ S: 'URI', URI: PDFString.of(n.url) }));
+      } else if (page) {
         if (n.top !== null && n.pageIndex !== null) {
-          const box = page.getMediaBox();
+          // pdf.js measures `top` from the visible (crop) box.
+          const box = page.getCropBox();
           const y = box.y + box.height - n.top;
           dict.set(N.Dest, ctx.obj([page.ref, N.XYZ, PDFNull, y, PDFNull]));
         } else {
@@ -308,6 +418,40 @@ function writeOutline(out: PDFDocument, pages: PDFPage[], outline: OutlineNode[]
   root.set(N.Count, PDFNumber.of(count));
   ctx.assign(rootRef, root);
   out.catalog.set(N.Outlines, rootRef);
+}
+
+/** One label per page as a /PageLabels number tree with literal prefixes. */
+function writePageLabels(out: PDFDocument, labels: Array<string | null>): void {
+  const nums: PDFObject[] = [];
+  labels.forEach((label, i) => {
+    nums.push(PDFNumber.of(i), out.context.obj({ P: PDFHexString.fromText(label ?? String(i + 1)) }));
+  });
+  out.catalog.set(N.PageLabels, out.context.obj({ Nums: out.context.obj(nums) }));
+}
+
+/** Deletes every indirect object that the trailer cannot reach, so nothing dropped survives. */
+function sweepUnreachable(out: PDFDocument): void {
+  const ctx = out.context;
+  const seen = new Set<string>();
+  const stack: PDFObject[] = [ctx.trailerInfo.Root, ctx.trailerInfo.Info].filter(
+    (o): o is PDFObject => o !== undefined,
+  );
+  while (stack.length > 0) {
+    const o = stack.pop()!;
+    if (o instanceof PDFRef) {
+      if (seen.has(o.tag)) continue;
+      seen.add(o.tag);
+      const v = ctx.lookup(o);
+      if (v) stack.push(v);
+    } else if (o instanceof PDFDict) {
+      for (const [, v] of o.entries()) stack.push(v);
+    } else if (o instanceof PDFArray) {
+      stack.push(...o.asArray());
+    } else if (o instanceof PDFStream) {
+      for (const [, v] of o.dict.entries()) stack.push(v);
+    }
+  }
+  for (const [ref] of ctx.enumerateIndirectObjects()) if (!seen.has(ref.tag)) ctx.delete(ref);
 }
 
 function firstPageIndex(nodes: OutlineNode[]): number | null {

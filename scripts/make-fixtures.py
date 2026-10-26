@@ -178,6 +178,71 @@ def links_named(src, path):
         writer.write(f)
 
 
+def restricted(src, rc4_path, aes_path):
+    """Owner-password-only encryption: opens without a password, but the file is encrypted."""
+    from pypdf import PdfReader, PdfWriter
+    for path, algorithm in ((rc4_path, "RC4-128"), (aes_path, "AES-256")):
+        w = PdfWriter(clone_from=PdfReader(src))
+        w.encrypt(user_password="", owner_password="owner", algorithm=algorithm, permissions_flag=0)
+        with open(path, "wb") as f:
+            w.write(f)
+
+
+def forms_actions(src, path):
+    """Page 1 carries a chained GoTo link (to 3, then 2), a push button that goes to page 2,
+    and one widget of a text field whose other widget sits on page 2."""
+    from pypdf import PdfReader, PdfWriter
+    from pypdf.generic import (ArrayObject, DecodedStreamObject, DictionaryObject, FloatObject,
+                               NameObject, NumberObject, TextStringObject)
+    w = PdfWriter(clone_from=PdfReader(src))
+    p1, p2, p3 = w.pages
+    N = NameObject
+
+    def rect(*v):
+        return ArrayObject([FloatObject(x) for x in v])
+
+    def goto(page, nxt=None):
+        a = DictionaryObject({N("/S"): N("/GoTo"), N("/D"): ArrayObject([page.indirect_reference, N("/Fit")])})
+        if nxt is not None:
+            a[N("/Next")] = nxt
+        return a
+
+    helv = w._add_object(DictionaryObject({N("/Type"): N("/Font"), N("/Subtype"): N("/Type1"), N("/BaseFont"): N("/Helvetica")}))
+
+    def ap(text):
+        s = DecodedStreamObject()
+        s.set_data(f"BT /Helv 10 Tf 2 5 Td ({text}) Tj ET".encode())
+        s.update({N("/Type"): N("/XObject"), N("/Subtype"): N("/Form"), N("/BBox"): rect(0, 0, 160, 20),
+                  N("/Resources"): DictionaryObject({N("/Font"): DictionaryObject({N("/Helv"): helv})})})
+        return w._add_object(s)
+
+    link = w._add_object(DictionaryObject({
+        N("/Type"): N("/Annot"), N("/Subtype"): N("/Link"), N("/Rect"): rect(60, 560, 220, 580),
+        N("/Border"): ArrayObject([NumberObject(0)] * 3), N("/A"): goto(p3, goto(p2))}))
+    button = w._add_object(DictionaryObject({
+        N("/Type"): N("/Annot"), N("/Subtype"): N("/Widget"), N("/FT"): N("/Btn"), N("/Ff"): NumberObject(65536),
+        N("/T"): TextStringObject("go"), N("/Rect"): rect(60, 520, 220, 540), N("/P"): p1.indirect_reference,
+        # An indirect action: removing it must not leave the object behind.
+        N("/A"): w._add_object(goto(p2)), N("/AA"): DictionaryObject({N("/E"): goto(p2)}),
+        N("/AP"): DictionaryObject({N("/N"): ap("BUTTON")})}))
+    field = w._add_object(DictionaryObject({N("/FT"): N("/Tx"), N("/T"): TextStringObject("secret"),
+                                            N("/V"): TextStringObject("SHARED-VALUE")}))
+    w1 = w._add_object(DictionaryObject({
+        N("/Type"): N("/Annot"), N("/Subtype"): N("/Widget"), N("/Parent"): field, N("/Rect"): rect(60, 480, 220, 500),
+        N("/P"): p1.indirect_reference, N("/AP"): DictionaryObject({N("/N"): ap("PAGE1-SHOWN")})}))
+    w2 = w._add_object(DictionaryObject({
+        N("/Type"): N("/Annot"), N("/Subtype"): N("/Widget"), N("/Parent"): field, N("/Rect"): rect(60, 480, 220, 500),
+        N("/P"): p2.indirect_reference, N("/AP"): DictionaryObject({N("/N"): ap("PAGE2-ONLY")})}))
+    field.get_object()[N("/Kids")] = ArrayObject([w1, w2])
+    p1[N("/Annots")] = ArrayObject([link, button, w1])
+    p2[N("/Annots")] = ArrayObject([w2])
+    w._root_object[N("/AcroForm")] = DictionaryObject({
+        N("/Fields"): ArrayObject([field, button]), N("/DA"): TextStringObject("/Helv 0 Tf 0 g"),
+        N("/DR"): DictionaryObject({N("/Font"): DictionaryObject({N("/Helv"): helv})})})
+    with open(path, "wb") as f:
+        w.write(f)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--font", default=None, help="TTF with Korean glyphs to embed")
@@ -192,6 +257,8 @@ def main():
     korean(os.path.join(OUT, "한글 문서.pdf"), args.font)
     links(os.path.join(OUT, "links.pdf"))
     links_named(os.path.join(OUT, "links.pdf"), os.path.join(OUT, "links-named.pdf"))
+    restricted(os.path.join(OUT, "simple.pdf"), os.path.join(OUT, "restricted-rc4.pdf"), os.path.join(OUT, "restricted-aes.pdf"))
+    forms_actions(os.path.join(OUT, "simple.pdf"), os.path.join(OUT, "forms-actions.pdf"))
     for name in sorted(os.listdir(OUT)):
         print(f"{name}\t{os.path.getsize(os.path.join(OUT, name))} bytes")
 
