@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   CSS_UNITS,
+  anchoredScroll,
   anchoredScrollTop,
   computeLayout,
   currentPageIndex,
@@ -8,13 +9,17 @@ import {
   fitPageScale,
   fitWidthScale,
   rotatedSize,
+  rowOfPage,
+  scrollLeftToReveal,
   scrollTopForPage,
+  stepRow,
   visibleRange,
   yForDocPoint,
   type Layout,
   type LayoutOptions,
   type PageSize,
   type Rotation,
+  type Spread,
 } from '../../src/viewer/layout';
 
 const A4: PageSize = { width: 595, height: 842 };
@@ -302,6 +307,236 @@ describe('anchoredScrollTop', () => {
   test('is 0 for empty layouts', () => {
     const empty = computeLayout([], opts());
     expect(anchoredScrollTop(empty, empty, 100, 50)).toBe(0);
+  });
+});
+
+describe('two-page rows', () => {
+  const PAGE: PageSize = { width: 600, height: 800 };
+  const SPINE = 8;
+  const W = px(600); // 800
+  const H = px(800); // 1066.67
+  const four = (spread: Spread = 'pairs') => computeLayout([PAGE, PAGE, PAGE, PAGE], opts({ spread, spineGap: SPINE }));
+
+  test('pairs put two pages per row, meeting at the spine gap', () => {
+    const layout = four();
+    expect(layout.rows).toHaveLength(2);
+    expect(layout.rows[0]).toMatchObject({ first: 0, last: 1 });
+    expect(layout.rows[1]).toMatchObject({ first: 2, last: 3 });
+    const [p0, p1, p2] = layout.pages;
+    expect(p1!.left - (p0!.left + p0!.width)).toBeCloseTo(SPINE, 6);
+    expect(p0!.top).toBeCloseTo(p1!.top, 6);
+    expect(p2!.top).toBeCloseTo(PADDING + H + GAP, 6);
+    expect(layout.totalHeight).toBeCloseTo(PADDING + 2 * H + GAP + PADDING, 6);
+  });
+
+  test('the spine is the horizontal center of the content', () => {
+    const layout = four();
+    // 2 × 800 + 8 + 2 × 24 = 1656 > 1000
+    expect(layout.contentWidth).toBeCloseTo(2 * W + SPINE + 2 * PADDING, 6);
+    const spine = layout.contentWidth / 2;
+    expect(layout.pages[0]!.left + layout.pages[0]!.width).toBeCloseTo(spine - SPINE / 2, 6);
+    expect(layout.pages[1]!.left).toBeCloseTo(spine + SPINE / 2, 6);
+  });
+
+  test('a lone last page sits on the left of the spine', () => {
+    const layout = computeLayout([PAGE, PAGE, PAGE], opts({ spread: 'pairs', spineGap: SPINE }));
+    expect(layout.rows).toHaveLength(2);
+    expect(layout.rows[1]).toMatchObject({ first: 2, last: 2 });
+    const spine = layout.contentWidth / 2;
+    expect(layout.pages[2]!.left + layout.pages[2]!.width).toBeCloseTo(spine - SPINE / 2, 6);
+  });
+
+  test('book mode puts the first page alone on the right', () => {
+    const layout = four('book');
+    expect(layout.rows.map((r) => [r.first, r.last])).toEqual([[0, 0], [1, 2], [3, 3]]);
+    const spine = layout.contentWidth / 2;
+    expect(layout.pages[0]!.left).toBeGreaterThanOrEqual(spine);
+    expect(layout.pages[1]!.left + layout.pages[1]!.width).toBeCloseTo(spine - SPINE / 2, 6);
+    expect(layout.pages[2]!.left).toBeCloseTo(spine + SPINE / 2, 6);
+    expect(layout.pages[3]!.left + layout.pages[3]!.width).toBeCloseTo(spine - SPINE / 2, 6);
+  });
+
+  test('pages of different heights in one row share a vertical center', () => {
+    const layout = computeLayout([A4, LANDSCAPE], opts({ spread: 'pairs', spineGap: SPINE }));
+    const [p0, p1] = layout.pages;
+    expect(p0!.top + p0!.height / 2).toBeCloseTo(p1!.top + p1!.height / 2, 6);
+    expect(layout.rows[0]!.height).toBeCloseTo(px(842), 6);
+    expect(p0!.top).toBeCloseTo(PADDING, 6); // the taller page starts at the row top
+    expect(p1!.top).toBeGreaterThan(p0!.top);
+  });
+
+  test('continuous scroll is rows of one', () => {
+    const layout = threeA4();
+    expect(layout.rows.map((r) => [r.first, r.last])).toEqual([[0, 0], [1, 1], [2, 2]]);
+    expect(layout.rows[1]!.top).toBeCloseTo(layout.pages[1]!.top, 6);
+  });
+
+  test('rowOfPage finds the row holding a page', () => {
+    const layout = four();
+    expect(rowOfPage(layout, 0)).toBe(0);
+    expect(rowOfPage(layout, 1)).toBe(0);
+    expect(rowOfPage(layout, 3)).toBe(1);
+    expect(rowOfPage(four('book'), 0)).toBe(0);
+    expect(rowOfPage(four('book'), 1)).toBe(1);
+    expect(rowOfPage(four('book'), 3)).toBe(2);
+    expect(rowOfPage(threeA4(), 2)).toBe(2);
+  });
+
+  test('stepRow moves one row and clamps at the ends', () => {
+    const layout = four();
+    expect(stepRow(layout, 0, 1)).toBe(2);
+    expect(stepRow(layout, 1, 1)).toBe(2);
+    expect(stepRow(layout, 3, 1)).toBe(2);
+    expect(stepRow(layout, 3, -1)).toBe(0);
+    expect(stepRow(layout, 0, -1)).toBe(0);
+    expect(stepRow(four('book'), 0, 1)).toBe(1);
+    expect(stepRow(four('book'), 2, 1)).toBe(3);
+    expect(stepRow(threeA4(), 1, 1)).toBe(2);
+    expect(stepRow(threeA4(), 1, -1)).toBe(0);
+  });
+
+  test('fitWidthScale fits both pages of a row', () => {
+    const single = fitWidthScale([PAGE], 0, CONTAINER_WIDTH, PADDING);
+    const pairs = fitWidthScale([PAGE, PAGE], 0, CONTAINER_WIDTH, PADDING, 'pairs', SPINE);
+    expect(pairs).toBeCloseTo((CONTAINER_WIDTH - 2 * PADDING - SPINE) / (2 * W), 10);
+    expect(pairs).toBeLessThan(single / 2);
+    const layout = computeLayout([PAGE, PAGE], opts({ scale: pairs, spread: 'pairs', spineGap: SPINE }));
+    expect(layout.contentWidth).toBeCloseTo(CONTAINER_WIDTH, 6);
+    expect(layout.pages[0]!.left).toBeCloseTo(PADDING, 6);
+    expect(layout.pages[1]!.left + layout.pages[1]!.width).toBeCloseTo(CONTAINER_WIDTH - PADDING, 6);
+  });
+
+  test('fitPageScale fits a whole row', () => {
+    const scale = fitPageScale([PAGE, PAGE], 0, CONTAINER_WIDTH, 2000, PADDING, 'pairs', SPINE);
+    expect(scale).toBeCloseTo((CONTAINER_WIDTH - 2 * PADDING - SPINE) / (2 * W), 10);
+    const short = fitPageScale([PAGE, PAGE], 0, CONTAINER_WIDTH, 500, PADDING, 'pairs', SPINE);
+    expect(short).toBeCloseTo((500 - 2 * PADDING) / H, 10);
+  });
+
+  test('visibleRange covers whole rows', () => {
+    const layout = four();
+    expect(visibleRange(layout, 0, VIEWPORT_HEIGHT, 0)).toEqual({ first: 0, last: 1 });
+    expect(visibleRange(layout, PADDING + H + GAP / 2, VIEWPORT_HEIGHT, 0)).toEqual({ first: 2, last: 3 });
+    expect(visibleRange(layout, 1000, VIEWPORT_HEIGHT, 0)).toEqual({ first: 0, last: 3 });
+  });
+
+  test('visibleRange finds rows whose pages are not in top order', () => {
+    // Row 0: landscape (short) then portrait (tall): page 1's top is above page 0's.
+    const layout = computeLayout([LANDSCAPE, A4, A4, A4], opts({ spread: 'pairs', spineGap: SPINE }));
+    expect(layout.pages[1]!.top).toBeLessThan(layout.pages[0]!.top);
+    expect(visibleRange(layout, 30, 10, 0)).toEqual({ first: 0, last: 1 });
+  });
+
+  test('currentPageIndex returns the left page when both pages are fully visible', () => {
+    const layout = computeLayout([SMALL, SMALL, SMALL, SMALL], opts({ spread: 'pairs', spineGap: SPINE }));
+    expect(layout.rows[0]).toMatchObject({ first: 0, last: 1 });
+    expect(currentPageIndex(layout, 0, VIEWPORT_HEIGHT)).toBe(0);
+  });
+
+  test('currentPageIndex returns the left page of the most visible row', () => {
+    const layout = four();
+    expect(currentPageIndex(layout, 300, VIEWPORT_HEIGHT)).toBe(0);
+    expect(currentPageIndex(layout, 1000, VIEWPORT_HEIGHT)).toBe(2);
+    // Row 0 of a mixed pair: the right (landscape) page is shorter but the row still counts once.
+    const mixed = computeLayout([A4, LANDSCAPE, A4, A4], opts({ spread: 'pairs', spineGap: SPINE }));
+    expect(currentPageIndex(mixed, 0, VIEWPORT_HEIGHT)).toBe(0);
+  });
+
+  test('scrollTopForPage goes to the row top', () => {
+    const layout = computeLayout([A4, LANDSCAPE, A4, A4], opts({ spread: 'pairs', spineGap: SPINE }));
+    expect(scrollTopForPage(layout, 1)).toBe(0);
+    expect(scrollTopForPage(layout, 3)).toBeCloseTo(layout.rows[1]!.top - PADDING, 6);
+  });
+
+  test('docPointAt picks the page of the row under x and round-trips', () => {
+    const layout = four();
+    const y = PADDING + H / 2;
+    const spine = layout.contentWidth / 2;
+    expect(docPointAt(layout, y).index).toBe(0);
+    expect(docPointAt(layout, y, spine - 100).index).toBe(0);
+    const right = docPointAt(layout, y, spine + 100);
+    expect(right.index).toBe(1);
+    expect(right.fraction).toBeCloseTo(0.5, 10);
+    expect(yForDocPoint(layout, right)).toBeCloseTo(y, 6);
+    expect(docPointAt(layout, PADDING + H + GAP + 10, spine + 50).index).toBe(3);
+  });
+
+  test('docPointAt uses the page that spans y when the row mixes heights', () => {
+    const layout = computeLayout([LANDSCAPE, A4], opts({ spread: 'pairs', spineGap: SPINE }));
+    expect(layout.rows).toHaveLength(1);
+    // Above the landscape page but inside the portrait one.
+    const y = layout.pages[1]!.top + 10;
+    expect(docPointAt(layout, y).index).toBe(1);
+  });
+
+  test('anchoredScroll keeps the point under the anchor fixed in both directions', () => {
+    const oldLayout = four();
+    const newLayout = computeLayout([PAGE, PAGE, PAGE, PAGE], opts({ scale: 2, spread: 'pairs', spineGap: SPINE }));
+    const scroll = { top: 100, left: 300 };
+    const anchor = { x: 700, y: 400 };
+    const docX = scroll.left + anchor.x; // on page 1 (right of the spine at 828)
+    const point = docPointAt(oldLayout, scroll.top + anchor.y, docX);
+    expect(point.index).toBe(1);
+    const fx = (docX - oldLayout.pages[1]!.left) / oldLayout.pages[1]!.width;
+
+    const next = anchoredScroll(oldLayout, newLayout, scroll, anchor);
+    const after = docPointAt(newLayout, next.top + anchor.y, next.left + anchor.x);
+    expect(after.index).toBe(1);
+    expect(after.fraction).toBeCloseTo(point.fraction, 10);
+    const p1 = newLayout.pages[1]!;
+    expect((next.left + anchor.x - p1.left) / p1.width).toBeCloseTo(fx, 10);
+  });
+
+  test('anchoredScroll clamps at 0 and is 0 for empty layouts', () => {
+    const empty = computeLayout([], opts());
+    expect(anchoredScroll(empty, empty, { top: 100, left: 100 }, { x: 10, y: 10 })).toEqual({ top: 0, left: 0 });
+    const oldLayout = threeA4();
+    const small = computeLayout([A4, A4, A4], opts({ scale: 0.5 }));
+    expect(anchoredScroll(oldLayout, small, { top: 0, left: 0 }, { x: 500, y: 400 }).top).toBe(0);
+  });
+});
+
+describe('scrollLeftToReveal', () => {
+  const PAGE: PageSize = { width: 600, height: 800 }; // 800 × 1066.67 px
+  const pairs = computeLayout([PAGE, PAGE], opts({ spread: 'pairs', spineGap: 8 })); // pages at 24 and 832
+  const VW = 1000;
+
+  test('scrolls the least that shows a page that fits, padding included', () => {
+    // Page 1 spans [832, 1632]: its right edge plus padding ends the viewport.
+    expect(scrollLeftToReveal(pairs, 1, 0, VW)).toBeCloseTo(1632 + PADDING - VW, 6);
+    // Page 0 spans [24, 824]: from the right it is revealed at its left edge minus padding.
+    expect(scrollLeftToReveal(pairs, 0, 656, VW)).toBeCloseTo(0, 6);
+  });
+
+  test('leaves the scroll alone when the page is already in view', () => {
+    expect(scrollLeftToReveal(pairs, 0, 0, VW)).toBe(0);
+    expect(scrollLeftToReveal(pairs, 1, 656, VW)).toBe(656);
+  });
+
+  test('leaves the scroll alone when a page wider than the viewport covers it', () => {
+    const wide = computeLayout([A4, A4], opts({ scale: 3 })); // 2380 px wide, one column
+    expect(scrollLeftToReveal(wide, 1, 700, VW)).toBe(700);
+  });
+
+  test('aligns the near edge of a wide page that does not cover the viewport', () => {
+    const wide = computeLayout([PAGE, PAGE], opts({ scale: 2, spread: 'pairs', spineGap: 8 }));
+    const p1 = wide.pages[1]!; // 1600 px wide, right of the spine
+    expect(scrollLeftToReveal(wide, 1, 0, VW)).toBeCloseTo(p1.left - PADDING, 6);
+  });
+});
+
+describe('anchoredScroll beside a shorter page', () => {
+  test('keeps a point above the shorter page of a row at its distance from that page', () => {
+    const oldLayout = computeLayout([A4, LANDSCAPE], opts({ spread: 'pairs', spineGap: 8 }));
+    const newLayout = computeLayout([A4, LANDSCAPE], opts({ scale: 2, spread: 'pairs', spineGap: 8 }));
+    const from = oldLayout.pages[1]!; // landscape, vertically centered: blank space above it
+    const anchor = { x: 500, y: 100 };
+    const scroll = { top: 0, left: from.left + from.width / 2 - anchor.x };
+    const docY = scroll.top + anchor.y;
+    expect(docY).toBeLessThan(from.top); // over the blank space, right column
+    const next = anchoredScroll(oldLayout, newLayout, scroll, anchor);
+    const to = newLayout.pages[1]!;
+    expect(next.top + anchor.y - to.top).toBeCloseTo(((docY - from.top) * to.height) / from.height, 6);
   });
 });
 

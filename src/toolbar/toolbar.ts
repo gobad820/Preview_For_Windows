@@ -179,6 +179,11 @@ export class Toolbar {
     swatch.dataset['kind'] = state.kind;
   }
 
+  /** Reflects on the View chevron whether its menu is open. */
+  setViewMenuOpen(open: boolean): void {
+    this.q('[data-action="view-menu"]').setAttribute('aria-expanded', String(open));
+  }
+
   focusPageInput(): void {
     if (this.pageInput.disabled) return;
     this.pageInput.focus();

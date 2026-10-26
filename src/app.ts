@@ -7,12 +7,13 @@ import { FindBar } from './search/findbar';
 import { Sidebar } from './sidebar/sidebar';
 import { bindShortcuts, type Action } from './shortcuts';
 import { loadFileState, saveFileState } from './state/fileState';
-import { createStore, initialState, type Store, type ViewerState } from './store';
+import { loadPrefs, savePrefs } from './state/prefs';
+import { createStore, initialState, type DisplayMode, type SidebarTab, type Store, type ViewerState } from './store';
 import { Toolbar } from './toolbar/toolbar';
 import type { Rotation } from './types';
 import type { DocPoint } from './viewer/layout';
 import { showAlert } from './ui/dialog';
-import { showMenu } from './ui/menu';
+import { showMenu, type MenuItem } from './ui/menu';
 import { PdfViewer } from './viewer/viewer';
 import { zoomIn, zoomOut } from './viewer/zoom';
 import type { Composition } from './edit/composition';
@@ -59,6 +60,16 @@ export class App {
       },
     });
 
+    // ---- page layout (Continuous Scroll / Two Pages): a window-wide preference ----
+    this.store.set(loadPrefs());
+    this.store.subscribe((s, prev) => {
+      if (s.displayMode !== prev.displayMode || s.bookMode !== prev.bookMode) {
+        this.viewer.setDisplay(s.displayMode, s.bookMode);
+        savePrefs({ displayMode: s.displayMode, bookMode: s.bookMode });
+      }
+    });
+    this.viewer.setDisplay(this.store.get().displayMode, this.store.get().bookMode);
+
     this.store.select('status', (s) => {
       appEl.dataset['status'] = s;
     });
@@ -100,7 +111,7 @@ export class App {
       toggleMarkup: () => this.store.set({ markupOpen: !this.store.get().markupOpen }),
       highlight: () => {},
       highlightMenu: () => {},
-      viewMenu: () => {},
+      viewMenu: (anchor) => this.viewMenu(anchor),
     }, this.platform.windowControls);
     const markupBar = this.el('markupbar');
     this.store.select('markupOpen', (open) => {
@@ -248,11 +259,11 @@ export class App {
         break;
       case 'next-page':
         if (this.viewer.overflowsHorizontally()) this.viewer.panBy(PAN_STEP);
-        else this.viewer.goToPage(s.currentPage);
+        else this.viewer.stepPage(1);
         break;
       case 'prev-page':
         if (this.viewer.overflowsHorizontally()) this.viewer.panBy(-PAN_STEP);
-        else this.viewer.goToPage(s.currentPage - 2);
+        else this.viewer.stepPage(-1);
         break;
       case 'first-page':
         this.viewer.goToPage(0);
@@ -484,6 +495,53 @@ export class App {
       { label: 'Undo', shortcut: 'Ctrl+Z', disabled: !doc?.canUndo, action: () => this.editor.undo() },
       { label: 'Redo', shortcut: 'Ctrl+Y', disabled: !doc?.canRedo, action: () => this.editor.redo() },
     ]);
+  }
+
+  /** The View menu (the chevron by the sidebar button): sidebar and page layout, as in Preview. */
+  viewMenu(anchor: DOMRect): void {
+    const s = this.store.get();
+    const sidebar = (tab: SidebarTab): MenuItem => ({
+      label: tab === 'thumbnails' ? 'Thumbnails' : 'Table of Contents',
+      radio: true,
+      checked: s.sidebarOpen && s.sidebarTab === tab,
+      disabled: tab === 'outline' && !this.sidebar.outlineAvailable,
+      action: () => this.store.set({ sidebarOpen: true, sidebarTab: tab }),
+    });
+    const display = (mode: DisplayMode): MenuItem => ({
+      label: mode === 'continuous' ? 'Continuous Scroll' : 'Two Pages',
+      radio: true,
+      checked: s.displayMode === mode,
+      action: () => this.store.set({ displayMode: mode }),
+    });
+    // The toolbar anchors the menu on the sidebar button; the press-to-close area covers the chevron too.
+    const chevron = this.root.querySelector('[data-action="view-menu"]')?.getBoundingClientRect();
+    const at = chevron
+      ? new DOMRect(
+          anchor.left,
+          anchor.top,
+          Math.max(anchor.right, chevron.right) - anchor.left,
+          Math.max(anchor.bottom, chevron.bottom) - anchor.top,
+        )
+      : anchor;
+    this.toolbar.setViewMenuOpen(true);
+    void showMenu(at, [
+      {
+        label: s.sidebarOpen ? 'Hide Sidebar' : 'Show Sidebar',
+        shortcut: 'Ctrl+Alt+S',
+        action: () => this.store.set({ sidebarOpen: !this.store.get().sidebarOpen }),
+      },
+      sidebar('thumbnails'),
+      sidebar('outline'),
+      'separator',
+      display('continuous'),
+      display('two-pages'),
+      {
+        label: 'Book Mode',
+        checked: s.bookMode,
+        disabled: s.displayMode !== 'two-pages',
+        action: () => this.store.set({ bookMode: !this.store.get().bookMode }),
+      },
+    ]).then(() => this.toolbar.setViewMenuOpen(false));
   }
 
   /** Picks PDFs and merges them after the selection. */
