@@ -59,7 +59,6 @@ const N = {
   XYZ: PDFName.of('XYZ'),
   Fit: PDFName.of('Fit'),
   AA: PDFName.of('AA'),
-  Next: PDFName.of('Next'),
   Widget: PDFName.of('Widget'),
   URI: PDFName.of('URI'),
   PageLabels: PDFName.of('PageLabels'),
