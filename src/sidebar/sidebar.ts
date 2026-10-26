@@ -1,0 +1,133 @@
+import type { PdfDocument } from '../pdf/document';
+import type { PageRenderer } from '../pdf/renderer';
+import type { SidebarTab, Store, ViewerState } from '../store';
+import { OutlineTree } from './outline';
+import { ThumbnailList } from './thumbnails';
+
+export interface SidebarDeps {
+  doc: PdfDocument | null;
+  renderer: PageRenderer | null;
+  goToPage(index: number, top?: number): void;
+}
+
+const TABS: { id: SidebarTab; label: string }[] = [
+  { id: 'thumbnails', label: 'Thumbnails' },
+  { id: 'outline', label: 'Outline' },
+];
+
+/**
+ * Sidebar shell: a Thumbnails / Outline tab strip over one scrolling panel per tab.
+ * Visibility (`hidden` on the host) is driven by whoever owns `sidebarOpen`; the active tab lives in
+ * `store.sidebarTab`. Nothing in here ever takes keyboard focus away from the viewer.
+ */
+export class Sidebar {
+  readonly thumbnails: ThumbnailList;
+  readonly outline: OutlineTree;
+  private doc: PdfDocument | null = null;
+  private readonly tabs = new Map<SidebarTab, HTMLButtonElement>();
+  private readonly panels = new Map<SidebarTab, HTMLElement>();
+  private readonly unsubscribers: (() => void)[] = [];
+
+  constructor(
+    private readonly host: HTMLElement,
+    private readonly store: Store<ViewerState>,
+    deps: SidebarDeps,
+  ) {
+    const strip = document.createElement('div');
+    strip.className = 'sidebar-tabs';
+    strip.setAttribute('role', 'tablist');
+    for (const { id, label } of TABS) {
+      const tab = document.createElement('button');
+      tab.type = 'button';
+      tab.className = 'sidebar-tab';
+      tab.tabIndex = -1;
+      tab.dataset['tab'] = id;
+      tab.setAttribute('role', 'tab');
+      tab.textContent = label;
+      tab.addEventListener('click', () => {
+        if (!tab.disabled) this.store.set({ sidebarTab: id });
+      });
+      strip.append(tab);
+      this.tabs.set(id, tab);
+
+      const panel = document.createElement('div');
+      panel.className = `sidebar-panel ${id}`;
+      panel.dataset['panel'] = id;
+      panel.setAttribute('role', 'tabpanel');
+      panel.hidden = true;
+      this.panels.set(id, panel);
+    }
+    host.append(strip, ...this.panels.values());
+    // Buttons never take focus: mousedown's default action is what moves it.
+    host.addEventListener('mousedown', (e) => {
+      if ((e.target as Element | null)?.closest('button')) e.preventDefault();
+    });
+
+    this.thumbnails = new ThumbnailList(this.panels.get('thumbnails')!, store, {
+      goToPage: (index) => deps.goToPage(index),
+    });
+    this.outline = new OutlineTree(this.panels.get('outline')!, {
+      goToPage: (index, top) => deps.goToPage(index, top),
+    });
+    this.setOutlineAvailable(false);
+
+    this.unsubscribers.push(
+      store.select('sidebarTab', (tab) => this.showTab(tab)),
+      store.select('currentPage', (page) => this.thumbnails.setCurrent(page)),
+      store.select('sidebarOpen', (open) => {
+        // The owner un-hides the host in its own subscriber; sync once layout exists.
+        if (open) requestAnimationFrame(() => this.thumbnails.scrollCurrentIntoView());
+      }),
+    );
+    if (deps.doc) this.setDocument(deps.doc, deps.renderer);
+  }
+
+  /** Swaps the document shown; `renderer` must be a separate instance from the viewer's. */
+  setDocument(doc: PdfDocument | null, renderer: PageRenderer | null): void {
+    this.doc = doc;
+    this.thumbnails.setDocument(doc, renderer);
+    this.outline.setOutline([]);
+    this.setOutlineAvailable(false);
+    if (!doc) return;
+    doc
+      .getOutline()
+      .catch(() => [])
+      .then((nodes) => {
+        if (this.doc !== doc) return;
+        this.outline.setOutline(nodes);
+        this.setOutlineAvailable(nodes.length > 0);
+      });
+  }
+
+  /** Call after `PdfDocument.loadSizes` reported a batch. */
+  sizesChanged(): void {
+    this.thumbnails.sizesChanged();
+  }
+
+  destroy(): void {
+    for (const u of this.unsubscribers) u();
+    this.thumbnails.destroy();
+    this.outline.destroy();
+    this.host.replaceChildren();
+  }
+
+  // ---- internals ----------------------------------------------------------
+
+  private setOutlineAvailable(available: boolean): void {
+    const tab = this.tabs.get('outline')!;
+    tab.disabled = !available;
+    if (available) tab.removeAttribute('title');
+    else tab.title = 'No outline';
+    if (!available && this.store.get().sidebarTab === 'outline') this.store.set({ sidebarTab: 'thumbnails' });
+  }
+
+  private showTab(active: SidebarTab): void {
+    for (const [id, tab] of this.tabs) {
+      const on = id === active;
+      tab.classList.toggle('active', on);
+      tab.setAttribute('aria-selected', String(on));
+      this.panels.get(id)!.hidden = !on;
+    }
+    if (active === 'thumbnails') this.thumbnails.scrollCurrentIntoView();
+  }
+}
