@@ -98,6 +98,8 @@ public static class PfwGuard {
       try {
         // 1. OLE file drop from the drag source onto the gap between thumbnails.
         Pause(700);
+        // Never press anywhere but on our own drag source (e.g. not on a lock screen).
+        if (OwnerAt(sx, sy) != (uint)System.Diagnostics.Process.GetCurrentProcess().Id) throw new Exception("drag source not under the cursor");
         MoveTo(sx, sy); Pause(120); Down(sx, sy); Pause(120);
         Glide(sx, sy, sx + 24, sy, 6, 20);
         Glide(sx + 24, sy, dropX, dropY, 24, 25);
