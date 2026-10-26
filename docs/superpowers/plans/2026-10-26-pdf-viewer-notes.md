@@ -24,6 +24,19 @@ What was verified, where, and what is still unverified. Companion to
 - Keyboard shortcuts inside WebView2 (`hardenWebview` blocks F5/Ctrl+R etc.).
 - Trackpad pinch (wheel events with `ctrlKey`) on a real touchpad.
 
+## Code review (fresh-context reviewer, whole branch)
+
+Verdict: no critical issues; five important ones, all fixed in
+`fix: address code review findings`: canvas backing-store cap at extreme
+zoom, `page.cleanup()` when pages leave the viewport, UNC-safe startup
+paths (`std::path::absolute`), arrow-key panning when the page is wider
+than the viewport, and a password prompt for encrypted PDFs. Minor items
+fixed: Escape scoping, loading cue, outline top level expanded,
+`menuitemradio` roles, narrower dialog permission, `cargo fmt --check`
+in the build script, unused members. Left as noted below: thumbnails do
+not re-render on a DPR change; the find bar's initial scroll ignores a
+non-zero MediaBox origin (self-corrects).
+
 ## Known gaps / follow-ups
 
 - Find highlights are approximate at the glyph level (pdf.js text layer

@@ -331,7 +331,7 @@ tests/fixtures/{simple.pdf,mixed.pdf,long300.pdf,outline.pdf,encrypted.pdf,broke
 **Files:**
 - Modify: `README.md`; Create: `docs/superpowers/plans/2026-10-26-pdf-viewer-notes.md` (what was verified where, known gaps)
 
-- [ ] **Step 1: README**: what it is, screenshot, features, shortcuts table, build instructions (WSL cross-build), install/portable notes, non-goals.
-- [ ] **Step 2: Run `npm test`, `npm run e2e`, `cargo fmt --check` (in `src-tauri`), `scripts/build-windows.sh --bundle`** — all pass.
-- [ ] **Step 3: Request a fresh-context code review** (superpowers:requesting-code-review) of the whole branch; fix anything blocking.
-- [ ] **Step 4: Commit** `docs: readme and verification notes`.
+- [x] **Step 1: README**: what it is, screenshot, features, shortcuts table, build instructions (WSL cross-build), install/portable notes, non-goals.
+- [x] **Step 2: Run `npm test`, `npm run e2e`, `cargo fmt --check` (in `src-tauri`), `scripts/build-windows.sh --bundle`** — all pass.
+- [x] **Step 3: Request a fresh-context code review** (superpowers:requesting-code-review) of the whole branch; fix anything blocking.
+- [x] **Step 4: Commit** `docs: readme and verification notes`.
