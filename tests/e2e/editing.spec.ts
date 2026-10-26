@@ -268,6 +268,64 @@ test.describe('page editing', () => {
     await expect(page.locator('.page[data-page="1"] mark.find-match')).toHaveCount(1);
   });
 
+  test('the thumbnail context menu edits pages', async ({ page }) => {
+    await open(page, 'simple.pdf');
+    await thumb(page, 2).click({ button: 'right' });
+    expect(await selected(page)).toEqual(['2']);
+    const menu = page.getByRole('menu');
+    await expect(menu).toBeVisible();
+    await expect(menu.getByRole('menuitem', { name: /Copy/ })).toBeVisible();
+    await menu.getByRole('menuitem', { name: /Delete/ }).click();
+    await expect(menu).toBeHidden();
+    expect(await keys(page)).toEqual(['0:0', '0:2']);
+  });
+
+  test('Insert Pages from File merges after the selection', async ({ page }) => {
+    await open(page, 'simple.pdf');
+    await thumb(page, 1).click();
+    await page.evaluate(() => ((window as any).__pfwNextOpenPaths = ['fixtures/mixed.pdf', 'fixtures/한글 문서.pdf']));
+    await thumb(page, 1).click({ button: 'right' });
+    await page.getByRole('menuitem', { name: /Insert Pages from File/ }).click();
+    await expect
+      .poll(() => keys(page))
+      .toEqual(['0:0', '1:0', '1:1', '1:2', '2:0', '2:1', '0:1', '0:2']);
+  });
+
+  test('closing with unsaved changes asks first', async ({ page }) => {
+    await open(page, 'simple.pdf');
+    expect(await page.evaluate(() => (window as any).__pfwRequestClose())).toBe(true); // clean: closes
+    await thumb(page, 2).click();
+    await page.keyboard.press('Delete');
+    const ask = page.evaluate(() => (window as any).__pfwRequestClose());
+    const alert = page.getByRole('alertdialog');
+    await expect(alert).toContainText('Do you want to save the changes made to the document “simple.pdf”?');
+    await alert.getByRole('button', { name: 'Cancel' }).click();
+    expect(await ask).toBe(false);
+    expect((await state(page)).dirty).toBe(true);
+
+    const discard = page.evaluate(() => (window as any).__pfwRequestClose());
+    await alert.getByRole('button', { name: "Don't Save" }).click();
+    expect(await discard).toBe(true);
+    expect(await page.evaluate(() => (window as any).__pfwFiles.has('fixtures/simple.pdf'))).toBe(false);
+
+    const save = page.evaluate(() => (window as any).__pfwRequestClose());
+    await alert.getByRole('button', { name: 'Save', exact: true }).click();
+    expect(await save).toBe(true);
+    expect(await page.evaluate(() => (window as any).__pfwFiles.has('fixtures/simple.pdf'))).toBe(true);
+    expect((await state(page)).dirty).toBe(false);
+  });
+
+  test('opening another file into an edited window asks first', async ({ page }) => {
+    await open(page, 'simple.pdf');
+    await thumb(page, 2).click();
+    await page.keyboard.press('Delete');
+    const opening = page.evaluate(() => (window as any).__pfw.app.openOrSpawn('fixtures/mixed.pdf'));
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel' }).click();
+    await opening;
+    expect((await state(page)).fileName).toBe('simple.pdf');
+    expect((await state(page)).numPages).toBe(2);
+  });
+
   test('edits above the view keep the visible page and reuse its rendering', async ({ page }) => {
     await open(page, 'long300.pdf');
     await page.evaluate(() => (window as any).__pfw.store.set({ sidebarOpen: false }));

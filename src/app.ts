@@ -11,6 +11,8 @@ import { createStore, initialState, type Store, type ViewerState } from './store
 import { Toolbar } from './toolbar/toolbar';
 import type { Rotation } from './types';
 import type { DocPoint } from './viewer/layout';
+import { showAlert } from './ui/dialog';
+import { showMenu } from './ui/menu';
 import { PdfViewer } from './viewer/viewer';
 import { zoomIn, zoomOut } from './viewer/zoom';
 import type { Composition } from './edit/composition';
@@ -167,6 +169,7 @@ export class App {
       editor: this.editor,
       metrics: this.metrics,
     };
+    (window as unknown as { __pfwUi: unknown }).__pfwUi = { showMenu, showAlert };
   }
 
   /** The document being edited, if any. */
@@ -384,14 +387,56 @@ export class App {
     return this.save();
   }
 
-  /** Replaced by the Mac-style alert once the UI branch lands. */
-  protected async askUnsaved(name: string): Promise<'save' | 'discard' | 'cancel'> {
-    const save = window.confirm(`Do you want to save the changes made to the document “${name}”?`);
-    return save ? 'save' : 'discard';
+  private async askUnsaved(name: string): Promise<'save' | 'discard' | 'cancel'> {
+    const { value } = await showAlert({
+      title: `Do you want to save the changes made to the document “${name}”?`,
+      message: "Your changes will be lost if you don't save them.",
+      buttons: [
+        { label: 'Save', value: 'save', primary: true },
+        { label: "Don't Save", value: 'discard' },
+        { label: 'Cancel', value: 'cancel', cancel: true },
+      ],
+    });
+    return value === 'save' || value === 'discard' ? value : 'cancel';
   }
 
-  /** Thumbnail context menu; filled in once the menu component is available. */
-  protected pageContextMenu(_point: Point): void {}
+  /** Right-click on a thumbnail. */
+  private pageContextMenu(point: Point): void {
+    const has = this.editor.selection.size > 0;
+    void showMenu(point, [
+      { label: 'Cut', shortcut: 'Ctrl+X', disabled: !has, action: () => void this.editor.cutSelection() },
+      { label: 'Copy', shortcut: 'Ctrl+C', disabled: !has, action: () => void this.editor.copySelection() },
+      { label: 'Paste', shortcut: 'Ctrl+V', action: () => void this.editor.paste() },
+      { label: 'Delete', shortcut: 'Delete', disabled: !has, action: () => this.editor.deleteSelection() },
+      'separator',
+      { label: 'Select All', shortcut: 'Ctrl+A', action: () => this.editor.selectAll() },
+      'separator',
+      { label: 'Insert Pages from File…', action: () => void this.insertPagesFromFile() },
+    ]);
+  }
+
+  /** The toolbar's ⋯ menu: file and edit commands. */
+  moreMenu(anchor: DOMRect): void {
+    const doc = this.doc;
+    void showMenu(anchor, [
+      { label: 'Open…', shortcut: 'Ctrl+O', action: () => void this.open() },
+      'separator',
+      { label: 'Save', shortcut: 'Ctrl+S', disabled: !doc, action: () => void this.save() },
+      { label: 'Save As…', shortcut: 'Ctrl+Shift+S', disabled: !doc, action: () => void this.saveAs() },
+      'separator',
+      { label: 'Insert Pages from File…', disabled: !doc, action: () => void this.insertPagesFromFile() },
+      'separator',
+      { label: 'Undo', shortcut: 'Ctrl+Z', disabled: !doc?.canUndo, action: () => this.editor.undo() },
+      { label: 'Redo', shortcut: 'Ctrl+Y', disabled: !doc?.canRedo, action: () => this.editor.redo() },
+    ]);
+  }
+
+  /** Picks PDFs and merges them after the selection. */
+  async insertPagesFromFile(): Promise<void> {
+    if (!this.doc) return;
+    const paths = await this.platform.openFilesDialog();
+    if (paths.length > 0) await this.editor.insertFiles(paths);
+  }
 
   // ---- merging ----------------------------------------------------------------
 

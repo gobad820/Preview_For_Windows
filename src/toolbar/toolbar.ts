@@ -19,7 +19,7 @@ const ZOOM_PRESETS = [0.5, 0.75, 1, 1.25, 1.5, 2, 4];
 const template = `
   <div class="tb-group">
     <button class="tb-btn" data-action="sidebar" title="Sidebar (Ctrl+Shift+S)" aria-label="Toggle sidebar" aria-pressed="false">${icons.sidebar}</button>
-    <button class="tb-btn" data-action="open" title="Open… (Ctrl+O)" aria-label="Open file">${icons.open}</button>
+    <button class="tb-btn" data-action="open" title="Open… (Ctrl+O)" aria-label="Open file">${icons.document}</button>
   </div>
   <div class="tb-spacer"></div>
   <div class="tb-group tb-page">
@@ -29,13 +29,13 @@ const template = `
   </div>
   <div class="tb-spacer"></div>
   <div class="tb-group">
-    <button class="tb-btn" data-action="zoom-out" title="Zoom Out (Ctrl+-)" aria-label="Zoom out" disabled>${icons.minus}</button>
+    <button class="tb-btn" data-action="zoom-out" title="Zoom Out (Ctrl+-)" aria-label="Zoom out" disabled>${icons.zoomOut}</button>
     <button class="tb-btn tb-zoom" data-zoom-menu title="Zoom" aria-haspopup="menu" aria-expanded="false" disabled>100%</button>
-    <button class="tb-btn" data-action="zoom-in" title="Zoom In (Ctrl+=)" aria-label="Zoom in" disabled>${icons.plus}</button>
+    <button class="tb-btn" data-action="zoom-in" title="Zoom In (Ctrl+=)" aria-label="Zoom in" disabled>${icons.zoomIn}</button>
   </div>
   <div class="tb-divider" aria-hidden="true"></div>
   <div class="tb-group">
-    <button class="tb-btn" data-action="rotate" title="Rotate (Ctrl+L)" aria-label="Rotate clockwise" disabled>${icons.rotate}</button>
+    <button class="tb-btn" data-action="rotate" title="Rotate (Ctrl+L)" aria-label="Rotate clockwise" disabled>${icons.rotateRight}</button>
     <button class="tb-btn" data-action="find" title="Find (Ctrl+F)" aria-label="Find" aria-pressed="false" disabled>${icons.search}</button>
   </div>
   <div class="tb-menu" role="menu" hidden>
