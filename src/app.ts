@@ -96,7 +96,9 @@ export class App {
       rotate: () => this.rotate(90),
       toggleFind: () => this.findBar.toggle(),
       open: () => void this.open(),
-      moreMenu: (anchor) => void showMenu(anchor, [{ label: 'Open…', shortcut: 'Ctrl+O', action: () => void this.open() }]),
+      // Stub until page editing wires Save, Insert Pages, Undo and Redo into the ⋯ menu.
+      moreMenu: (anchor) =>
+        void showMenu(anchor, [{ label: 'Open…', shortcut: 'Ctrl+O', action: () => void this.open() }]),
     }, this.platform.windowControls);
 
     // ---- shortcuts + per-file state ----

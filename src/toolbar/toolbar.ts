@@ -148,6 +148,7 @@ export class Toolbar {
   destroy(): void {
     for (const u of this.unsubscribe) u();
     if (this.zoomMenuOpen) closeMenus();
+    this.host.classList.remove('has-caption', 'find-open');
     this.host.innerHTML = '';
   }
 
