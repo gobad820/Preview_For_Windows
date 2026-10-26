@@ -1,0 +1,58 @@
+import { describe, expect, test } from 'vitest';
+import { icons } from '../../src/ui/icons';
+
+const REQUIRED = [
+  'sidebar',
+  'zoomIn',
+  'zoomOut',
+  'rotateLeft',
+  'rotateRight',
+  'ellipsis',
+  'search',
+  'chevronUp',
+  'chevronDown',
+  'chevronLeft',
+  'chevronRight',
+  'closeSmall',
+  'document',
+  'checkmark',
+  'xmarkCircleFill',
+] as const;
+
+const attr = (svg: string, name: string): string | null =>
+  new RegExp(`^<svg[^>]*\\s${name}="([^"]*)"`).exec(svg)?.[1] ?? null;
+
+describe('icons', () => {
+  test.each(REQUIRED)('%s is an 18px currentColor svg hidden from assistive tech', (name) => {
+    const svg = (icons as Record<string, string>)[name];
+    expect(svg).toBeDefined();
+    expect(svg!.startsWith('<svg')).toBe(true);
+    expect(svg!.endsWith('</svg>')).toBe(true);
+    expect(attr(svg!, 'width')).toBe('18');
+    expect(attr(svg!, 'height')).toBe('18');
+    expect(attr(svg!, 'aria-hidden')).toBe('true');
+    expect(attr(svg!, 'fill')).toBe('none');
+    expect(attr(svg!, 'stroke')).toBe('currentColor');
+  });
+
+  test.each(REQUIRED)('%s draws a 1.5px stroke with round caps and joins', (name) => {
+    const svg = (icons as Record<string, string>)[name]!;
+    const viewBox = attr(svg, 'viewBox')!.split(/\s+/).map(Number);
+    const rendered = (Number(attr(svg, 'stroke-width')) * 18) / viewBox[2]!;
+    expect(rendered).toBeCloseTo(1.5, 5);
+    expect(viewBox[2]).toBe(viewBox[3]);
+    expect(attr(svg, 'stroke-linecap')).toBe('round');
+    expect(attr(svg, 'stroke-linejoin')).toBe('round');
+  });
+
+  test('every icon has its own drawing', () => {
+    const bodies = Object.values(icons);
+    expect(new Set(bodies).size).toBe(bodies.length);
+  });
+
+  test('the search clear glyph is a filled circle with the cross knocked out', () => {
+    const svg = icons.xmarkCircleFill;
+    expect(svg).toContain('fill="currentColor"');
+    expect(svg).toContain('fill-rule="evenodd"');
+  });
+});

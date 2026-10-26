@@ -1,48 +1,144 @@
-/* ---- theme tokens ---------------------------------------------------- */
+/* ---- type ------------------------------------------------------------ */
+@font-face {
+  font-family: "Inter";
+  src: url("./assets/fonts/InterVariable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: block;
+}
+
+/* ---- theme tokens (macOS Sonoma Preview) ---------------------------- */
 :root {
   color-scheme: light dark;
-  --bg: #e5e5e7;            /* document surface behind pages */
-  --chrome: #f6f6f7;        /* toolbar / sidebar */
-  --chrome-border: #d9d9dc;
-  --fg: #1d1d1f;
-  --fg-muted: #6e6e73;
-  --accent: #2f6fed;
+  --font: "Inter", "Malgun Gothic", system-ui, sans-serif;
+  --caption-font: "Segoe Fluent Icons", "Segoe MDL2 Assets";
+
+  --doc-bg: #e8e8e8;                      /* document area behind pages */
+  --chrome-bg: #f6f6f6;                   /* unified title/toolbar */
+  --sidebar-bg: #f6f6f6;
+  --hairline: rgba(0, 0, 0, 0.1);
+  --text: rgba(0, 0, 0, 0.85);
+  --text-secondary: rgba(0, 0, 0, 0.5);
+  --text-tertiary: rgba(0, 0, 0, 0.26);
+  --icon: rgba(0, 0, 0, 0.6);
+  --accent: #007aff;                      /* controls, focus rings */
+  --accent-strong: #0a64d8;               /* menu highlight, selection fills */
   --accent-fg: #ffffff;
+  --fill-hover: rgba(0, 0, 0, 0.05);
+  --fill-pressed: rgba(0, 0, 0, 0.1);
+  --fill-quiet: rgba(0, 0, 0, 0.05);      /* pill and segmented tracks */
+  --fill-selected: rgba(0, 0, 0, 0.08);   /* unfocused selection */
   --control-bg: #ffffff;
-  --control-border: #cfcfd3;
-  --control-hover: #e9e9ec;
-  --page-shadow: 0 1px 3px rgba(0, 0, 0, 0.18), 0 6px 18px rgba(0, 0, 0, 0.08);
+  --control-raised: #ffffff;
+  --control-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.12), 0 1px 1.5px rgba(0, 0, 0, 0.1);
+  --field-border: rgba(0, 0, 0, 0.14);
+  --menu-bg: rgba(246, 246, 246, 0.82);
+  --menu-border: rgba(0, 0, 0, 0.14);
+  --menu-shadow: 0 10px 32px rgba(0, 0, 0, 0.16), 0 2px 6px rgba(0, 0, 0, 0.08);
+  --alert-bg: rgba(238, 238, 238, 0.9);
+  --scrim: rgba(0, 0, 0, 0.16);
+  --danger: #ff3b30;
+  --warning: #ff9f0a;
+  --caption-close: #c42b1c;
+  --page-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.12), 0 4px 14px rgba(0, 0, 0, 0.06);
+  --thumb-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.1);
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent);
   --find-match: rgba(255, 213, 0, 0.45);
   --find-current: rgba(255, 140, 0, 0.75);
-  --selection: rgba(47, 111, 237, 0.28);
-  --font: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Malgun Gothic", sans-serif;
+  --selection: rgba(0, 122, 255, 0.26);
+
+  --radius-control: 6px;
+  --radius-menu: 8px;
+  --radius-alert: 12px;
+  --toolbar-h: 52px;
+  --sidebar-w: 220px;
+
+  /* legacy names, retired as each section is restyled */
+  --bg: var(--doc-bg);
+  --chrome: var(--chrome-bg);
+  --chrome-border: var(--hairline);
+  --fg: var(--text);
+  --fg-muted: var(--text-secondary);
+  --control-border: var(--field-border);
+  --control-hover: var(--fill-hover);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #262628;
-    --chrome: #323234;
-    --chrome-border: #434346;
-    --fg: #f2f2f4;
-    --fg-muted: #a1a1a6;
-    --accent: #5b8def;
-    --control-bg: #3c3c3f;
-    --control-border: #55555a;
-    --control-hover: #48484c;
-    --page-shadow: 0 1px 3px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.35);
+    --doc-bg: #1e1e1e;
+    --chrome-bg: #2c2c2e;
+    --sidebar-bg: #2c2c2e;
+    --hairline: rgba(255, 255, 255, 0.1);
+    --text: rgba(255, 255, 255, 0.88);
+    --text-secondary: rgba(255, 255, 255, 0.55);
+    --text-tertiary: rgba(255, 255, 255, 0.25);
+    --icon: rgba(255, 255, 255, 0.66);
+    --accent: #0a84ff;
+    --accent-strong: #0a84ff;
+    --fill-hover: rgba(255, 255, 255, 0.08);
+    --fill-pressed: rgba(255, 255, 255, 0.14);
+    --fill-quiet: rgba(255, 255, 255, 0.07);
+    --fill-selected: rgba(255, 255, 255, 0.1);
+    --control-bg: rgba(255, 255, 255, 0.07);
+    --control-raised: #636366;
+    --control-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.3), 0 1px 1.5px rgba(0, 0, 0, 0.25);
+    --field-border: rgba(255, 255, 255, 0.14);
+    --menu-bg: rgba(40, 40, 42, 0.8);
+    --menu-border: rgba(255, 255, 255, 0.14);
+    --menu-shadow: 0 10px 32px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
+    --alert-bg: rgba(44, 44, 46, 0.92);
+    --scrim: rgba(0, 0, 0, 0.32);
+    --danger: #ff453a;
+    --page-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4), 0 6px 18px rgba(0, 0, 0, 0.3);
+    --thumb-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 1px 3px rgba(0, 0, 0, 0.5);
+    --selection: rgba(10, 132, 255, 0.35);
   }
 }
 :root[data-theme="dark"] {
-  --bg: #262628;
-  --chrome: #323234;
-  --chrome-border: #434346;
-  --fg: #f2f2f4;
-  --fg-muted: #a1a1a6;
-  --accent: #5b8def;
-  --control-bg: #3c3c3f;
-  --control-border: #55555a;
-  --control-hover: #48484c;
-  --page-shadow: 0 1px 3px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --doc-bg: #1e1e1e;
+  --chrome-bg: #2c2c2e;
+  --sidebar-bg: #2c2c2e;
+  --hairline: rgba(255, 255, 255, 0.1);
+  --text: rgba(255, 255, 255, 0.88);
+  --text-secondary: rgba(255, 255, 255, 0.55);
+  --text-tertiary: rgba(255, 255, 255, 0.25);
+  --icon: rgba(255, 255, 255, 0.66);
+  --accent: #0a84ff;
+  --accent-strong: #0a84ff;
+  --fill-hover: rgba(255, 255, 255, 0.08);
+  --fill-pressed: rgba(255, 255, 255, 0.14);
+  --fill-quiet: rgba(255, 255, 255, 0.07);
+  --fill-selected: rgba(255, 255, 255, 0.1);
+  --control-bg: rgba(255, 255, 255, 0.07);
+  --control-raised: #636366;
+  --control-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.3), 0 1px 1.5px rgba(0, 0, 0, 0.25);
+  --field-border: rgba(255, 255, 255, 0.14);
+  --menu-bg: rgba(40, 40, 42, 0.8);
+  --menu-border: rgba(255, 255, 255, 0.14);
+  --menu-shadow: 0 10px 32px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
+  --alert-bg: rgba(44, 44, 46, 0.92);
+  --scrim: rgba(0, 0, 0, 0.32);
+  --danger: #ff453a;
+  --page-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4), 0 6px 18px rgba(0, 0, 0, 0.3);
+  --thumb-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 1px 3px rgba(0, 0, 0, 0.5);
+  --selection: rgba(10, 132, 255, 0.35);
 }
+
+/* Windows 11 Mica behind the window: chrome turns translucent, pages keep an opaque backdrop. */
+:root[data-material="mica"] {
+  --chrome-bg: rgba(246, 246, 246, 0.6);
+  --sidebar-bg: rgba(246, 246, 246, 0.6);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-material="mica"]:not([data-theme="light"]) {
+    --chrome-bg: rgba(32, 32, 32, 0.55);
+    --sidebar-bg: rgba(32, 32, 32, 0.55);
+  }
+}
+:root[data-material="mica"][data-theme="dark"] {
+  --chrome-bg: rgba(32, 32, 32, 0.55);
+  --sidebar-bg: rgba(32, 32, 32, 0.55);
+}
+:root[data-material="mica"] body { background: transparent; }
 
 /* ---- base ------------------------------------------------------------ */
 *, *::before, *::after { box-sizing: border-box; }
@@ -50,17 +146,21 @@ html, body { height: 100%; margin: 0; }
 body {
   font-family: var(--font);
   font-size: 13px;
-  color: var(--fg);
-  background: var(--bg);
+  letter-spacing: -0.003em;
+  line-height: 1.3;
+  color: var(--text);
+  background: var(--doc-bg);
   overflow: hidden;
+  -webkit-font-smoothing: antialiased;
   -webkit-user-select: none;
   user-select: none;
+  cursor: default;
 }
-button { font: inherit; color: inherit; }
+button, input { font: inherit; color: inherit; letter-spacing: inherit; }
 kbd {
   font: inherit; font-size: 11px;
   padding: 1px 5px; border-radius: 4px;
-  border: 1px solid var(--control-border);
+  border: 1px solid var(--field-border);
   background: var(--control-bg);
 }
 
@@ -69,7 +169,7 @@ kbd {
 
 /* ---- toolbar --------------------------------------------------------- */
 .toolbar {
-  height: 44px; flex: none;
+  height: var(--toolbar-h); flex: none;
   display: flex; align-items: center; gap: 6px;
   padding: 0 10px;
   background: var(--chrome);
@@ -78,8 +178,8 @@ kbd {
 
 /* ---- sidebar --------------------------------------------------------- */
 .sidebar {
-  width: 220px; flex: none;
-  background: var(--chrome);
+  width: var(--sidebar-w); flex: none;
+  background: var(--sidebar-bg);
   border-right: 1px solid var(--chrome-border);
   display: flex; flex-direction: column;
 }
@@ -91,7 +191,7 @@ kbd {
   overflow: auto;
   scrollbar-gutter: stable;
   outline: none;
-  background: var(--bg);
+  background: var(--doc-bg);
 }
 
 /* ---- empty state ----------------------------------------------------- */
@@ -328,7 +428,7 @@ kbd {
 .outline-empty[hidden] { display: none; }
 /* ---- find bar (Task 12) ---------------------------------------------- */
 .findbar {
-  position: absolute; top: 44px; right: 28px; z-index: 30;
+  position: absolute; top: var(--toolbar-h); right: 28px; z-index: 30;
   display: flex; align-items: center; gap: 4px;
   height: 38px; padding: 0 6px 0 10px;
   background: var(--chrome);
