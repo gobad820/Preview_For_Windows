@@ -20,6 +20,8 @@ export interface Platform {
   startupFile(): Promise<string | null>;
   /** Subscribes to files dropped onto the window; returns an unsubscribe function. */
   onFileDrop(cb: (path: string) => void): () => void;
+  /** Reports whether a file is currently being dragged over the window. */
+  onDragState(cb: (over: boolean) => void): () => void;
   setTitle(title: string): Promise<void>;
   /** Display name for a path (last path segment). */
   fileName(path: string): string;

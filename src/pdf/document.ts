@@ -3,6 +3,7 @@ import type {
   PDFDocumentLoadingTask,
   PDFDocumentProxy,
   PDFPageProxy,
+  TextContent,
   TextItem,
 } from 'pdfjs-dist/types/src/display/api';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
@@ -61,6 +62,7 @@ export class PdfDocument {
   readonly sizes: PageSize[];
 
   private readonly pages = new Map<number, Promise<PDFPageProxy>>();
+  private readonly contents = new Map<number, Promise<TextContent>>();
   private readonly texts = new Map<number, Promise<PageText>>();
   private destroyed = false;
 
@@ -166,12 +168,23 @@ export class PdfDocument {
     }
   }
 
+  /** Full pdf.js text content for a page (memoised); feeds both the text layer and search. */
+  getTextContent(index: number): Promise<TextContent> {
+    let c = this.contents.get(index);
+    if (!c) {
+      c = this.getPage(index).then((page) => page.getTextContent());
+      this.contents.set(index, c);
+    }
+    return c;
+  }
+
+  /** Text items with a `str` (marked-content entries removed), in text layer order. */
   getPageText(index: number): Promise<PageText> {
     let t = this.texts.get(index);
     if (!t) {
-      t = this.getPage(index)
-        .then((page) => page.getTextContent())
-        .then((content) => content.items.filter((i): i is TextItem => 'str' in i));
+      t = this.getTextContent(index).then((content) =>
+        content.items.filter((i): i is TextItem => 'str' in i),
+      );
       this.texts.set(index, t);
     }
     return t;
