@@ -282,6 +282,12 @@ test.describe('sidebar look', () => {
 
   test('the current page gets a subtle outline only when it is not selected', async ({ page }) => {
     await openSidebar(page, 'simple.pdf');
+    // The selection follows the current page; select only page 2 so page 1 is current but not selected.
+    await page.evaluate(() => {
+      const editor = (window as any).__pfw.editor;
+      editor.clickAt(1, { ctrl: true, shift: false });
+      editor.clickAt(0, { ctrl: true, shift: false });
+    });
     const current = '#sidebar .thumb.current';
     const plain = '#sidebar .thumb[data-page="3"]';
     expect(await style(page, `${current} canvas`, 'outline-style')).toBe('solid');

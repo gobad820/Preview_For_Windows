@@ -113,7 +113,7 @@ export class App {
       rotate: () => this.rotate(90),
       toggleFind: () => this.findBar.toggle(),
       open: () => void this.open(),
-      moreMenu: (anchor) => void showMenu(anchor, [{ label: 'Open…', shortcut: 'Ctrl+O', action: () => void this.open() }]),
+      moreMenu: (anchor) => this.moreMenu(anchor),
     }, this.platform.windowControls);
 
     // ---- page editing ----

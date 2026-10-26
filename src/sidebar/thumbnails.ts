@@ -80,7 +80,6 @@ export class ThumbnailList {
     scroller.setAttribute('aria-label', 'Pages');
     this.indicator = document.createElement('div');
     this.indicator.className = 'drop-indicator';
-    this.indicator.hidden = true;
     scroller.addEventListener('pointerdown', this.onPointerDown);
     scroller.addEventListener('pointermove', this.onPointerMove);
     scroller.addEventListener('pointerup', this.onPointerUp);
@@ -203,7 +202,7 @@ export class ThumbnailList {
   /** Shows the insertion line at `gap`, or hides it with null. */
   showIndicator(gap: number | null): void {
     if (gap === null || this.thumbs.length === 0) {
-      this.indicator.hidden = true;
+      this.indicator.classList.remove('visible');
       delete this.scroller.dataset['dropGap'];
       return;
     }
@@ -214,7 +213,7 @@ export class ThumbnailList {
     else if (after) y = after.el.offsetTop - 4;
     else y = before!.el.offsetTop + before!.el.offsetHeight + 4;
     this.indicator.style.top = `${Math.round(y)}px`;
-    this.indicator.hidden = false;
+    this.indicator.classList.add('visible');
     this.scroller.dataset['dropGap'] = String(gap);
   }
 
@@ -349,7 +348,8 @@ export class ThumbnailList {
     const d = this.drag;
     if (!d) return;
     d.y = y;
-    d.ghost.style.transform = `translate(${Math.round(x + 10)}px, ${Math.round(y + 6)}px)`;
+    d.ghost.style.left = `${Math.round(x + 10)}px`;
+    d.ghost.style.top = `${Math.round(y + 6)}px`;
     this.setGap(this.gapAt(y));
   }
 
@@ -382,13 +382,13 @@ export class ThumbnailList {
     return 0;
   }
 
-  /** A small stack of the dragged thumbnails with a count badge. */
+  /** A small stack of the dragged thumbnails (front card first) with a count badge. */
   private buildGhost(selected: number[]): HTMLElement {
     const ghost = document.createElement('div');
     ghost.className = 'drag-ghost';
     ghost.setAttribute('aria-hidden', 'true');
     const width = 72;
-    for (const [n, i] of selected.slice(0, 3).entries()) {
+    for (const i of selected.slice(0, 3)) {
       const t = this.thumbs[i];
       if (!t) continue;
       const card = document.createElement('canvas');
@@ -398,14 +398,13 @@ export class ThumbnailList {
       card.height = Math.round(width * 2 * ratio);
       card.style.width = `${width}px`;
       card.style.height = `${Math.round(width * ratio)}px`;
-      card.style.setProperty('--n', String(n));
       const ctx = card.getContext('2d');
       if (ctx) {
         ctx.fillStyle = '#fff';
         ctx.fillRect(0, 0, card.width, card.height);
         if (src.width > 0) ctx.drawImage(src, 0, 0, card.width, card.height);
       }
-      ghost.prepend(card);
+      ghost.append(card);
     }
     if (selected.length > 1) {
       const badge = document.createElement('span');
