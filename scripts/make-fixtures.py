@@ -134,6 +134,50 @@ def korean(path, font_path):
     c.save()
 
 
+def links(path):
+    """Contents page linking to pages A/B/C with explicit [pageRef /Fit] destinations."""
+    c = canvas.Canvas(path, pagesize=A4)
+    c.setFont("Helvetica-Bold", 20)
+    c.drawString(25 * mm, 280 * mm, "Contents")
+    for i, label in enumerate(["Go to A", "Go to B", "Go to C"]):
+        y = (260 - i * 12) * mm
+        c.setFont("Helvetica", 14)
+        c.drawString(25 * mm, y, label)
+        c.linkRect("", f"dest{i}", (25 * mm, y - 2 * mm, 80 * mm, y + 6 * mm), relative=0, thickness=0)
+    c.showPage()
+    for i, label in enumerate(["Page A", "Page B", "Page C"]):
+        c.bookmarkPage(f"dest{i}")
+        c.setFont("Helvetica-Bold", 24)
+        c.drawString(25 * mm, 280 * mm, label)
+        c.showPage()
+    c.save()
+
+
+def links_named(src, path):
+    """Same document with named destinations: /Dest names for A and B, a GoTo action for C."""
+    from pypdf import PdfReader, PdfWriter
+    from pypdf.generic import (ArrayObject, DictionaryObject, NameObject, TextStringObject)
+    reader = PdfReader(src)
+    writer = PdfWriter(clone_from=reader)
+    names = ["A", "B", "C"]
+    for i, n in enumerate(names):
+        writer.add_named_destination(f"chapter-{n}", i + 1)
+    annots = writer.pages[0]["/Annots"]
+    for i, ref in enumerate(annots):
+        annot = ref.get_object()
+        del annot["/Dest"]
+        name = TextStringObject(f"chapter-{names[i]}")
+        if i < 2:
+            annot[NameObject("/Dest")] = name
+        else:
+            action = DictionaryObject()
+            action[NameObject("/S")] = NameObject("/GoTo")
+            action[NameObject("/D")] = name
+            annot[NameObject("/A")] = action
+    with open(path, "wb") as f:
+        writer.write(f)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--font", default=None, help="TTF with Korean glyphs to embed")
@@ -146,6 +190,8 @@ def main():
     encrypted(os.path.join(OUT, "encrypted.pdf"))
     broken(os.path.join(OUT, "broken.pdf"))
     korean(os.path.join(OUT, "한글 문서.pdf"), args.font)
+    links(os.path.join(OUT, "links.pdf"))
+    links_named(os.path.join(OUT, "links.pdf"), os.path.join(OUT, "links-named.pdf"))
     for name in sorted(os.listdir(OUT)):
         print(f"{name}\t{os.path.getsize(os.path.join(OUT, name))} bytes")
 
