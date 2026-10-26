@@ -51,7 +51,7 @@ test.describe('keyboard shortcuts', () => {
     await expect.poll(async () => (await state(page)).rotation).toBe(90);
     await page.keyboard.press('Control+Shift+l');
     await expect.poll(async () => (await state(page)).rotation).toBe(0);
-    await page.keyboard.press('Control+Shift+s');
+    await page.keyboard.press('Control+Alt+s');
     await expect.poll(async () => (await state(page)).sidebarOpen).toBe(true);
     await page.keyboard.press('Control+g');
     await expect(page.locator('input[data-page-input]')).toBeFocused();
