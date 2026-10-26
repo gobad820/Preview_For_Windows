@@ -53,11 +53,36 @@ ask); an AES owner-password-only file opens without a prompt and saves; with
 `decorated: true` in the saved window state, v0.1 gets a 71 px native frame and
 v0.2 stays frameless (15 px of resize border).
 
+## Native integration checks on the locked Windows host
+
+The session was locked (LockApp running, `GetCursorPos` denied), so Windows rejected any
+injected mouse or keyboard input. Everything below the input layer was exercised in the real
+exe instead:
+
+- **Explorer drop:** wry's `IDropTarget` (read in `wry-0.57.1/src/webview2/drag_drop.rs`)
+  converts the screen point with `ScreenToClient` into physical pixels relative to the webview
+  and Tauri forwards it unchanged as `tauri://drag-enter/over/drop`. Emitting exactly those
+  events with real Windows paths and physical positions showed the insertion line at the gap
+  after page 1, merged `mixed.pdf` there through Rust `read_file` (keys `0:0 1:0 1:1 1:2 0:1 0:2`,
+  inserted pages selected), opened a new window for a drop on the document area, and saved
+  the merge (six pages on disk in that order).
+- **Title bar and window:** `WS_THICKFRAME`, `WS_MAXIMIZEBOX` and `WS_MINIMIZEBOX` are set (what
+  Aero Snap uses); `WM_NCHITTEST` reports left/right/top/bottom/corner resize zones at the
+  edges; the toolbar point is a `data-tauri-drag-region` and `start_dragging` is permitted; a
+  real renderer double-click (DevTools `Input.dispatchMouseEvent`, clickCount 2) on it
+  maximized the window, and the caption buttons restored, minimized and closed it.
+- **Save As:** the native "다른 이름으로 저장" dialog opened with the suggested name; confirming
+  it (TaskDialog `TDM_CLICK_BUTTON` on the replace prompt) made the app write the edited
+  document to the returned path and clear "— Edited".
+
 ## Not verified on Windows
 
-- Native drag-and-drop from Explorer onto the sidebar (needs a real mouse drag; the same code path is covered with HTML5 drops in Playwright, and position conversion from physical to CSS pixels is untested on a scaled display).
-- Title-bar drag, double-click maximize, snap layouts, and resizing from the window edges of the undecorated window.
-- The native Save As dialog, and the NSIS installer.
+- A physical mouse drag from Explorer, a physical title-bar drag, and Win+Arrow snapping: the
+  only remaining layer is Windows delivering real input, which a locked session refuses.
+  `scripts/input-windows.ps1` runs these checks with guarded real input on an unlocked desktop.
+- Typing a different file name into the native Save As dialog from automation (the dialog
+  keeps its own file name state; UI Automation cannot reach it while the session is locked).
+- The NSIS installer.
 
 ## Known limitations
 

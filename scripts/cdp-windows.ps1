@@ -8,7 +8,9 @@
 #     [-Pdf C:\path\doc.pdf] [-Port 9333] [-Shot C:\path\page.png] [-KeepOpen]
 # steps.json: [ { "name": "label", "eval": "expression", "waitMs": 300 }, ... ]
 #   A step may instead carry "ps": a PowerShell snippet run on the host between page steps
-#   ($proc is the launched app process). A failing step is reported and the run continues.
+#   ($proc is the launched app process, $last the previous page step's value), or "cdp":
+#   { "method": ..., "params": ... } for a raw DevTools command. A failing step
+#   is reported and the run continues.
 param(
   [Parameter(Mandatory = $true)][string]$Exe,
   [Parameter(Mandatory = $true)][string]$Steps,
@@ -75,6 +77,10 @@ foreach ($step in $list) {
   try {
     if ($step.ps) {
       $out.value = (Invoke-Expression $step.ps | Out-String).Trim()
+    } elseif ($step.cdp) {
+      # A raw DevTools command, e.g. Input.dispatchMouseEvent for real renderer input.
+      $res = Send-Cdp $step.cdp.method $step.cdp.params
+      $out.value = if ($res.error) { 'error: ' + $res.error.message } else { 'ok' }
     } else {
       $res = Send-Cdp 'Runtime.evaluate' @{ expression = $step.eval; awaitPromise = $true; returnByValue = $true }
       if ($res.result.exceptionDetails) {
@@ -82,6 +88,7 @@ foreach ($step in $list) {
         if (-not $out.error) { $out.error = [string]$res.result.exceptionDetails.text }
       } else {
         $out.value = $res.result.result.value
+        $script:last = $out.value # available to the next "ps" step
       }
     }
   } catch {
