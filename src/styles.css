@@ -33,7 +33,8 @@
   --control-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.12), 0 1px 1.5px rgba(0, 0, 0, 0.1);
   --field-border: rgba(0, 0, 0, 0.14);
   --menu-bg: rgba(246, 246, 246, 0.82);
-  --menu-border: rgba(0, 0, 0, 0.14);
+  --menu-ring: 0 0 0 0.5px rgba(0, 0, 0, 0.16);
+  --app-icon: url("../src-tauri/icons/128x128@2x.png");
   --menu-shadow: 0 10px 32px rgba(0, 0, 0, 0.16), 0 2px 6px rgba(0, 0, 0, 0.08);
   --alert-bg: rgba(238, 238, 238, 0.9);
   --scrim: rgba(0, 0, 0, 0.16);
@@ -82,8 +83,8 @@
     --control-raised: #636366;
     --control-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.3), 0 1px 1.5px rgba(0, 0, 0, 0.25);
     --field-border: rgba(255, 255, 255, 0.14);
-    --menu-bg: rgba(40, 40, 42, 0.8);
-    --menu-border: rgba(255, 255, 255, 0.14);
+    --menu-bg: rgba(38, 38, 40, 0.9);
+    --menu-ring: 0 0 0 0.5px rgba(0, 0, 0, 0.7), inset 0 0 0 0.5px rgba(255, 255, 255, 0.16);
     --menu-shadow: 0 10px 32px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
     --alert-bg: rgba(44, 44, 46, 0.92);
     --scrim: rgba(0, 0, 0, 0.32);
@@ -112,8 +113,8 @@
   --control-raised: #636366;
   --control-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.3), 0 1px 1.5px rgba(0, 0, 0, 0.25);
   --field-border: rgba(255, 255, 255, 0.14);
-  --menu-bg: rgba(40, 40, 42, 0.8);
-  --menu-border: rgba(255, 255, 255, 0.14);
+  --menu-bg: rgba(38, 38, 40, 0.9);
+  --menu-ring: 0 0 0 0.5px rgba(0, 0, 0, 0.7), inset 0 0 0 0.5px rgba(255, 255, 255, 0.16);
   --menu-shadow: 0 10px 32px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
   --alert-bg: rgba(44, 44, 46, 0.92);
   --scrim: rgba(0, 0, 0, 0.32);
@@ -504,3 +505,117 @@ kbd {
   -webkit-user-select: text; user-select: text;
 }
 .password-row input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+/* ---- menus (src/ui/menu.ts) ----------------------------------------- */
+.menu {
+  position: fixed; z-index: 1000;
+  min-width: 168px; max-width: 360px;
+  padding: 5px;
+  overflow-y: auto; overscroll-behavior: contain;
+  color: var(--text);
+  background: var(--menu-bg);
+  -webkit-backdrop-filter: blur(28px) saturate(1.8);
+  backdrop-filter: blur(28px) saturate(1.8);
+  border-radius: var(--radius-menu);
+  box-shadow: var(--menu-ring), var(--menu-shadow);
+  outline: none;
+}
+.menu-item {
+  display: flex; align-items: center;
+  height: 22px; padding: 0 12px 0 2px;
+  border-radius: 4px;
+  white-space: nowrap;
+  outline: none;
+}
+.menu-check { flex: none; width: 20px; display: flex; align-items: center; justify-content: center; }
+.menu-check svg { width: 11px; height: 11px; stroke-width: 3.2; }
+.menu-label { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.menu-shortcut {
+  flex: none; margin-left: 32px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.menu-item:focus { background: var(--accent-strong); color: var(--accent-fg); }
+.menu-item:focus .menu-shortcut { color: rgba(255, 255, 255, 0.78); }
+.menu-item[aria-disabled="true"],
+.menu-item[aria-disabled="true"] .menu-shortcut { color: var(--text-tertiary); }
+.menu-separator { height: 1px; margin: 5px 10px; background: var(--hairline); }
+
+/* ---- alerts (src/ui/dialog.ts) --------------------------------------- */
+.alert-scrim {
+  position: fixed; inset: 0; z-index: 1100;
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px 16px 8vh;
+  background: var(--scrim);
+  animation: pfw-fade-in 140ms ease-out;
+}
+.alert {
+  width: 260px; max-width: 100%;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 20px 16px 16px;
+  text-align: center;
+  color: var(--text);
+  background: var(--alert-bg);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  backdrop-filter: blur(40px) saturate(1.8);
+  border-radius: var(--radius-alert);
+  box-shadow: var(--menu-ring), 0 22px 56px rgba(0, 0, 0, 0.24), 0 4px 14px rgba(0, 0, 0, 0.1);
+  animation: pfw-alert-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.alert-icon {
+  width: 64px; height: 64px; flex: none;
+  margin-bottom: 14px;
+  background: var(--app-icon) center / contain no-repeat;
+}
+.alert-title {
+  margin: 0;
+  font-size: 13px; font-weight: 700; line-height: 16px;
+  letter-spacing: -0.003em;
+  overflow-wrap: anywhere;
+}
+.alert-message {
+  margin: 6px 0 0;
+  font-size: 11px; line-height: 14px; letter-spacing: 0.005em;
+  overflow-wrap: anywhere;
+}
+.alert-input {
+  width: 100%; height: 24px; margin-top: 14px; padding: 0 7px;
+  color: var(--text);
+  background: var(--control-bg);
+  border: 0; border-radius: 5px;
+  box-shadow: inset 0 0 0 1px var(--field-border);
+  outline: none;
+  -webkit-user-select: text; user-select: text;
+}
+.alert-input::placeholder { color: var(--text-tertiary); }
+.alert-input:focus { box-shadow: inset 0 0 0 1px var(--accent), var(--focus-ring); }
+.alert-buttons {
+  width: 100%; margin-top: 16px;
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px;
+}
+.alert-buttons.stacked { grid-auto-flow: row; }
+.alert-button {
+  height: 28px; padding: 0 10px;
+  border: 0; border-radius: var(--radius-control);
+  color: var(--text);
+  background: var(--control-raised);
+  box-shadow: var(--control-shadow);
+  font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  outline: none;
+}
+.alert-button.primary {
+  color: var(--accent-fg);
+  background: var(--accent);
+  box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.25), 0 1px 1.5px rgba(0, 0, 0, 0.12);
+}
+.alert-button:active { filter: brightness(0.92); }
+/* The blue default button needs no ring; rings appear once the keyboard moves focus (Tab). */
+.alert.keyboard .alert-button:focus { box-shadow: var(--control-shadow), var(--focus-ring); }
+.alert.keyboard .alert-button.primary:focus { box-shadow: var(--focus-ring); }
+
+@keyframes pfw-fade-in { from { opacity: 0; } }
+@keyframes pfw-alert-in { from { opacity: 0; transform: scale(0.94); } }
+@media (prefers-reduced-motion: reduce) {
+  .alert-scrim, .alert { animation: none; }
+}

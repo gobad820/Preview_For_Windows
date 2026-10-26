@@ -8,6 +8,8 @@ import { loadFileState, saveFileState } from './state/fileState';
 import { createStore, initialState, type Store, type ViewerState } from './store';
 import { Toolbar } from './toolbar/toolbar';
 import type { Rotation } from './types';
+import { showAlert } from './ui/dialog';
+import { showMenu } from './ui/menu';
 import { PdfViewer } from './viewer/viewer';
 import { zoomIn, zoomOut } from './viewer/zoom';
 
@@ -120,6 +122,7 @@ export class App {
       toolbar: this.toolbar,
       metrics: this.metrics,
     };
+    (window as unknown as { __pfwUi: unknown }).__pfwUi = { showMenu, showAlert };
 
     // ---- sidebar wiring (Task 11) ----------------------------------------
     const aside = this.el('sidebar');
