@@ -1,9 +1,11 @@
 # Preview for Windows
 
-A fast, clean PDF viewer and page editor for Windows in the spirit of macOS
+A fast, clean PDF viewer and editor for Windows in the spirit of macOS
 Preview: a native window that opens instantly, a unified title bar and toolbar,
-continuous scrolling, search, and a thumbnail sidebar where you reorder, delete,
-copy, paste and merge pages, then save.
+continuous scrolling or two pages side by side, search, a thumbnail sidebar
+where you reorder, delete, copy, paste and merge pages, and Preview's markup
+tools: highlight, underline, strike through, shapes, arrows, drawing, text
+boxes and notes, saved as standard PDF annotations.
 
 ![Preview for Windows showing a document with the sidebar and find bar open](docs/screenshot.png)
 
@@ -32,6 +34,29 @@ without one). Pages copied in one Preview window paste into another, and a PDF
   unsaved changes, and closing or replacing the document asks first. Saved
   files keep the outline and metadata, internal links follow moved pages, and
   deleted pages leave no trace in the file.
+- **Two Pages**: the View menu (the chevron next to the sidebar button)
+  switches between Continuous Scroll and Two Pages, with Book Mode to put the
+  first page alone on the right like a cover. Fit Width and Fit Page fit the
+  whole spread, and → / ← move a spread at a time.
+- **Markup**, like Preview's Markup toolbar (the pen-tip button or
+  `Ctrl+Shift+A`):
+  - Highlight (five colors), underline and strike through selected text. The
+    highlight button in the toolbar toggles highlight mode: every selection you
+    finish is marked. With text selected, pressing it marks that selection.
+  - Rectangle, rounded rectangle, oval, line and arrow (drag, or click for a
+    default size; Shift keeps squares, circles and 45° lines), freehand
+    drawing, text boxes (Hangul included) and sticky notes.
+  - Click an annotation to select it, drag to move, drag the handles to
+    resize, arrows to nudge, `Delete` to remove, `Ctrl+D` to duplicate; line
+    width, border color, fill and text style apply to the selection and become
+    the defaults. Every change is undoable and marks the document edited.
+  - Annotations travel with their pages when pages are moved, copied, pasted
+    into another window or merged, and the thumbnails show them.
+  - Saved as standard annotations with appearance streams, so Acrobat, Edge,
+    Chrome and Mac Preview show them as drawn here. Text boxes embed only the
+    Malgun Gothic glyphs they use. Reopening a file saved by this app makes its
+    annotations editable again; annotations made by other apps are shown and
+    kept, but not editable.
 - Find in document with highlights and next/previous.
 - Text selection and copy, rotation, HiDPI-crisp rendering, light and dark
   theme following Windows.
@@ -55,6 +80,10 @@ blank window.
 | Fit width / fit page | `Ctrl+1` / `Ctrl+2` |
 | Rotate clockwise / counter-clockwise | `Ctrl+L` / `Ctrl+Shift+L` |
 | Toggle sidebar | `Ctrl+Alt+S` |
+| Show / hide the markup toolbar | `Ctrl+Shift+A` |
+| Delete / duplicate the selected annotation | `Delete` / `Ctrl+D` |
+| Nudge the selected annotation by 1 pt / 10 pt | arrows / `Shift`+arrows |
+| End text editing, disarm a tool, deselect | `Esc` |
 | Save / Save As | `Ctrl+S` / `Ctrl+Shift+S` |
 | Undo / Redo | `Ctrl+Z` / `Ctrl+Y`, `Ctrl+Shift+Z` |
 | Close window | `Ctrl+W` |
@@ -62,7 +91,7 @@ blank window.
 | Copy / Cut / Paste pages | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` (sidebar focused) |
 | Delete pages | `Delete` or `Backspace` (sidebar focused) |
 | Go to page | `Ctrl+G` |
-| Next / previous page | `→` / `←` |
+| Next / previous page (spread in Two Pages) | `→` / `←` |
 | Scroll a screen down / up | `Space`, `PageDown` / `Shift+Space`, `PageUp` |
 | First / last page | `Home` / `End` |
 
@@ -123,6 +152,13 @@ prints each result as JSON. It never clicks or types, so it does not interfere
 with whoever is using the desktop. This is how saving and merging were checked
 against real files on Windows.
 
+### Checking saved annotations in other viewers
+
+`scripts/pdfium-render.py FILE PAGE SCALE --png out.png [--probe X,Y ...]`
+renders a page with PDFium, the engine of Chrome and Edge, from the
+annotations' appearance streams (needs `pypdfium2`). The writer tests use it to
+check that a saved rectangle lands where it was drawn, also on `/Rotate` pages.
+
 ### Smoke test on the Windows host
 
 From WSL, `scripts/smoke-windows.sh tests/fixtures/simple.pdf` copies the
@@ -137,6 +173,8 @@ src-tauri/        Tauri 2 shell (Rust): file read, startup argument, dialogs, wi
 src/app.ts        wires platform, store and components; open/save/close flows; shortcut dispatch
 src/edit/         page editing: composition, history, selection, outline remap, PDF writer,
                   EditableDocument (pages from several files) and the Editor controller
+src/annot/        annotation model, geometry, appearance streams, writing and reading them
+src/markup/       markup toolbar, page overlays, tools, text marks, annotation editing
 src/viewer/       virtualised continuous page view + pure layout and zoom math
 src/pdf/          pdf.js document wrapper, cancellable page renderer, text layer
 src/search/       pure matcher + find bar with highlights
@@ -144,7 +182,7 @@ src/sidebar/      thumbnails and outline
 src/toolbar/      toolbar, page indicator, zoom menu
 src/platform/     Platform interface, Tauri implementation, browser shim for tests
 src/ui/           Mac-style icons, menus and alerts
-src/state/        per-file last position (localStorage)
+src/state/        per-file last position and the view preference (localStorage)
 ```
 
 Design notes live in `docs/superpowers/specs/`, the implementation plan in
@@ -152,6 +190,8 @@ Design notes live in `docs/superpowers/specs/`, the implementation plan in
 
 ## Not in scope (yet)
 
-Annotation and markup, form filling, signing, rotating or cropping single
-pages, dragging thumbnails between two windows (copy and paste works),
-printing beyond the webview's own `Ctrl+P`, and non-PDF formats.
+Editing annotations made by other applications, signatures, stamps, images,
+redaction, rich text and font choice in text boxes, a Highlights and Notes
+list, form filling, rotating or cropping single pages, dragging thumbnails
+between two windows (copy and paste works), printing beyond the webview's own
+`Ctrl+P`, and non-PDF formats.
