@@ -138,7 +138,7 @@ export function insertPages(c: Composition, gap: number, refs: ReadonlyArray<{ s
 export function canDelete(c: Composition, ids: ReadonlySet<number>): boolean;
 export function samePages(a: Composition, b: Composition): boolean;  // same ids in same order
 ```
-Tests (exact cases): ids 1..6 → move {2,3} to gap 0 → [2,3,1,4,5,6]; to gap 6 → [1,4,5,6,2,3]; to gap 5 → [1,4,5,2,3,6]; {2,5} to gap 3 → [1,2,5,3,4,6]; {2,3} to gap 2 or 3 (inside/adjacent to itself) → same instance; move all → same instance; delete {2} → [1,3,4,5,6]; delete all → same instance; insert two refs at gap 1 → new ids 7,8 at positions 1,2; inserting the same {src,index} twice yields distinct ids.
+Tests (exact cases): ids 1..6 → move {2,3} to gap 0 → [2,3,1,4,5,6]; to gap 6 → [1,4,5,6,2,3]; to gap 5 → [1,4,5,2,3,6]; {2,5} to gap 3 → [1,3,2,5,4,6]; {2,3} to gap 2 or 3 (inside/adjacent to itself) → same instance; move all → same instance; delete {2} → [1,3,4,5,6]; delete all → same instance; insert two refs at gap 1 → new ids 7,8 at positions 1,2; inserting the same {src,index} twice yields distinct ids.
 
 **A2 `src/edit/history.ts`**
 ```ts
