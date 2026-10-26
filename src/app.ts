@@ -17,6 +17,7 @@ import { PdfViewer } from './viewer/viewer';
 import { zoomIn, zoomOut } from './viewer/zoom';
 import type { Composition } from './edit/composition';
 import { MarkupBar, openHighlightMenu } from './markup/bar';
+import { OverlayHost } from './markup/overlay';
 import { MarkupState, type MarkKind, type Styles } from './markup/state';
 import type { Color } from './annot/types';
 
@@ -38,6 +39,8 @@ export class App {
   /** Markup tool and default styles for this window. */
   readonly markup = new MarkupState();
   readonly markupBar: MarkupBar;
+  /** Annotation drawing over document pages and thumbnails. */
+  readonly overlays: OverlayHost;
   readonly metrics: AppMetrics = { openStart: 0, firstPaint: 0 };
   private doc: EditableDocument | null = null;
   /** Composition before the latest change, to keep the viewer on the same page across edits. */
@@ -170,6 +173,8 @@ export class App {
       aside.hidden = !open;
     });
 
+    this.overlays = new OverlayHost(() => this.doc, [this.viewer, this.sidebar.thumbnails]);
+
     // ---- find bar ----
     this.findBar = new FindBar(this.el('findbar'), this.store, { viewer: this.viewer, doc: null });
 
@@ -182,7 +187,7 @@ export class App {
       findBar: this.findBar,
       editor: this.editor,
       metrics: this.metrics,
-      markup: { state: this.markup },
+      markup: { state: this.markup, overlays: this.overlays },
     };
     (window as unknown as { __pfwUi: unknown }).__pfwUi = { showMenu, showAlert };
   }
@@ -639,6 +644,7 @@ export class App {
       this.lastPages = doc.pages;
       this.viewer.annotationsChanged();
       this.sidebar.thumbnails.annotationsChanged();
+      this.overlays.refresh();
       this.store.set({ dirty: doc.dirty });
       return;
     }
@@ -648,6 +654,7 @@ export class App {
     this.viewer.structureChanged(anchor, 'center');
     this.sidebar.structureChanged();
     this.editor.structureChanged();
+    this.overlays.refresh();
     this.store.set({ numPages: doc.numPages, dirty: doc.dirty });
   }
 

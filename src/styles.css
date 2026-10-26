@@ -937,3 +937,37 @@ button, input { font: inherit; color: inherit; letter-spacing: inherit; }
 .palette-step:active:not(:disabled) { filter: brightness(0.92); }
 .palette-step:disabled { color: var(--text-tertiary); }
 .palette-step:focus-visible { box-shadow: var(--control-shadow), var(--focus-ring); }
+
+/* annotation overlays (src/markup/overlay.ts): no z-index on the overlay itself, so its layers
+   stack with the text layer and the marks can multiply onto the canvas */
+.markup-overlay { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.markup-overlay > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.markup-overlay .mk-marks { z-index: 2; mix-blend-mode: multiply; }
+.markup-overlay .mk-shapes { z-index: 3; }
+.markup-overlay .mk-shapes path, .markup-overlay .mk-shapes rect, .markup-overlay .mk-shapes ellipse {
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.markup-overlay .mk-html { position: absolute; inset: 0; z-index: 3; }
+.markup-overlay .mk-handles { z-index: 4; }
+.mk-text {
+  position: absolute; box-sizing: border-box;
+  margin: 0; padding: 2px;
+  transform-origin: 50% 50%;
+  font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+  font-weight: 400; line-height: 1.2; letter-spacing: 0; text-align: left;
+  white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere;
+  overflow: hidden;
+  -webkit-font-smoothing: auto;
+}
+.mk-note {
+  position: absolute; box-sizing: border-box;
+  transform-origin: 50% 50%;
+  border-radius: 2px;
+  background:
+    linear-gradient(rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0.28)) 4px 6px / 12px 1.2px no-repeat,
+    linear-gradient(rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0.28)) 4px 9.5px / 12px 1.2px no-repeat,
+    linear-gradient(rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0.28)) 4px 13px / 8px 1.2px no-repeat,
+    var(--note, #ffd60a);
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+.markup-overlay .mk-outline { fill: none; stroke: var(--accent); stroke-width: 1; shape-rendering: crispEdges; }
