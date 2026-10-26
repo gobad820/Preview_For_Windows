@@ -1,6 +1,8 @@
 import { PdfDocument, PdfOpenError } from './pdf/document';
+import { PageRenderer } from './pdf/renderer';
 import type { Platform } from './platform/types';
 import { loadFileState } from './state/fileState';
+import { Sidebar } from './sidebar/sidebar';
 import { createStore, initialState, type Store, type ViewerState } from './store';
 import { PdfViewer } from './viewer/viewer';
 
@@ -12,6 +14,7 @@ export interface AppMetrics {
 export class App {
   readonly store: Store<ViewerState> = createStore(initialState);
   readonly viewer: PdfViewer;
+  readonly sidebar: Sidebar;
   readonly metrics: AppMetrics = { openStart: 0, firstPaint: 0 };
   private doc: PdfDocument | null = null;
   private openSeq = 0;
@@ -53,6 +56,19 @@ export class App {
       viewer: this.viewer,
       metrics: this.metrics,
     };
+
+    // ---- sidebar wiring (Task 11) ----------------------------------------
+    const aside = this.el('sidebar');
+    this.sidebar = new Sidebar(aside, this.store, {
+      doc: null,
+      renderer: null,
+      goToPage: (index, top) => this.viewer.goToPage(index, top),
+    });
+    this.store.select('sidebarOpen', (open) => {
+      aside.hidden = !open;
+    });
+    Object.assign((window as unknown as { __pfw: object }).__pfw, { sidebar: this.sidebar });
+    // ---- end sidebar wiring ----------------------------------------------
   }
 
   async start(): Promise<void> {
@@ -112,6 +128,7 @@ export class App {
       currentPage: 1,
     });
     await this.viewer.setDocument(doc);
+    this.sidebar.setDocument(doc, new PageRenderer(doc)); // sidebar (Task 11)
     if (old) void old.destroy();
     if (restored && restored.page > 1) this.viewer.goToPage(restored.page - 1);
     void doc.loadSizes(() => {
@@ -125,6 +142,7 @@ export class App {
       error: `Can't open ${name}: ${reason}`,
       status: this.doc ? 'ready' : 'error',
     });
+    if (!this.doc) this.sidebar.setDocument(null, null); // sidebar (Task 11)
   }
 
   private el<T extends HTMLElement = HTMLElement>(idOrSelector: string): T {
