@@ -18,6 +18,7 @@ import { zoomIn, zoomOut } from './viewer/zoom';
 import type { Composition } from './edit/composition';
 import { MarkupBar, openHighlightMenu } from './markup/bar';
 import { OverlayHost } from './markup/overlay';
+import { MarkupController } from './markup/controller';
 import { MarkupState, type MarkKind, type Styles } from './markup/state';
 import type { Color } from './annot/types';
 
@@ -41,6 +42,8 @@ export class App {
   readonly markupBar: MarkupBar;
   /** Annotation drawing over document pages and thumbnails. */
   readonly overlays: OverlayHost;
+  /** Markup tools, editing and the selected annotation in the document view. */
+  readonly markupController: MarkupController;
   readonly metrics: AppMetrics = { openStart: 0, firstPaint: 0 };
   private doc: EditableDocument | null = null;
   /** Composition before the latest change, to keep the viewer on the same page across edits. */
@@ -174,6 +177,14 @@ export class App {
     });
 
     this.overlays = new OverlayHost(() => this.doc, [this.viewer, this.sidebar.thumbnails]);
+    this.markupController = new MarkupController({
+      doc: () => this.doc,
+      viewer: this.viewer,
+      container: this.el('viewer'),
+      state: this.markup,
+      store: this.store,
+      overlays: this.overlays,
+    });
 
     // ---- find bar ----
     this.findBar = new FindBar(this.el('findbar'), this.store, { viewer: this.viewer, doc: null });
@@ -187,7 +198,7 @@ export class App {
       findBar: this.findBar,
       editor: this.editor,
       metrics: this.metrics,
-      markup: { state: this.markup, overlays: this.overlays },
+      markup: { state: this.markup, overlays: this.overlays, controller: this.markupController },
     };
     (window as unknown as { __pfwUi: unknown }).__pfwUi = { showMenu, showAlert };
   }
@@ -494,11 +505,7 @@ export class App {
 
   /** Esc ends editing, disarms a tool or deselects before it closes find; true when it did one. */
   private markupEscape(): boolean {
-    if (this.markup.tool !== 'select') {
-      this.markup.setTool('select');
-      return true;
-    }
-    return false;
+    return this.markupController.handleEscape();
   }
 
   /** The highlight button's main part: toggles highlight mode. */
@@ -605,6 +612,7 @@ export class App {
       return;
     }
     const old = this.doc;
+    this.markupController.reset();
     this.doc = doc;
     this.lastPages = doc.pages;
     doc.onChange((kind) => this.onDocChange(doc, kind));
@@ -645,6 +653,7 @@ export class App {
       this.viewer.annotationsChanged();
       this.sidebar.thumbnails.annotationsChanged();
       this.overlays.refresh();
+      this.markupController.documentChanged();
       this.store.set({ dirty: doc.dirty });
       return;
     }
@@ -655,6 +664,7 @@ export class App {
     this.sidebar.structureChanged();
     this.editor.structureChanged();
     this.overlays.refresh();
+    this.markupController.documentChanged();
     this.store.set({ numPages: doc.numPages, dirty: doc.dirty });
   }
 

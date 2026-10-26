@@ -296,6 +296,8 @@ export class OverlayHost {
   private editingRef: AnnotRef | null = null;
   /** Annotation lists shown instead of the document's while a gesture is in progress (document view only). */
   private readonly drafts = new Map<number, readonly Annot[]>();
+  /** An annotation shown before it is committed (a new note while its popup is open). */
+  private pending: { pageId: number; annot: Annot } | null = null;
 
   constructor(
     private readonly doc: () => EditableDocument | null,
@@ -332,6 +334,12 @@ export class OverlayHost {
     this.refresh();
   }
 
+  /** Shows `annot` on its page (document view only) until cleared with null. */
+  setPending(pageId: number, annot: Annot | null): void {
+    this.pending = annot ? { pageId, annot } : null;
+    this.refresh();
+  }
+
   /** Shows `list` for the page at `position` in the document view until cleared with null. */
   setDraft(position: number, list: readonly Annot[] | null): void {
     if (list) this.drafts.set(position, list);
@@ -361,7 +369,10 @@ export class OverlayHost {
     if (!doc || view.canvasGeneration !== doc.hideGeneration(view.index)) return null;
     const list = doc.annotationsAt(view.index);
     if (list === null) return null;
-    return (view.interactive ? this.drafts.get(view.index) : undefined) ?? list;
+    if (!view.interactive) return list;
+    const shown = this.drafts.get(view.index) ?? list;
+    const p = this.pending;
+    return p && doc.pages[view.index]?.id === p.pageId ? [...shown, p.annot] : shown;
   }
 
   private draw(view: PageView): void {

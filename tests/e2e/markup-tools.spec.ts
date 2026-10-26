@@ -171,3 +171,295 @@ test.describe('annotation overlays', () => {
     expect(counts).toEqual({ stale: 0, unknown: 0, back: SEED.length });
   });
 });
+
+// ---- creation tools (real mouse input) --------------------------------------------
+
+/**
+ * Opens with the markup toolbar shown and at Fit Page, so all of page 1 is on screen for the
+ * mouse and the layout no longer moves (showing the toolbar re-fits the page).
+ */
+async function openFit(page: Page) {
+  await open(page);
+  await page.click('#toolbar [data-action="markup"]');
+  await page.evaluate(() => (window as any).__pfw.viewer.setZoom('fit-page'));
+  await settle(page);
+}
+
+/** Waits until page 1 is on screen, its view matches its element, and it stopped moving. */
+async function settle(page: Page) {
+  let last = '';
+  await expect
+    .poll(async () => {
+      const now = await page.evaluate(() => {
+        const v = (window as any).__pfw.viewer.getPageViews().find((x: any) => x.index === 0);
+        const r = document.querySelector('#viewer .page[data-page="1"]')!.getBoundingClientRect();
+        const ok = !!v && r.bottom <= window.innerHeight && Math.abs(v.viewport.width - r.width) < 1;
+        return ok ? `${r.x},${r.y},${r.width},${r.height}` : '';
+      });
+      const stable = now !== '' && now === last;
+      last = now;
+      return stable;
+    }, { intervals: [150] })
+    .toBe(true);
+  await page.waitForSelector('#viewer .page[data-page="1"] canvas[data-rendered="true"]');
+}
+
+/** Client point at fractions of page 1's box. */
+async function at(page: Page, fx: number, fy: number) {
+  const box = (await page.locator('#viewer .page[data-page="1"]').boundingBox())!;
+  return { x: box.x + box.width * fx, y: box.y + box.height * fy };
+}
+
+async function drag(page: Page, from: { x: number; y: number }, to: { x: number; y: number }, shift = false) {
+  await page.mouse.move(from.x, from.y);
+  if (shift) await page.keyboard.down('Shift');
+  await page.mouse.down();
+  await page.mouse.move((from.x + to.x) / 2, (from.y + to.y) / 2, { steps: 4 });
+  await page.mouse.move(to.x, to.y, { steps: 4 });
+  await page.mouse.up();
+  if (shift) await page.keyboard.up('Shift');
+}
+
+/** The PDF point of page 1 under a client point. */
+const toPdf = (page: Page, p: { x: number; y: number }) =>
+  page.evaluate(({ x, y }) => {
+    const view = (window as any).__pfw.viewer.getPageViews().find((v: any) => v.index === 0);
+    const r = view.el.getBoundingClientRect();
+    const [px, py] = view.viewport.convertToPdfPoint(x - r.left, y - r.top);
+    return { x: px, y: py };
+  }, p);
+
+const annots = (page: Page, index = 0) => page.evaluate((i) => (window as any).__pfw.app.document.annotationsAt(i), index);
+const tool = (page: Page) => page.evaluate(() => (window as any).__pfw.markup.state.tool);
+const selected = (page: Page) => page.evaluate(() => (window as any).__pfw.markup.controller.selected);
+
+async function pickShape(page: Page, label: string) {
+  if (!(await page.locator('#markupbar').isVisible())) await page.click('#toolbar [data-action="markup"]');
+  await page.click('[data-markup="shapes"]');
+  await page.getByRole('menuitemradio', { name: label, exact: true }).click();
+}
+
+test.describe('creation tools', () => {
+  test('Rectangle: a drag creates one rect at the dragged size, then Text Selection is back with it selected', async ({ page }) => {
+    await openFit(page);
+    await pickShape(page, 'Rectangle');
+    expect(await tool(page)).toBe('rect');
+    const a = await at(page, 0.3, 0.3);
+    const b = await at(page, 0.55, 0.42);
+    await drag(page, a, b);
+    const list = await annots(page);
+    expect(list).toHaveLength(1);
+    const r = list[0];
+    expect(r).toMatchObject({ kind: 'rect', rounded: false, fill: null, width: 2, color: '#ff3b30', opacity: 1 });
+    const p = await toPdf(page, a);
+    const q = await toPdf(page, b);
+    expect(Math.abs(r.rect.x0 - Math.min(p.x, q.x))).toBeLessThan(1);
+    expect(Math.abs(r.rect.x1 - Math.max(p.x, q.x))).toBeLessThan(1);
+    expect(Math.abs(r.rect.y0 - Math.min(p.y, q.y))).toBeLessThan(1);
+    expect(Math.abs(r.rect.y1 - Math.max(p.y, q.y))).toBeLessThan(1);
+    expect(await tool(page)).toBe('select');
+    expect(await selected(page)).toEqual({ pageId: expect.any(Number), annotId: r.id });
+    expect(await page.locator('[data-markup="select"]').getAttribute('aria-pressed')).toBe('true');
+    // One undo step removes it.
+    await page.keyboard.press('Control+z');
+    expect(await annots(page)).toHaveLength(0);
+  });
+
+  test('Oval with Shift is a circle; Rounded Rectangle is rounded and uses the fill default', async ({ page }) => {
+    await openFit(page);
+    await page.evaluate(() => (window as any).__pfw.markup.state.setStyles({ fill: '#34c759', width: 3, stroke: '#007aff' }));
+    await pickShape(page, 'Oval');
+    await drag(page, await at(page, 0.3, 0.3), await at(page, 0.6, 0.38), true);
+    await pickShape(page, 'Rounded Rectangle');
+    await drag(page, await at(page, 0.3, 0.5), await at(page, 0.5, 0.6));
+    const [oval, rounded] = await annots(page);
+    expect(oval.kind).toBe('oval');
+    expect(Math.abs(oval.rect.x1 - oval.rect.x0 - (oval.rect.y1 - oval.rect.y0))).toBeLessThan(0.01);
+    expect(oval.rect.x1 - oval.rect.x0).toBeGreaterThan(50);
+    expect(rounded).toMatchObject({ kind: 'rect', rounded: true, fill: '#34c759', width: 3, color: '#007aff' });
+  });
+
+  test('a click with Arrow creates a 100 pt arrow centered on the click; Shift snaps lines to 45°', async ({ page }) => {
+    await openFit(page);
+    await pickShape(page, 'Arrow');
+    const c = await at(page, 0.5, 0.5);
+    await page.mouse.click(c.x, c.y);
+    const [arrow] = await annots(page);
+    expect(arrow.kind).toBe('arrow');
+    expect(Math.hypot(arrow.to.x - arrow.from.x, arrow.to.y - arrow.from.y)).toBeCloseTo(100, 3);
+    const mid = await toPdf(page, c);
+    expect(Math.abs((arrow.from.x + arrow.to.x) / 2 - mid.x)).toBeLessThan(1);
+    expect(Math.abs((arrow.from.y + arrow.to.y) / 2 - mid.y)).toBeLessThan(1);
+    expect(arrow.to.x).toBeGreaterThan(arrow.from.x);
+
+    await pickShape(page, 'Line');
+    await drag(page, await at(page, 0.2, 0.7), await at(page, 0.4, 0.72), true);
+    const line = (await annots(page))[1];
+    expect(line.kind).toBe('line');
+    expect(Math.abs(line.to.y - line.from.y)).toBeLessThan(0.01);
+  });
+
+  test('Draw stays armed: three strokes make three ink annotations, points at least 1 pt apart; Esc disarms', async ({ page }) => {
+    await openFit(page);
+    await page.click('[data-markup="draw"]');
+    for (const y of [0.3, 0.4, 0.5]) {
+      const a = await at(page, 0.2, y);
+      await page.mouse.move(a.x, a.y);
+      await page.mouse.down();
+      for (let i = 1; i <= 20; i++) await page.mouse.move(a.x + i * 12, a.y + Math.sin(i / 2) * 20);
+      await page.mouse.up();
+      expect(await tool(page)).toBe('draw');
+    }
+    const list = await annots(page);
+    expect(list.map((a: any) => a.kind)).toEqual(['ink', 'ink', 'ink']);
+    for (const ink of list) {
+      expect(ink.paths).toHaveLength(1);
+      const pts = ink.paths[0];
+      expect(pts.length).toBeGreaterThan(5);
+      for (let i = 1; i < pts.length; i++) expect(Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y)).toBeGreaterThanOrEqual(1);
+    }
+    expect(await page.evaluate(() => (window as any).__pfw.app.document.canUndo)).toBe(true);
+    await page.keyboard.press('Escape');
+    expect(await tool(page)).toBe('select');
+  });
+
+  test('Text: typing replaces the placeholder, a click outside stores it; an empty box leaves no trace', async ({ page }) => {
+    await openFit(page);
+    await page.click('[data-markup="text"]');
+    const c = await at(page, 0.25, 0.6);
+    await page.mouse.click(c.x, c.y);
+    const editor = page.locator('#viewer .mk-text-editor');
+    await expect(editor).toBeFocused();
+    expect(await editor.evaluate((t: HTMLTextAreaElement) => t.value.slice(t.selectionStart, t.selectionEnd))).toBe('Text');
+    await page.keyboard.type('안녕 Hello');
+    const out = await at(page, 0.8, 0.9);
+    await page.mouse.click(out.x, out.y);
+    await expect(editor).toHaveCount(0);
+    const [box] = await annots(page);
+    expect(box).toMatchObject({ kind: 'text', text: '안녕 Hello', fontSize: 12, color: '#000000', fill: null, border: null, angle: 0 });
+    const tl = await toPdf(page, c);
+    expect(Math.abs(box.rect.x0 - tl.x)).toBeLessThan(1);
+    expect(Math.abs(box.rect.y1 - tl.y)).toBeLessThan(1);
+    await expect(page.locator('#viewer .markup-overlay .mk-text')).toHaveText('안녕 Hello');
+
+    // An emptied box is not created and leaves no history entry.
+    const undoable = await page.evaluate(() => (window as any).__pfw.app.document.version);
+    await page.click('[data-markup="text"]');
+    const d = await at(page, 0.25, 0.75);
+    await page.mouse.click(d.x, d.y);
+    await expect(editor).toBeFocused();
+    await page.keyboard.press('Backspace');
+    await page.keyboard.press('Escape');
+    await expect(editor).toHaveCount(0);
+    expect(await annots(page)).toHaveLength(1);
+    expect(await page.evaluate(() => (window as any).__pfw.app.document.version)).toBe(undoable);
+  });
+
+  test('Text: the box grows downward as lines are added', async ({ page }) => {
+    await openFit(page);
+    await page.click('[data-markup="text"]');
+    const c = await at(page, 0.25, 0.3);
+    await page.mouse.click(c.x, c.y);
+    await page.keyboard.type('one');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('two');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('three');
+    await page.keyboard.press('Escape');
+    const [box] = await annots(page);
+    expect(box.text).toBe('one\ntwo\nthree');
+    // Three lines of 12 pt × 1.2 plus 2 pt padding top and bottom; the top edge stays put.
+    expect(box.rect.y1 - box.rect.y0).toBeGreaterThanOrEqual(3 * 14.4 + 4 - 0.5);
+    const tl = await toPdf(page, c);
+    expect(Math.abs(box.rect.y1 - tl.y)).toBeLessThan(1);
+    // Esc keeps the box selected.
+    expect((await selected(page))?.annotId).toBe(box.id);
+  });
+
+  test('Note: a click places a note and opens its popup; an empty note is removed', async ({ page }) => {
+    await openFit(page);
+    await page.click('[data-markup="note"]');
+    const c = await at(page, 0.7, 0.3);
+    await page.mouse.click(c.x, c.y);
+    const popup = page.locator('.mk-note-popup textarea');
+    await expect(popup).toBeFocused();
+    // The icon shows next to its open popup.
+    await expect(page.locator('#viewer .markup-overlay .mk-note')).toHaveCount(1);
+    await page.keyboard.type('Remember this');
+    const out = await at(page, 0.2, 0.9);
+    await page.mouse.click(out.x, out.y);
+    await expect(popup).toHaveCount(0);
+    const [note] = await annots(page);
+    expect(note).toMatchObject({ kind: 'note', text: 'Remember this', angle: 0 });
+    expect(note.rect.x1 - note.rect.x0).toBe(20);
+    expect(note.rect.y1 - note.rect.y0).toBe(20);
+    const mid = await toPdf(page, c);
+    expect(Math.abs((note.rect.x0 + note.rect.x1) / 2 - mid.x)).toBeLessThan(1);
+    expect(Math.abs((note.rect.y0 + note.rect.y1) / 2 - mid.y)).toBeLessThan(1);
+    await expect(page.locator('#viewer .markup-overlay .mk-note')).toHaveCount(1);
+
+    const version = await page.evaluate(() => (window as any).__pfw.app.document.version);
+    await page.click('[data-markup="note"]');
+    const d = await at(page, 0.7, 0.5);
+    await page.mouse.click(d.x, d.y);
+    await expect(popup).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(popup).toHaveCount(0);
+    expect(await annots(page)).toHaveLength(1);
+    expect(await page.evaluate(() => (window as any).__pfw.app.document.version)).toBe(version);
+  });
+
+  test('in a rotated view a rectangle lands where it was dragged and a new text box reads upright', async ({ page }) => {
+    await openFit(page);
+    await page.locator('#viewer').focus();
+    await page.keyboard.press('Control+l');
+    await expect.poll(async () => page.evaluate(() => (window as any).__pfw.viewer.getPageViews()[0]?.viewport.rotation)).toBe(90);
+    await settle(page);
+    await pickShape(page, 'Rectangle');
+    const a = await at(page, 0.3, 0.3);
+    const b = await at(page, 0.5, 0.6);
+    await drag(page, a, b);
+    const [r] = await annots(page);
+    const p = await toPdf(page, a);
+    const q = await toPdf(page, b);
+    expect(Math.abs(r.rect.x0 - Math.min(p.x, q.x))).toBeLessThan(1);
+    expect(Math.abs(r.rect.x1 - Math.max(p.x, q.x))).toBeLessThan(1);
+    expect(Math.abs(r.rect.y0 - Math.min(p.y, q.y))).toBeLessThan(1);
+    expect(Math.abs(r.rect.y1 - Math.max(p.y, q.y))).toBeLessThan(1);
+    // Drawn where it was dragged.
+    const g = (await page.locator(`#viewer .markup-overlay [data-annot-id="${r.id}"]`).boundingBox())!;
+    expect(Math.abs(g.x - a.x)).toBeLessThan(1.5);
+    expect(Math.abs(g.y - a.y)).toBeLessThan(1.5);
+    expect(Math.abs(g.x + g.width - b.x)).toBeLessThan(1.5);
+    expect(Math.abs(g.y + g.height - b.y)).toBeLessThan(1.5);
+
+    await page.click('[data-markup="text"]');
+    const c = await at(page, 0.2, 0.75);
+    await page.mouse.click(c.x, c.y);
+    await page.keyboard.type('upright');
+    await page.keyboard.press('Escape');
+    const box = (await annots(page))[1];
+    expect(box.kind).toBe('text');
+    expect(box.angle).toBe(90);
+    const el = (await page.locator(`#viewer .markup-overlay [data-annot-id="${box.id}"]`).boundingBox())!;
+    // Upright: one line of text is wider than tall on screen, starting at the click.
+    expect(el.width).toBeGreaterThan(el.height * 2);
+    expect(Math.abs(el.x - c.x)).toBeLessThan(1.5);
+    expect(Math.abs(el.y - c.y)).toBeLessThan(1.5);
+  });
+
+  test('while a tool is armed the text layer is not selectable; with Text Selection it is', async ({ page }) => {
+    await openFit(page);
+    await page.waitForSelector('#viewer .page[data-page="1"] .textLayer span');
+    const span = (await page.locator('#viewer .page[data-page="1"] .textLayer span').nth(1).boundingBox())!;
+    await page.click('[data-markup="draw"]');
+    expect(await page.locator('#viewer .page[data-page="1"]').evaluate((el) => getComputedStyle(el).cursor)).toBe('crosshair');
+    await drag(page, { x: span.x + 2, y: span.y + span.height / 2 }, { x: span.x + span.width - 2, y: span.y + span.height / 2 });
+    expect(await page.evaluate(() => getSelection()?.toString() ?? '')).toBe('');
+    expect(await annots(page)).toHaveLength(1);
+    await page.keyboard.press('Escape');
+    await drag(page, { x: span.x + 2, y: span.y + span.height / 2 }, { x: span.x + span.width - 2, y: span.y + span.height / 2 });
+    expect((await page.evaluate(() => getSelection()?.toString() ?? '')).length).toBeGreaterThan(3);
+    expect(await annots(page)).toHaveLength(1);
+  });
+});
