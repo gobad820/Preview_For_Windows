@@ -40,6 +40,7 @@ package.json, vite.config.ts, tsconfig.json, vitest.config.ts, playwright.config
 index.html                       — single page shell: toolbar, sidebar, main, find bar mount points
 src/main.ts                      — picks platform (tauri vs browser) and starts App
 src/app.ts                       — App: wires store, platform, components; open-file flow
+src/types.ts                     — shared primitives: Rotation, ZoomMode, PageSize (dependency-free)
 src/store.ts                     — createStore<T>(): reactive state container
 src/platform/types.ts            — Platform interface + FileState type
 src/platform/browser.ts          — browser shim for e2e (fetch ?file=, HTML5 drop)
@@ -103,7 +104,7 @@ tests/fixtures/{simple.pdf,mixed.pdf,long300.pdf,outline.pdf,encrypted.pdf,broke
 
 **Interfaces:**
 - Produces: `createStore<T extends object>(initial: T): Store<T>` with `get(): T`, `set(patch: Partial<T>): void` (shallow merge, notifies only when at least one key changed by `Object.is`), `subscribe(fn: (state: T, prev: T) => void): () => void`, `select<K extends keyof T>(key: K, fn: (v: T[K]) => void): () => void` (fires on change of that key only, and immediately once on subscribe).
-- Produces: `ViewerState` type and `initialState` in the same file: `filePath: string | null`, `fileName: string | null`, `numPages: number`, `currentPage: number` (1-based, 0 when no doc), `zoomMode: 'fit-width' | 'fit-page' | 'custom'`, `scale: number`, `rotation: 0 | 90 | 180 | 270`, `sidebarOpen: boolean`, `sidebarTab: 'thumbnails' | 'outline'`, `findOpen: boolean`, `findQuery: string`, `findTotal: number`, `findIndex: number` (0-based, -1 none), `status: 'empty' | 'loading' | 'ready' | 'error'`, `error: string | null`. Initial: zoomMode `fit-width`, scale 1, sidebarOpen false, sidebarTab thumbnails, status empty.
+- Produces: `ViewerState` type and `initialState` in the same file: `filePath: string | null`, `fileName: string | null`, `numPages: number`, `currentPage: number` (1-based, 0 when no doc), `zoomMode: ZoomMode` (from `src/types.ts`), `scale: number`, `rotation: Rotation` (from `src/types.ts`), `sidebarOpen: boolean`, `sidebarTab: 'thumbnails' | 'outline'`, `findOpen: boolean`, `findQuery: string`, `findTotal: number`, `findIndex: number` (0-based, -1 none), `status: 'empty' | 'loading' | 'ready' | 'error'`, `error: string | null`. Initial: zoomMode `fit-width`, scale 1, sidebarOpen false, sidebarTab thumbnails, status empty.
 
 - [ ] **Step 1: Write failing tests**: `set` merges and notifies with `(state, prev)`; `set` with identical values does not notify; `subscribe` returns unsubscribe; `select` fires immediately and then only on that key.
 - [ ] **Step 2: Run `npx vitest run tests/unit/store.test.ts`** — FAIL (module missing).
@@ -119,7 +120,7 @@ tests/fixtures/{simple.pdf,mixed.pdf,long300.pdf,outline.pdf,encrypted.pdf,broke
 
 **Interfaces:**
 - Produces (all pure, CSS px):
-  - `CSS_UNITS = 96 / 72`; `type Rotation = 0 | 90 | 180 | 270`; `interface PageSize { width: number; height: number }` (PDF points, unrotated).
+  - `CSS_UNITS = 96 / 72`; re-exports `Rotation` and `PageSize` from `src/types.ts` (PDF points, unrotated).
   - `rotatedSize(size: PageSize, rotation: Rotation): PageSize`.
   - `interface LayoutOptions { scale: number; rotation: Rotation; gap: number; padding: number; containerWidth: number }`.
   - `interface PageRect { index: number; top: number; left: number; width: number; height: number }`; `interface Layout { pages: PageRect[]; totalHeight: number; contentWidth: number }`.
@@ -192,7 +193,7 @@ tests/fixtures/{simple.pdf,mixed.pdf,long300.pdf,outline.pdf,encrypted.pdf,broke
 - Test: `tests/unit/fileState.test.ts`
 
 **Interfaces:**
-- Produces (`types.ts`): `interface FileState { page: number; zoomMode: ViewerState['zoomMode']; scale: number; rotation: Rotation; updatedAt: number }`; `interface Platform { readFile(path: string): Promise<Uint8Array>; openFileDialog(): Promise<string | null>; startupFile(): Promise<string | null>; onFileDrop(cb: (path: string) => void): () => void; setTitle(title: string): Promise<void>; fileName(path: string): string }`.
+- Produces (`types.ts`): `interface FileState { page: number; zoomMode: ZoomMode; scale: number; rotation: Rotation; updatedAt: number }` (types imported from `src/types.ts`, never from `store.ts`); `interface Platform { readFile(path: string): Promise<Uint8Array>; openFileDialog(): Promise<string | null>; startupFile(): Promise<string | null>; onFileDrop(cb: (path: string) => void): () => void; setTitle(title: string): Promise<void>; fileName(path: string): string }`.
 - Produces (`fileState.ts`): `loadFileState(path: string, storage?: StorageLike): FileState | null`, `saveFileState(path: string, state: Omit<FileState,'updatedAt'>, storage?: StorageLike): void`, key `pfw:file:` + path, keeps at most 200 entries (evicts oldest `updatedAt`), every storage access wrapped in try/catch, `StorageLike = Pick<Storage,'getItem'|'setItem'|'removeItem'|'key'|'length'>`.
 
 - [ ] **Step 1: Write failing tests** with an in-memory `StorageLike`: round trip; missing → null; corrupt JSON → null; 201st entry evicts the oldest; throwing storage does not throw.
@@ -211,7 +212,7 @@ tests/fixtures/{simple.pdf,mixed.pdf,long300.pdf,outline.pdf,encrypted.pdf,broke
 - Produces: `browserPlatform(): Platform` — `readFile` fetches the path relative to the page (`fetch(encodeURI(path))`), `startupFile` reads `?file=` from `location.search`, `openFileDialog` uses a hidden `<input type=file>` and stores the chosen `File` under a `blob:` path, `onFileDrop` listens to HTML5 drop with files, `setTitle` sets `document.title`, `fileName` = last path segment.
 - Fixtures: `simple.pdf` (3 A4 pages, text "Hello world page N"), `mixed.pdf` (A4 portrait, A4 landscape, 200×200), `long300.pdf` (300 pages, page number text), `outline.pdf` (6 pages, nested bookmarks "Chapter 1" → "Section 1.1"), `encrypted.pdf` (user password "secret"), `broken.pdf` (text file with `.pdf` extension), `한글 문서.pdf` (2 pages with Korean text "안녕하세요 미리보기").
 
-- [ ] **Step 1: Create `scripts/make-fixtures.py`** using reportlab (install into a conda env `pdftools`: `mamba create -n pdftools -c conda-forge reportlab`) with a CJK font registered from the system (fallback: any TTF found under `/usr/share/fonts`, or reportlab's built-in `HeiseiMin-W3`/`HYSMyeongJo-Medium` CID font for Korean). Run it; commit the fixtures.
+- [ ] **Step 1: Fixtures already exist** (generated in Task 1 by `scripts/make-fixtures.py` with Noto Sans KR embedded on page 1 and the non-embedded `HYSMyeongJo-Medium` CID font on page 2 of `한글 문서.pdf`). pdf.js therefore needs its CMaps: serve `node_modules/pdfjs-dist/cmaps` and `standard_fonts` at `/pdfjs/cmaps/` and `/pdfjs/standard_fonts/` (dev/preview middleware + copy into `dist/pdfjs/` at build) and pass `cMapUrl`, `cMapPacked: true`, `standardFontDataUrl` to `getDocument`.
 - [ ] **Step 2: Write failing `tests/unit/document.test.ts`** (Vitest, Node): `PdfDocument.load(simple)` → `numPages 3`, `sizes[0]` ≈ `{595.28, 841.89}`; `mixed` → `loadSizes` ends with `sizes[1].width > sizes[1].height`; `outline` → root title `Chapter 1`, child `Section 1.1` with `pageIndex 1`; `encrypted` without password → rejects with `kind 'password'`; `broken` → `kind 'invalid'`; `getPageText(0)` of simple contains an item whose `str` includes `Hello`. Use `pdfjs-dist/legacy/build/pdf.mjs` under Node via a `vitest` alias when `typeof window === 'undefined'`.
 - [ ] **Step 3: Run** — FAIL. **Step 4: Implement `document.ts` and `renderer.ts`.** Set `GlobalWorkerOptions.workerSrc` from `new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url)` in browser builds only.
 - [ ] **Step 5: Run** — PASS.
