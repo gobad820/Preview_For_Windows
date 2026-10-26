@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-const SIDEBAR_WIDTH = 220;
+const SIDEBAR_WIDTH = 200;
 
 async function open(page: Page, name: string) {
   await page.goto(`/?file=${encodeURIComponent(`fixtures/${name}`)}`);
@@ -40,7 +40,7 @@ async function openSidebar(page: Page) {
 }
 
 test.describe('sidebar', () => {
-  test('is hidden until sidebarOpen, is 220px wide and re-fits the viewer', async ({ page }) => {
+  test('is hidden until sidebarOpen, is 200px wide and re-fits the viewer', async ({ page }) => {
     await open(page, 'simple.pdf');
     const aside = page.locator('#sidebar');
     await expect(aside).toBeHidden();

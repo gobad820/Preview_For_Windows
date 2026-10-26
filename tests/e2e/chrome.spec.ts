@@ -222,3 +222,150 @@ test.describe('unified toolbar', () => {
     await expect(page.locator('[data-action="more"]')).toBeVisible();
   });
 });
+
+const style = (page: Page, selector: string, prop: string) =>
+  page.locator(selector).first().evaluate((el, p) => getComputedStyle(el).getPropertyValue(p), prop);
+
+async function openSidebar(page: Page, name: string) {
+  await page.emulateMedia({ colorScheme: 'light' });
+  await open(page, name);
+  await page.evaluate(() => (window as any).__pfw.store.set({ sidebarOpen: true }));
+  await page.waitForSelector('#sidebar .thumb[data-page="2"] canvas[data-rendered="true"]');
+}
+
+test.describe('sidebar look', () => {
+  test('is 200px with a segmented Thumbnails | Contents control', async ({ page }) => {
+    await openSidebar(page, 'outline.pdf');
+    expect((await page.locator('#sidebar').boundingBox())!.width).toBe(200);
+    const thumbs = page.locator('#sidebar [data-tab="thumbnails"]');
+    const outline = page.locator('#sidebar [data-tab="outline"]');
+    await expect(thumbs).toHaveText('Thumbnails');
+    await expect(outline).toHaveText('Contents');
+    await expect(thumbs).toHaveClass(/active/);
+    expect(await style(page, '#sidebar .sidebar-tabs', 'background-color')).not.toBe('rgba(0, 0, 0, 0)');
+    expect(await style(page, '#sidebar [data-tab="thumbnails"]', 'background-color')).toBe('rgb(255, 255, 255)');
+    expect(await style(page, '#sidebar [data-tab="outline"]', 'background-color')).toBe('rgba(0, 0, 0, 0)');
+    const a = (await thumbs.boundingBox())!;
+    const b = (await outline.boundingBox())!;
+    expect(Math.round(a.width)).toBe(Math.round(b.width));
+    expect(Math.round(a.y)).toBe(Math.round(b.y));
+  });
+
+  test('thumbnails are centered with a hairline and soft shadow, label underneath', async ({ page }) => {
+    await openSidebar(page, 'simple.pdf');
+    const panel = (await page.locator('#sidebar .sidebar-panel.thumbnails').boundingBox())!;
+    const canvas = (await page.locator('#sidebar .thumb[data-page="1"] canvas').boundingBox())!;
+    const label = (await page.locator('#sidebar .thumb[data-page="1"] .thumb-label').boundingBox())!;
+    expect(Math.abs(canvas.x + canvas.width / 2 - (panel.x + panel.width / 2))).toBeLessThanOrEqual(1);
+    expect(Math.abs(label.x + label.width / 2 - (canvas.x + canvas.width / 2))).toBeLessThanOrEqual(1);
+    expect(label.y).toBeGreaterThan(canvas.y + canvas.height);
+    expect(await style(page, '#sidebar .thumb canvas', 'box-shadow')).toMatch(/rgba\(0, 0, 0, 0\.1\) 0px 0px 0px 1px/);
+  });
+
+  test('selection is an 8px highlight with an accent capsule while the sidebar has focus, gray otherwise', async ({ page }) => {
+    await openSidebar(page, 'simple.pdf');
+    await page.evaluate(() => document.querySelector('#sidebar .thumb[data-page="2"]')!.classList.add('selected'));
+    const sel = '#sidebar .thumb[data-page="2"]';
+    await page.locator('#viewer').focus();
+    const ring = await style(page, `${sel} canvas`, 'box-shadow');
+    expect(ring).toMatch(/0px 0px 0px 6px/);
+    expect(await style(page, `${sel} canvas`, 'border-radius')).toBe('2px');
+    const grayCapsule = await style(page, `${sel} .thumb-label`, 'background-color');
+    expect(grayCapsule).not.toBe('rgba(0, 0, 0, 0)');
+    expect(grayCapsule).not.toBe('rgb(0, 122, 255)');
+    expect(Number.parseFloat(await style(page, `${sel} .thumb-label`, 'border-top-left-radius'))).toBeGreaterThanOrEqual(7);
+
+    await page.locator(sel).focus();
+    expect(await style(page, `${sel} .thumb-label`, 'background-color')).toBe('rgb(0, 122, 255)');
+    expect(await style(page, `${sel} .thumb-label`, 'color')).toBe('rgb(255, 255, 255)');
+  });
+
+  test('the current page gets a subtle outline only when it is not selected', async ({ page }) => {
+    await openSidebar(page, 'simple.pdf');
+    const current = '#sidebar .thumb.current';
+    const plain = '#sidebar .thumb[data-page="3"]';
+    expect(await style(page, `${current} canvas`, 'outline-style')).toBe('solid');
+    expect(await style(page, `${current} canvas`, 'outline-offset')).toBe('5px');
+    expect(await style(page, `${plain} canvas`, 'outline-style')).toBe('none');
+    await page.evaluate(() => document.querySelector('#sidebar .thumb.current')!.classList.add('selected'));
+    expect(await style(page, `${current} canvas`, 'outline-style')).toBe('none');
+    expect(await style(page, `${current} canvas`, 'box-shadow')).toMatch(/0px 0px 0px 6px/);
+  });
+
+  test('drag states: dimmed source, insertion line and ghost stack with a count badge', async ({ page }) => {
+    await openSidebar(page, 'simple.pdf');
+    const geometry = await page.evaluate(() => {
+      const list = document.querySelector<HTMLElement>('#sidebar .sidebar-panel.thumbnails')!;
+      const thumb = list.querySelector<HTMLElement>('.thumb[data-page="2"]')!;
+      thumb.classList.add('dragging');
+      const line = document.createElement('div');
+      line.className = 'drop-indicator';
+      line.style.top = '100px';
+      list.append(line);
+      const hidden = getComputedStyle(line).display;
+      line.classList.add('visible');
+      const ls = getComputedStyle(line);
+      const lr = line.getBoundingClientRect();
+      const pr = list.getBoundingClientRect();
+
+      const ghost = document.createElement('div');
+      ghost.className = 'drag-ghost';
+      for (let i = 0; i < 4; i++) {
+        const img = document.createElement('img');
+        img.width = 80;
+        img.height = 110;
+        ghost.append(img);
+      }
+      const count = document.createElement('span');
+      count.className = 'drag-count';
+      count.textContent = '4';
+      ghost.append(count);
+      ghost.style.left = '300px';
+      ghost.style.top = '200px';
+      document.body.append(ghost);
+      const imgs = Array.from(ghost.querySelectorAll('img')).map((i) => i.getBoundingClientRect());
+      return {
+        opacity: getComputedStyle(thumb).opacity,
+        hidden,
+        shown: ls.display,
+        position: ls.position,
+        height: lr.height,
+        radius: Number.parseFloat(ls.borderTopLeftRadius),
+        background: ls.backgroundColor,
+        insidePanel: lr.left >= pr.left && lr.right <= pr.right,
+        offsetParentIsList: line.offsetParent === list,
+        ghostPosition: getComputedStyle(ghost).position,
+        ghostEvents: getComputedStyle(ghost).pointerEvents,
+        dx: [imgs[1]!.x - imgs[0]!.x, imgs[2]!.x - imgs[0]!.x],
+        dy: [imgs[1]!.y - imgs[0]!.y, imgs[2]!.y - imgs[0]!.y],
+        fourthShown: getComputedStyle(ghost.querySelectorAll('img')[3]!).display !== 'none',
+        badge: getComputedStyle(count).backgroundColor,
+      };
+    });
+    expect(geometry).toMatchObject({
+      opacity: '0.4',
+      hidden: 'none',
+      shown: 'block',
+      position: 'absolute',
+      height: 2,
+      background: 'rgb(0, 122, 255)',
+      insidePanel: true,
+      offsetParentIsList: true,
+      ghostPosition: 'fixed',
+      ghostEvents: 'none',
+      dx: [6, 12],
+      dy: [6, 12],
+      fourthShown: false,
+      badge: 'rgb(255, 59, 48)',
+    });
+    expect(geometry.radius).toBeGreaterThanOrEqual(1);
+  });
+
+  test('contents rows are 24px with disclosure chevrons', async ({ page }) => {
+    await openSidebar(page, 'outline.pdf');
+    await page.locator('#sidebar [data-tab="outline"]').click();
+    const row = page.locator('#sidebar .outline-row').first();
+    expect((await row.boundingBox())!.height).toBe(24);
+    await expect(row.locator('.outline-toggle')).toBeVisible();
+  });
+});
