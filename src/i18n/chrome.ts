@@ -109,6 +109,7 @@ export const en = {
   'chrome.about.image': 'Preview for Windows',
   'chrome.about.version': 'Version {version} · Photo: Vincent Yap, Unsplash',
   'chrome.about.what': 'PDF viewer and editor. No network access, no telemetry.',
+  'chrome.about.legal': 'Copyright © 2026 Sanghae. Free software under the GNU AGPL v3, with no warranty. Source: {source}',
 
   // window buttons
   'chrome.win.minimize': 'Minimize',
@@ -215,6 +216,7 @@ export const ko: Record<keyof typeof en, Message> = {
   'chrome.about.image': 'Windows용 Preview',
   'chrome.about.version': '버전 {version} · 사진: Vincent Yap, Unsplash',
   'chrome.about.what': 'PDF 뷰어 및 편집기. 네트워크 연결 및 원격 분석 없음.',
+  'chrome.about.legal': 'Copyright © 2026 Sanghae. GNU AGPL v3에 따른 자유 소프트웨어이며 어떠한 보증도 하지 않습니다. 소스: {source}',
 
   'chrome.win.minimize': '최소화',
   'chrome.win.maximize': '최대화',

@@ -25,7 +25,11 @@ export function showAbout(): void {
   const what = document.createElement('span');
   what.textContent = t('chrome.about.what');
   caption.append(version, what);
-  card.append(img, caption);
+  // The license's "appropriate legal notices": copyright, no warranty, the license, where the source is.
+  const legal = document.createElement('p');
+  legal.className = 'about-legal';
+  legal.textContent = t('chrome.about.legal', { source: 'github.com/gobad820/Preview_For_Windows' });
+  card.append(img, caption, legal);
   scrim.append(card);
   const close = () => {
     scrim.remove();

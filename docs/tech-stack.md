@@ -6,7 +6,7 @@ interface, and a TypeScript app reads, renders and writes PDFs with pdf.js and p
 Everything is built on Linux (WSL2) and cross-compiled for Windows.
 
 Versions are the ones locked in `package-lock.json` and `src-tauri/Cargo.lock` as of
-release 0.5.0.
+release 0.5.1.
 
 ```
 Preview.exe  (Rust, Tauri 2; about 7 MB, portable)
@@ -79,7 +79,7 @@ whole build.
 | Layer | Tool | What it covers |
 | --- | --- | --- |
 | Unit | Vitest 5.0.5 (526 tests, 33 files) | Layout and zoom math, search, shortcuts, page composition and undo history, outline remapping, annotation geometry, appearance streams, writer and reader, preferences, commands |
-| End to end | Playwright 1.64.1 (290 tests) | The built app in headless Chromium through a browser platform shim (`src/platform/browser.ts`): opening, viewing, page editing, saving, markup, menus, dialogs. Each worktree runs on its own `PW_PORT` |
+| End to end | Playwright 1.64.1 (291 tests) | The built app in headless Chromium through a browser platform shim (`src/platform/browser.ts`): opening, viewing, page editing, saving, markup, menus, dialogs. Each worktree runs on its own `PW_PORT` |
 | Other viewers | PDFium via pypdfium2 (`scripts/pdfium-render.py`) | Saved annotations render in Chrome and Edge's engine where they were drawn, also on rotated pages |
 | Real Windows | `scripts/cdp-windows.ps1` | Drives the real `Preview.exe` through WebView2's DevTools protocol with its own profile, without touching the user's desktop |
 | Fixtures | reportlab (`scripts/make-fixtures.py`) | Mixed page sizes, 300 pages, outline, links, encrypted and broken files, a Korean document |

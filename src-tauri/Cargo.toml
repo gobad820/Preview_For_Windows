@@ -1,8 +1,9 @@
 [package]
 name = "preview"
-version = "0.5.0"
+version = "0.5.1"
 description = "A fast, clean PDF viewer for Windows"
 authors = ["Sanghae"]
+license = "AGPL-3.0-only"
 edition = "2021"
 
 [lib]

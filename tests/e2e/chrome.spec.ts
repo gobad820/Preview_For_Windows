@@ -511,3 +511,18 @@ test('About Preview shows the splash and the version, and closes with a click or
   await page.mouse.click(10, 400);
   await expect(about).toBeHidden();
 });
+
+test('About shows the copyright, the license, no warranty and where the source is', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForFunction(() => (window as any).__pfw?.store.get().status === 'empty');
+  await page.evaluate(() => (window as any).__pfw.app.commands.run('app.about'));
+  const legal = page.locator('.about .about-legal');
+  await expect(legal).toHaveText(
+    'Copyright © 2026 Sanghae. Free software under the GNU AGPL v3, with no warranty. Source: github.com/gobad820/Preview_For_Windows',
+  );
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => (window as any).__pfw.app.settings.set({ language: 'ko' }));
+  await page.evaluate(() => (window as any).__pfw.app.commands.run('app.about'));
+  await expect(legal).toContainText('GNU AGPL v3에 따른 자유 소프트웨어이며 어떠한 보증도 하지 않습니다.');
+  await expect(legal).toContainText('github.com/gobad820/Preview_For_Windows');
+});

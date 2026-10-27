@@ -12,8 +12,10 @@ annotations.
   <img alt="The menu bar above a document in Two Pages, with the thumbnail sidebar and the markup toolbar open, showing a highlight, an underline, a strikethrough, a rounded rectangle, an arrow, a text box, a note, an oval and a freehand check mark" src="docs/screenshot.png">
 </picture>
 
-**Version 0.5.0** · English and Korean · Windows 10 and 11, x64 · portable `Preview.exe` (about 7 MB) or a
-per-user installer (about 4.6 MB) · no network access, no telemetry.
+**Version 0.5.1** · English and Korean · Windows 10 and 11, x64 · portable `Preview.exe` (about 7 MB) or a
+per-user installer (about 4.6 MB) · no network access, no telemetry · GNU AGPL v3.
+
+**[Download the latest release](https://github.com/gobad820/Preview_For_Windows/releases/latest)**
 
 ## Contents
 
@@ -25,7 +27,7 @@ per-user installer (about 4.6 MB) · no network access, no telemetry.
 - [Development](#development)
 - [Project layout](#project-layout)
 - [Version history](#version-history)
-- [Credits and licenses](#credits-and-licenses)
+- [License](#license)
 - [Not in scope yet](#not-in-scope-yet)
 
 ## What it does
@@ -149,12 +151,17 @@ Password-protected and non-PDF files show an inline error instead of a blank win
 
 ## Install
 
-A build produces two files:
+Download from [Releases](https://github.com/gobad820/Preview_For_Windows/releases/latest):
 
-- `Preview.exe`: portable, nothing to install. Needs the WebView2 runtime, which every
-  up-to-date Windows 10/11 already has.
-- `Preview_<version>_x64-setup.exe`: per-user NSIS installer that also offers to
-  associate `.pdf` files.
+- `Preview_<version>_x64-setup.exe`: per-user installer (no administrator rights); it adds
+  a Start menu entry and offers to open `.pdf` files with Preview.
+- `Preview-<version>-portable.exe`: nothing to install, run it from anywhere.
+
+Both need the WebView2 runtime, which every up-to-date Windows 10/11 already has.
+`SHA256SUMS.txt` lists the files' checksums.
+
+The files are not code-signed, so Windows SmartScreen may say "Windows protected your
+PC" the first time: choose **More info › Run anyway**.
 
 ## Tech stack
 
@@ -166,7 +173,7 @@ A build produces two files:
 | Reading PDFs | [pdf.js](https://mozilla.github.io/pdf.js/) 6.4 (`pdfjs-dist`), assets bundled for offline use |
 | Writing PDFs | `@cantoo/pdf-lib` 2.11 and `@cantoo/fontkit` 2.0 (Malgun Gothic subsets) |
 | Build | Cross-compiled from Linux/WSL2 with cargo-xwin, clang-cl and lld-link; NSIS installer |
-| Tests | Vitest 5 (526 unit tests), Playwright 1.64 (290 end-to-end tests), PDFium checks of saved files, WebView2 DevTools checks of the real exe |
+| Tests | Vitest 5 (526 unit tests), Playwright 1.64 (291 end-to-end tests), PDFium checks of saved files, WebView2 DevTools checks of the real exe |
 
 Versions, licenses, the reasons behind each choice and how the tests are layered are in
 [docs/tech-stack.md](docs/tech-stack.md).
@@ -294,18 +301,44 @@ Each feature has a design document in `docs/superpowers/specs/` and a plan in
 | 0.4.1 | 2026-10-27 | Menu bar, its menus, Keyboard Shortcuts and Settings restyled to match the modern macOS look of the rest of the window, with dark mode |
 | 0.4.2 | 2026-10-27 | Window buttons in the top-right corner of the title bar; menu bar lined up with the toolbar; Settings opens below the toolbar; the splash shows the current version |
 | 0.5.0 | 2026-10-27 | English and Korean interface, chosen in Settings and switched live |
+| 0.5.1 | 2026-10-27 | Licensed under the GNU AGPL v3; copyright and license shown in About |
 
-## Credits and licenses
+## License
+
+Copyright © 2026 Sanghae.
+
+Preview for Windows is free software: you can redistribute it and/or modify it under the
+terms of the **GNU Affero General Public License, version 3 only**, as published by the
+Free Software Foundation ([LICENSE](LICENSE)). It is distributed in the hope that it will
+be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+or FITNESS FOR A PARTICULAR PURPOSE.
+
+In practice: anyone may use, study and share it, but whoever distributes a modified
+version, or runs one for others over a network (for example as an online PDF editor),
+must publish their complete source under the same license. Using the code in a
+closed-source product is not allowed without the author's permission.
+
+The license covers this project's own work. The third-party components it is built from
+and ships with keep their own licenses; every one, with its license text, is listed in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) (regenerate with
+`node scripts/third-party-notices.mjs`). In short:
 
 - [pdf.js](https://github.com/mozilla/pdf.js) (Apache-2.0),
   [pdf-lib by Cantoo](https://github.com/cantoo-scribe/pdf-lib) and fontkit (MIT),
-  [Tauri](https://tauri.app) (MIT / Apache-2.0).
+  [Tauri](https://tauri.app) and its Rust crates (mostly MIT / Apache-2.0).
 - [Inter](https://rsms.me/inter/) by Rasmus Andersson, SIL Open Font License 1.1
   (`src/assets/fonts/OFL.txt`).
-- Splash photo by Vincent Yap on [Unsplash](https://unsplash.com) (Unsplash License).
-  The name on it is set in EB Garamond (SIL Open Font License 1.1); only the rendered
-  image ships.
+- The splash photo is by Vincent Yap on [Unsplash](https://unsplash.com/photos/yGykQCIecbM)
+  (Unsplash License); the name on it is set in EB Garamond (SIL Open Font License 1.1),
+  and only the rendered image ships.
 - Malgun Gothic is read from the user's own Windows installation and never bundled.
+
+**Not affiliated.** This is an independent project, not affiliated with, endorsed by or
+sponsored by Apple, Adobe or Microsoft. It imitates the look and behaviour of Apple's
+Preview app on macOS; macOS is a trademark of Apple Inc. The splash's type treatment (a
+coloured first word, the rest in ink, a smaller version number) was inspired by classic
+Adobe Photoshop splash screens, but it uses no Adobe artwork, logo or font; Adobe and
+Photoshop are trademarks of Adobe. Windows is a trademark of Microsoft.
 
 ## Not in scope yet
 
