@@ -6,7 +6,7 @@ interface, and a TypeScript app reads, renders and writes PDFs with pdf.js and p
 Everything is built on Linux (WSL2) and cross-compiled for Windows.
 
 Versions are the ones locked in `package-lock.json` and `src-tauri/Cargo.lock` as of
-release 0.4.0.
+release 0.4.1.
 
 ```
 Preview.exe  (Rust, Tauri 2; about 7 MB, portable)
@@ -35,7 +35,6 @@ Preview.exe  (Rust, Tauri 2; about 7 MB, portable)
 | PDF writing | `@cantoo/pdf-lib` | 2.11.1 | Saving edited documents and annotations; a maintained pdf-lib fork that also reads encrypted files | MIT |
 | Fonts in PDFs | `@cantoo/fontkit` | 2.0.12 | Subsets Malgun Gothic for text boxes (`@pdf-lib/fontkit` crashed on `malgun.ttf`) | MIT |
 | UI font | Inter (variable) | bundled | Interface text, with Malgun Gothic for Hangul | SIL OFL 1.1 (`src/assets/fonts/OFL.txt`) |
-| Menu bar font | Lucida Sans Unicode | system | The Mac OS X Lion menu bar and Settings window (Lion used Lucida Grande, which Windows does not have) | Microsoft, part of Windows |
 
 Annotations are drawn by the app's own overlays and saved as standard PDF annotations
 with appearance streams, so Acrobat, Edge, Chrome and Mac Preview show them as drawn.
@@ -79,8 +78,8 @@ whole build.
 
 | Layer | Tool | What it covers |
 | --- | --- | --- |
-| Unit | Vitest 5.0.5 (499 tests, 29 files) | Layout and zoom math, search, shortcuts, page composition and undo history, outline remapping, annotation geometry, appearance streams, writer and reader, preferences, commands |
-| End to end | Playwright 1.64.1 (242 tests) | The built app in headless Chromium through a browser platform shim (`src/platform/browser.ts`): opening, viewing, page editing, saving, markup, menus, dialogs. Each worktree runs on its own `PW_PORT` |
+| Unit | Vitest 5.0.5 (508 tests, 29 files) | Layout and zoom math, search, shortcuts, page composition and undo history, outline remapping, annotation geometry, appearance streams, writer and reader, preferences, commands |
+| End to end | Playwright 1.64.1 (255 tests) | The built app in headless Chromium through a browser platform shim (`src/platform/browser.ts`): opening, viewing, page editing, saving, markup, menus, dialogs. Each worktree runs on its own `PW_PORT` |
 | Other viewers | PDFium via pypdfium2 (`scripts/pdfium-render.py`) | Saved annotations render in Chrome and Edge's engine where they were drawn, also on rotated pages |
 | Real Windows | `scripts/cdp-windows.ps1` | Drives the real `Preview.exe` through WebView2's DevTools protocol with its own profile, without touching the user's desktop |
 | Fixtures | reportlab (`scripts/make-fixtures.py`) | Mixed page sizes, 300 pages, outline, links, encrypted and broken files, a Korean document |

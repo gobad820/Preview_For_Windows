@@ -16,7 +16,7 @@ export interface MenuSpec {
 
 const _ = SEPARATOR;
 
-/** Mac OS X Lion Preview's menus, with Windows access keys. */
+/** Preview's menus, with Windows access keys. */
 export const MENUS: readonly MenuSpec[] = [
   { title: 'Preview', key: 'p', app: true, items: ['app.about', _, 'app.preferences', _, 'file.close'] },
   { title: 'File', key: 'f', items: ['file.open', _, 'file.close', 'file.save', 'file.saveAs', _, 'file.print'] },

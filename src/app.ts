@@ -255,7 +255,7 @@ export class App {
     return s.status === 'ready' && s.numPages > 0 && this.doc !== null;
   }
 
-  /** Settings (Ctrl+,): the Lion-style preferences window. */
+  /** Settings (Ctrl+,): the preferences window. */
   openPreferences(): void {
     this.settingsWindow.open();
   }

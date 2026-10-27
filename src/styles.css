@@ -9,20 +9,6 @@
 
 /* ---- theme tokens (macOS Sonoma Preview) ---------------------------- */
 :root {
-  /* Mac OS X Lion (10.7) look for the in-window menu bar, its menus and the Settings window.
-     Lucida Grande was Lion's UI font; Windows ships its sibling Lucida Sans Unicode. */
-  --lion-font: "Lucida Grande", "Lucida Sans Unicode", "Lucida Sans", Geneva, Verdana, sans-serif;
-  --lion-bar-top: #f6f6f6;
-  --lion-bar-bottom: #dcdcdc;
-  --lion-bar-border: #a7a7a7;
-  --lion-menu-bg: rgba(255, 255, 255, 0.97);
-  --lion-menu-border: rgba(0, 0, 0, 0.22);
-  --lion-select-top: #648af5;
-  --lion-select-bottom: #2b58df;
-  --lion-text: #000000;
-  --lion-text-disabled: #a6a6a6;
-  --lion-window-top: #ebebeb;
-  --lion-window-bottom: #cfcfcf;
   color-scheme: light dark;
   --font: "Inter", "Malgun Gothic", system-ui, sans-serif;
   --caption-font: "Segoe Fluent Icons", "Segoe MDL2 Assets";
