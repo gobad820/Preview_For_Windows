@@ -24,6 +24,9 @@ import { MarkupController } from './markup/controller';
 import { MarkupState, type MarkKind, type Styles } from './markup/state';
 import type { Color } from './annot/types';
 import { Commands } from './commands';
+import { MenuBar } from './menubar/menubar';
+import { MENUS } from './menubar/menus';
+import { showShortcuts } from './menubar/shortcutsPanel';
 import type { Tool } from './markup/state';
 
 /** Horizontal pan per arrow-key press when the page is wider than the viewport (CSS px). */
@@ -45,6 +48,8 @@ export class App {
   readonly markup = new MarkupState();
   /** Every feature by id; the menu bar and other menus are built from these. */
   readonly commands = new Commands();
+  /** The in-window menu bar (File, Edit, View, …) built from `commands`. */
+  readonly menuBar: MenuBar;
   readonly markupBar: MarkupBar;
   /** Annotation drawing over document pages and thumbnails. */
   readonly overlays: OverlayHost;
@@ -211,6 +216,9 @@ export class App {
     // ---- find bar ----
     this.findBar = new FindBar(this.el('findbar'), this.store, { viewer: this.viewer, doc: null });
 
+    // ---- menu bar ----
+    this.menuBar = new MenuBar(this.el('menubar'), this.commands, this.store);
+
     (window as unknown as { __pfw: unknown }).__pfw = {
       app: this,
       store: this.store,
@@ -221,6 +229,7 @@ export class App {
       editor: this.editor,
       metrics: this.metrics,
       markup: { state: this.markup, overlays: this.overlays, controller: this.markupController },
+      menuBar: this.menuBar,
     };
     (window as unknown as { __pfwUi: unknown }).__pfwUi = { showMenu, showAlert };
     this.registerCommands();
@@ -390,6 +399,8 @@ export class App {
       // Window
       { id: 'window.minimize', label: 'Minimize', enabled: () => !!controls, run: () => void controls?.minimize() },
       { id: 'window.zoom', label: 'Zoom', enabled: () => !!controls, run: () => void controls?.toggleMaximize() },
+      // Help
+      { id: 'help.shortcuts', label: 'Keyboard Shortcuts', run: () => showShortcuts(MENUS, this.commands) },
     );
   }
 
