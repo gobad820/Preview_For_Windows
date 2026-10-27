@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 async function open(page: Page, name: string) {
   await page.goto(`/?file=${encodeURIComponent(`fixtures/${name}`)}`);
@@ -18,6 +18,61 @@ const state = (page: Page) => page.evaluate(() => (window as any).__pfw.store.ge
 const stored = (page: Page) => page.evaluate(() => JSON.parse(localStorage.getItem('pfw.settings') ?? 'null'));
 const settings = (page: Page) => page.getByRole('dialog', { name: 'Settings' });
 const tab = (page: Page, name: string) => settings(page).getByRole('tab', { name });
+
+/** What `prop: value` computes to on a bare element, so theme tokens resolve as the page has them. */
+const resolved = (page: Page, prop: string, value: string) =>
+  page.evaluate(
+    ([prop, value]) => {
+      const el = document.createElement('div');
+      el.style.setProperty(prop, value);
+      document.body.append(el);
+      const out = getComputedStyle(el).getPropertyValue(prop);
+      el.remove();
+      return out;
+    },
+    [prop, value] as const,
+  );
+const css = (loc: Locator, prop: string, pseudo?: string) =>
+  loc.evaluate((el, [prop, pseudo]) => getComputedStyle(el, pseudo).getPropertyValue(prop), [prop, pseudo ?? null] as const);
+
+/** The computed look of the app's own menus (src/ui/menu.ts), with a focused (highlighted) row. */
+const menuLook = (page: Page) =>
+  page.evaluate(() => {
+    const menu = document.createElement('div');
+    menu.className = 'menu';
+    const item = document.createElement('div');
+    item.className = 'menu-item';
+    item.tabIndex = -1;
+    const check = document.createElement('span');
+    check.className = 'menu-check';
+    const label = document.createElement('span');
+    label.className = 'menu-label';
+    label.textContent = 'Item';
+    item.append(check, label);
+    menu.append(item);
+    document.body.append(menu);
+    item.focus();
+    const m = getComputedStyle(menu);
+    const i = getComputedStyle(item);
+    const look = {
+      background: m.backgroundColor,
+      backdrop: m.backdropFilter,
+      radius: m.borderRadius,
+      shadow: m.boxShadow,
+      padding: m.padding,
+      borderWidth: m.borderTopWidth,
+      fontFamily: i.fontFamily,
+      fontSize: i.fontSize,
+      color: m.color,
+      itemHeight: i.height,
+      itemRadius: i.borderRadius,
+      highlight: i.backgroundColor,
+      highlightText: i.color,
+      labelInset: label.getBoundingClientRect().left - item.getBoundingClientRect().left,
+    };
+    menu.remove();
+    return look;
+  });
 
 async function openSettings(page: Page, pane?: string) {
   await page.keyboard.press('Control+Comma');
@@ -129,14 +184,217 @@ test.describe('Settings window', () => {
     await expect(settings(page)).toHaveCount(0);
   });
 
-  test('stays light in the dark theme', async ({ page }) => {
-    await page.emulateMedia({ colorScheme: 'dark' });
-    await page.goto('/');
-    await openSettings(page);
-    const bg = await settings(page).locator('.settings-pane:not([hidden])').evaluate((el) => getComputedStyle(el).backgroundColor);
-    expect(bg).toBe('rgb(236, 236, 236)');
-  });
 });
+
+for (const scheme of ['light', 'dark'] as const) {
+  test.describe(`Look, ${scheme}`, () => {
+    test.beforeEach(async ({ page }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+    });
+
+    test('the window is a modern panel in the toolbar colours, over the scrim', async ({ page }) => {
+      await page.goto('/');
+      await openSettings(page);
+      const win = settings(page);
+      const chrome = await resolved(page, 'background-color', 'var(--chrome-bg)');
+      expect(await css(win, 'background-color')).toBe(chrome);
+      expect(await css(page.locator('#toolbar'), 'background-color')).toBe(chrome);
+      expect(await css(win, 'border-radius')).toBe(await resolved(page, 'border-radius', 'var(--radius-alert)'));
+      expect(await css(win, 'box-shadow')).toContain(await resolved(page, 'box-shadow', 'var(--menu-ring)'));
+      expect(await css(win, 'font-family')).toContain('Inter');
+      expect(await css(win, 'font-family')).not.toContain('Lucida');
+      expect(await css(win, 'color')).toBe(await resolved(page, 'color', 'var(--text)'));
+      expect(await css(page.locator('.settings-scrim'), 'background-color')).toBe(await resolved(page, 'background-color', 'var(--scrim)'));
+
+      // Title bar and tab toolbar are one surface; only the toolbar draws the app toolbar's hairline.
+      const titlebar = win.locator('.settings-titlebar');
+      expect(await css(titlebar, 'background-image')).toBe('none');
+      expect(await css(titlebar, 'box-shadow')).toBe('none');
+      const toolbar = win.locator('.settings-toolbar');
+      expect(await css(toolbar, 'background-image')).toBe('none');
+      expect(await css(toolbar, 'box-shadow')).toBe(await css(page.locator('#toolbar'), 'box-shadow'));
+
+      const title = win.locator('.settings-title');
+      expect(await css(title, 'font-size')).toBe('13px');
+      expect(await css(title, 'font-weight')).toBe('600');
+      expect(await css(title, 'color')).toBe(await resolved(page, 'color', 'var(--text)'));
+      expect(await css(title, 'text-shadow')).toBe('none');
+      const [wb, tb] = [await win.boundingBox(), await title.boundingBox()];
+      expect(Math.abs(tb!.x + tb!.width / 2 - (wb!.x + wb!.width / 2))).toBeLessThan(1);
+    });
+
+    test('flat traffic lights: a red close button, the other two grey and inert', async ({ page }) => {
+      await page.goto('/');
+      await openSettings(page);
+      const lights = settings(page).locator('.settings-light');
+      await expect(lights).toHaveCount(3);
+      for (let i = 0; i < 3; i++) {
+        const box = await lights.nth(i).boundingBox();
+        expect([box!.width, box!.height]).toEqual([12, 12]);
+        expect(await css(lights.nth(i), 'border-radius')).toBe('50%');
+        expect(await css(lights.nth(i), 'background-image')).toBe('none');
+      }
+      const close = settings(page).getByRole('button', { name: 'Close' });
+      expect(await css(close, 'background-color')).toBe('rgb(255, 95, 87)');
+      for (const i of [1, 2]) {
+        expect(await css(lights.nth(i), 'background-color')).not.toBe('rgb(255, 95, 87)');
+        await expect(lights.nth(i)).toHaveAttribute('aria-hidden', 'true');
+        expect(await lights.nth(i).evaluate((el) => (el as HTMLElement).tabIndex)).toBe(-1);
+      }
+    });
+
+    test('toolbar tabs: grey line icons with labels; the selected one in the accent on a pressed fill', async ({ page }) => {
+      await page.goto('/');
+      await openSettings(page);
+      const icon = await resolved(page, 'color', 'var(--icon)');
+      const accent = await resolved(page, 'color', 'var(--accent)');
+      const selected = tab(page, 'General');
+      const other = tab(page, 'Markup');
+      for (const t of [selected, other, tab(page, 'Window')]) {
+        const svg = t.locator('svg');
+        expect(await svg.getAttribute('stroke')).toBe('currentColor');
+        expect((await svg.boundingBox())!.width).toBe(22);
+        expect(await css(t.locator('.settings-tab-label'), 'font-size')).toBe('11px');
+        expect(await css(t, 'font-family')).toContain('Inter');
+      }
+      expect(await css(other.locator('svg'), 'color')).toBe(icon);
+      expect(await css(other, 'background-color')).toBe('rgba(0, 0, 0, 0)');
+      expect(await css(selected.locator('svg'), 'color')).toBe(accent);
+      expect(await css(selected.locator('.settings-tab-label'), 'color')).toBe(accent);
+      expect(await css(selected, 'background-color')).toBe(await resolved(page, 'background-color', 'var(--fill-pressed)'));
+      expect(await css(selected, 'border-radius')).toBe('6px');
+      expect(await css(selected, 'background-image')).toBe('none');
+      await other.hover();
+      await expect.poll(() => css(other, 'background-color')).toBe(await resolved(page, 'background-color', 'var(--fill-hover)'));
+      // Keyboard focus shows the app's focus ring.
+      await selected.focus();
+      await page.keyboard.press('ArrowRight');
+      await page.keyboard.press('ArrowLeft');
+      expect(await css(selected, 'box-shadow')).toContain(await resolved(page, 'box-shadow', 'var(--focus-ring)'));
+    });
+
+    test('pop-up buttons: a macOS pop-up whose open list looks like the app menus', async ({ page }) => {
+      await page.goto('/');
+      const menu = await menuLook(page);
+      await openSettings(page);
+      const zoom = settings(page).getByLabel('Default zoom');
+      const box = (await zoom.boundingBox())!;
+      expect(box.height).toBe(22);
+      const radius = parseFloat(await css(zoom, 'border-radius'));
+      expect(radius).toBeGreaterThanOrEqual(5);
+      expect(radius).toBeLessThanOrEqual(6);
+      expect(await css(zoom, 'background-color')).toBe(await resolved(page, 'background-color', 'var(--control-bg)'));
+      expect(await css(zoom, 'background-image')).toBe('none');
+      expect(await css(zoom, 'box-shadow')).toBe(await resolved(page, 'box-shadow', 'var(--control-shadow)'));
+      expect(await css(zoom, 'font-family')).toContain('Inter');
+      expect(await css(zoom, 'font-size')).toBe('13px');
+
+      // Value on the left; an accent square with white chevrons on the right.
+      const value = zoom.locator('selectedcontent');
+      await expect(value).toHaveText('Fit Width');
+      const arrows = zoom.locator('.settings-popup-arrows');
+      const a = (await arrows.boundingBox())!;
+      expect(await css(arrows, 'background-color')).toBe(await resolved(page, 'background-color', 'var(--accent)'));
+      expect(await css(arrows, 'color')).toBe(await resolved(page, 'color', 'var(--accent-fg)'));
+      expect(a.width).toBe(a.height);
+      expect(box.x + box.width - (a.x + a.width)).toBeLessThanOrEqual(4);
+      expect((await value.boundingBox())!.x + 1).toBeLessThan(a.x);
+      await expect(arrows.locator('svg')).toHaveCount(1);
+
+      await zoom.focus();
+      expect(await css(zoom, 'box-shadow')).toContain(await resolved(page, 'box-shadow', 'var(--focus-ring)'));
+      await page.keyboard.press('Enter');
+      await expect.poll(() => zoom.evaluate((el) => el.matches(':open'))).toBe(true);
+      const picker = (prop: string) => css(zoom, prop, '::picker(select)');
+      expect(await picker('background-color')).toBe(menu.background);
+      expect(await picker('backdrop-filter')).toBe(menu.backdrop);
+      expect(await picker('border-radius')).toBe(menu.radius);
+      expect(await picker('box-shadow')).toBe(menu.shadow);
+      expect(await picker('padding')).toBe(menu.padding);
+      expect(await picker('border-top-width')).toBe(menu.borderWidth);
+      expect(await picker('color')).toBe(menu.color);
+
+      const options = zoom.locator('option');
+      for (let i = 0; i < 3; i++) {
+        expect((await options.nth(i).boundingBox())!.height).toBe(parseFloat(menu.itemHeight));
+        expect(await css(options.nth(i), 'border-radius')).toBe(menu.itemRadius);
+        expect(await css(options.nth(i), 'font-size')).toBe(menu.fontSize);
+        expect(await css(options.nth(i), 'font-family')).toBe(menu.fontFamily);
+        // Labels start where the menus' labels do, after the check column.
+        const inset = await options.nth(i).evaluate((o) => {
+          const text = [...o.childNodes].find((n) => n.nodeType === Node.TEXT_NODE)!;
+          const r = document.createRange();
+          r.selectNodeContents(text);
+          return r.getBoundingClientRect().left - o.getBoundingClientRect().left;
+        });
+        expect(Math.abs(inset - menu.labelInset)).toBeLessThan(0.5);
+      }
+      // The keyboard highlight is the menus' highlight; the chosen item carries the check mark.
+      const focused = zoom.locator('option:focus');
+      await expect(focused).toHaveText('Fit Width');
+      expect(await css(focused, 'background-color')).toBe(menu.highlight);
+      expect(await css(focused, 'background-image')).toBe('none');
+      expect(await css(focused, 'color')).toBe(menu.highlightText);
+      expect(await css(options.nth(0), 'visibility', '::checkmark')).toBe('visible');
+      expect(await css(options.nth(1), 'visibility', '::checkmark')).toBe('hidden');
+      await page.keyboard.press('ArrowDown');
+      await expect(focused).toHaveText('Fit Page');
+      expect(await css(options.nth(0), 'background-color')).toBe('rgba(0, 0, 0, 0)');
+      await page.keyboard.press('Escape');
+      await expect.poll(() => zoom.evaluate((el) => el.matches(':open'))).toBe(false);
+    });
+
+    test('check boxes: off on the control fill, on in the accent with a white check, disabled faded', async ({ page }) => {
+      await page.goto('/');
+      await openSettings(page);
+      const off = settings(page).getByLabel('Show the sidebar when a document opens');
+      const on = settings(page).getByLabel("Remember each file's last page and zoom");
+      const disabled = settings(page).getByLabel('Book Mode');
+      await expect(off).not.toBeChecked();
+      await expect(on).toBeChecked();
+      await expect(disabled).toBeDisabled();
+      for (const box of [off, on]) {
+        const b = (await box.boundingBox())!;
+        expect([b.width, b.height]).toEqual([14, 14]);
+        expect(await css(box, 'border-radius')).toBe('3.5px');
+        expect(await css(box, 'opacity')).toBe('1');
+      }
+      expect(await css(off, 'background-color')).toBe(await resolved(page, 'background-color', 'var(--control-bg)'));
+      expect(await css(off, 'background-image')).toBe('none');
+      expect(await css(off, 'box-shadow')).toBe(await resolved(page, 'box-shadow', 'var(--control-shadow)'));
+      expect(await css(on, 'background-color')).toBe(await resolved(page, 'background-color', 'var(--accent)'));
+      expect(await css(on, 'background-image')).toMatch(/^url\(.*(%23fff|white)/i);
+      expect(Number(await css(disabled, 'opacity'))).toBeLessThan(1);
+      // Clicking toggles the look along with the value.
+      await off.click();
+      expect(await css(off, 'background-color')).toBe(await resolved(page, 'background-color', 'var(--accent)'));
+      await off.click();
+      // Keyboard focus shows the app's focus ring.
+      await off.focus();
+      await page.keyboard.press('Tab');
+      await page.keyboard.press('Shift+Tab');
+      await expect(off).toBeFocused();
+      expect(await css(off, 'box-shadow')).toContain(await resolved(page, 'box-shadow', 'var(--focus-ring)'));
+    });
+
+    test('colour swatches are circles like the markup palette', async ({ page }) => {
+      await page.goto('/');
+      await openSettings(page, 'Markup');
+      const popup = settings(page).getByLabel('Highlight color');
+      const swatches = popup.locator('.settings-swatch');
+      expect(await swatches.count()).toBeGreaterThan(1);
+      for (let i = 0; i < (await swatches.count()); i++) {
+        expect(await css(swatches.nth(i), 'border-radius')).toBe('50%');
+        expect(await css(swatches.nth(i), 'width')).toBe(await css(swatches.nth(i), 'height'));
+      }
+      // The one shown in the button, too.
+      const shown = popup.locator('selectedcontent .settings-swatch');
+      await expect(shown).toHaveCount(1);
+      const s = (await shown.boundingBox())!;
+      expect(s.width).toBe(s.height);
+    });
+  });
+}
 
 test.describe('General', () => {
   test('default zoom applies to files without a remembered position, and is remembered', async ({ page }) => {
