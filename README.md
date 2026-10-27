@@ -154,12 +154,10 @@ against real files on Windows.
 
 ### App icon and splash
 
-The icon and the splash (shown on the empty window and in About Preview) are original
-artwork in the style of early-2000s desktop splash screens: a blue filter ring magnifying
-an eye over a beach. `src/assets/splash.svg` is the splash; `src-tauri/icons/source/`
-holds the icon (`icon.svg`, plus a simplified `icon-16.svg`), and
-`node scripts/make-icons.mjs` rasterizes them (Chromium through Playwright) into every icon
-file (needs Python with Pillow; set `PYTHON` if needed).
+The app icon is the logo artwork in `src-tauri/icons/source/logo.png` (a blue filter ring
+over a beach); `python scripts/make-icons.py` crops it to the lens, rounds the corners and
+writes every icon file (needs Pillow). The splash shown on the empty window and in About
+Preview is `src/assets/splash.svg`.
 
 ### Checking saved annotations in other viewers
 
