@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { Commands } from '../../src/commands';
 import { SEPARATOR, type MenuSpec } from '../../src/menubar/menus';
-import { shortcutSections } from '../../src/menubar/shortcutsPanel';
+import { shortcutKeys, shortcutSections } from '../../src/menubar/shortcutsPanel';
 
 test('lists each command that has a shortcut once, under the last menu that names it', () => {
   const c = new Commands();
@@ -30,4 +30,16 @@ test('lists each command that has a shortcut once, under the last menu that name
     },
     { title: 'View', rows: [{ label: 'Show Sidebar', shortcut: 'Ctrl+Alt+S' }] },
   ]);
+});
+
+test('splits a shortcut into its key caps; a plus as the key stays a key', () => {
+  expect(shortcutKeys('Ctrl+O')).toEqual(['Ctrl', 'O']);
+  expect(shortcutKeys('Ctrl+Shift+S')).toEqual(['Ctrl', 'Shift', 'S']);
+  expect(shortcutKeys('Ctrl+=')).toEqual(['Ctrl', '=']);
+  expect(shortcutKeys('Ctrl+-')).toEqual(['Ctrl', '-']);
+  expect(shortcutKeys('Ctrl+,')).toEqual(['Ctrl', ',']);
+  expect(shortcutKeys('Ctrl++')).toEqual(['Ctrl', '+']);
+  expect(shortcutKeys('+')).toEqual(['+']);
+  expect(shortcutKeys('→')).toEqual(['→']);
+  expect(shortcutKeys('Delete')).toEqual(['Delete']);
 });

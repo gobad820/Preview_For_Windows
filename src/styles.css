@@ -1262,111 +1262,107 @@ button, input { font: inherit; color: inherit; letter-spacing: inherit; }
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.28);
 }
 
-/* ---- in-window menu bar, Mac OS X Lion (src/menubar/) ------------------------------
-   Lion has no dark mode: the bar, its drop-downs and the shortcuts panel stay light. */
-.app { --menubar-h: 22px; }
+/* ---- in-window menu bar (src/menubar/) -------------------------------------------------
+   One title area with the toolbar under it: the same background, no line between the two (the
+   toolbar keeps its own bottom hairline). Its drop-downs are the app's menus (.menu above). */
+.app { --menubar-h: 24px; }
 .app:has(> .menubar:is([hidden], .peek)) { --menubar-h: 0px; }
 .menubar {
-  display: flex; flex: none;
-  height: 22px; padding: 0 4px; overflow: hidden;
-  font: 13px/22px var(--lion-font); letter-spacing: 0;
-  color: var(--lion-text); color-scheme: light;
-  background: linear-gradient(var(--lion-bar-top), var(--lion-bar-bottom));
-  box-shadow: inset 0 -1px 0 var(--lion-bar-border);
-  -webkit-font-smoothing: auto;
   position: relative; z-index: 21;
+  display: flex; flex: none;
+  height: 24px; padding: 0 5px; overflow: hidden;
+  font-size: 13px; font-weight: 400; line-height: 20px;
+  color: var(--text);
+  background: var(--chrome-bg);
 }
 .menubar[hidden] { display: none; }
 /* hidden by View › Menu Bar but in use (Alt): over the toolbar, so the document does not move */
-.menubar.peek { position: absolute; top: 0; left: 0; right: 0; }
-.mb-titles { display: flex; flex: none; }
-.mb-title { padding: 0 9px; white-space: nowrap; }
-.mb-title.mb-app { font-weight: bold; }
-.mb-title.open, .mb-title.focused {
-  color: #ffffff;
-  background: linear-gradient(var(--lion-select-top), var(--lion-select-bottom));
+.menubar.peek {
+  position: absolute; top: 0; left: 0; right: 0;
+  box-shadow: inset 0 -1px 0 var(--hairline);
+  -webkit-backdrop-filter: blur(28px) saturate(1.8);
+  backdrop-filter: blur(28px) saturate(1.8);
 }
+.mb-titles { display: flex; flex: none; align-items: center; }
+.mb-title { padding: 0 8px; border-radius: 5px; white-space: nowrap; }
+.mb-title.mb-app { font-weight: 600; }
+/* open, or the keyboard is on it: a pressed rounded rect behind the title, as since Big Sur */
+.mb-title.open, .mb-title.focused { background: var(--fill-pressed); }
 .mb-flex { flex: 1; min-width: 0; }
 /* access keys are underlined only while Alt is down or the keyboard is in the bar, as on Windows */
 .menubar.keys .mb-key { text-decoration: underline; }
+/* Keyboard focus stays where it was, so the bar highlights a row itself, the way .menu-item:focus looks. */
+.mb-item.active { background: var(--accent-strong); color: var(--accent-fg); }
+.mb-item.active .mb-shortcut { color: color-mix(in srgb, var(--accent-fg) 78%, transparent); }
 
-.mb-menu {
-  position: fixed; z-index: 1000;
-  min-width: 190px; max-width: 420px;
-  padding: 4px 0;
-  overflow-y: auto; overscroll-behavior: contain;
-  font: 13px/19px var(--lion-font); letter-spacing: 0;
-  color: var(--lion-text); color-scheme: light;
-  background: var(--lion-menu-bg);
-  border: 1px solid var(--lion-menu-border); border-top: 0;
-  border-radius: 0 0 5px 5px;
-  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.3);
-  -webkit-font-smoothing: auto;
-  -webkit-user-select: none; user-select: none;
-  cursor: default;
-}
-.mb-item { display: flex; align-items: center; height: 19px; padding-right: 20px; white-space: nowrap; }
-.mb-check { flex: none; width: 20px; display: flex; align-items: center; justify-content: center; }
-.mb-check svg { width: 11px; height: 11px; stroke-width: 3; }
-.mb-label { flex: 1; overflow: hidden; text-overflow: ellipsis; }
-.mb-shortcut { flex: none; margin-left: 30px; color: inherit; }
-.mb-item.active {
-  color: #ffffff;
-  background: linear-gradient(var(--lion-select-top), var(--lion-select-bottom));
-}
-.mb-item[aria-disabled="true"] { color: var(--lion-text-disabled); }
-.mb-separator { height: 1px; margin: 5px 1px 6px; background: #e3e3e3; }
-
-/* Lion panel: grey gradient title bar with a centred title and the red close button */
-.lion-scrim {
+/* Help › Keyboard Shortcuts: a panel in the alerts' look, grouped lists with key caps */
+.ks-scrim {
   position: fixed; inset: 0; z-index: 1100;
   display: flex; align-items: center; justify-content: center;
-  background: rgba(0, 0, 0, 0.14);
+  padding: 16px;
+  background: var(--scrim);
+  animation: pfw-fade-in 140ms ease-out;
 }
-.lion-panel {
+.ks-panel {
   display: flex; flex-direction: column;
-  width: min(580px, calc(100vw - 32px)); max-height: calc(100vh - 48px);
-  border-radius: 5px 5px 0 0; overflow: hidden;
-  font: 13px var(--lion-font); letter-spacing: 0;
-  color: var(--lion-text); color-scheme: light;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.28), 0 14px 40px rgba(0, 0, 0, 0.45);
-  -webkit-font-smoothing: auto;
+  width: min(620px, 100%); max-height: calc(100vh - 48px);
+  color: var(--text);
+  background: var(--alert-bg);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  backdrop-filter: blur(40px) saturate(1.8);
+  border-radius: var(--radius-alert);
+  box-shadow: var(--menu-ring), 0 22px 56px rgba(0, 0, 0, 0.24), 0 4px 14px rgba(0, 0, 0, 0.1); /* .alert's */
+  outline: none;
+  animation: pfw-alert-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.ks-titlebar { position: relative; flex: none; padding: 12px 40px 10px; }
+.ks-title { margin: 0; font-size: 13px; font-weight: 600; line-height: 16px; text-align: center; }
+/* the close button of a modern window: a flat red circle that shows its x on hover */
+.ks-close {
+  position: absolute; left: 14px; top: 14px;
+  width: 12px; height: 12px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 50%;
+  color: transparent;
+  background: #ff5f57;
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.2);
   outline: none;
 }
-.lion-titlebar {
-  position: relative; flex: none;
-  height: 22px;
-  background: linear-gradient(var(--lion-window-top), var(--lion-window-bottom));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 -1px 0 #a2a2a2;
-}
-.lion-title {
-  margin: 0;
-  font: 13px/22px var(--lion-font);
-  text-align: center; color: #3f3f3f;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
-}
-.lion-close {
-  position: absolute; left: 8px; top: 4px;
-  width: 14px; height: 14px; padding: 0;
-  border: 1px solid #a8352e; border-radius: 50%;
-  background: radial-gradient(circle at 50% 35%, #ffb1a8 0, #f0574d 45%, #c4362e 100%);
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.55), 0 1px 0 rgba(255, 255, 255, 0.5);
-  outline: none;
-}
-.lion-close::before {
-  content: '×'; display: block;
-  font: bold 12px/12px var(--lion-font);
-  color: rgba(90, 0, 0, 0.85);
-  opacity: 0;
-}
-.lion-close:hover::before, .lion-close:focus-visible::before { opacity: 1; }
-.lion-panel-body {
+.ks-close svg { width: 12px; height: 12px; stroke-width: 2.6; }
+.ks-close:hover, .ks-close:focus-visible { color: rgba(77, 0, 0, 0.75); }
+.ks-close:focus-visible { box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.2), var(--focus-ring); }
+.ks-body {
   flex: 1; min-height: 0; overflow-y: auto;
-  padding: 14px 22px 18px;
-  background: #ececec;
-  columns: 2; column-gap: 32px;
+  padding: 2px 20px 8px;
+  columns: 2; column-gap: 20px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar) transparent;
 }
 .ks-section { break-inside: avoid; padding-bottom: 12px; }
-.ks-section h3 { margin: 0 0 3px; font: bold 13px/19px var(--lion-font); }
-.ks-row { display: flex; justify-content: space-between; gap: 16px; line-height: 19px; }
-.ks-row kbd { font: inherit; color: #4c4c4c; white-space: nowrap; }
+.ks-section h3 {
+  margin: 0 0 5px 10px;
+  font-size: 11px; font-weight: 600; line-height: 14px; letter-spacing: 0.005em;
+  color: var(--text-secondary);
+}
+.ks-group {
+  padding: 0 10px;
+  border-radius: 8px;
+  background: var(--fill-quiet);
+  box-shadow: inset 0 0 0 0.5px var(--hairline);
+}
+.ks-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 28px; }
+.ks-row + .ks-row { box-shadow: 0 -1px 0 var(--hairline); }
+.ks-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ks-row > kbd { flex: none; font: 500 11px/17px var(--font); color: var(--text-tertiary); white-space: nowrap; }
+/* key caps: the empty window's (.empty-state kbd) */
+.ks-row kbd kbd {
+  display: inline-block; min-width: 18px; margin: 0 1px; padding: 0 5px;
+  font: 500 11px/17px var(--font); text-align: center;
+  color: var(--text-secondary);
+  background: var(--control-bg);
+  border: 0; border-radius: 4px;
+  box-shadow: inset 0 0 0 0.5px var(--field-border), 0 1px 0 var(--field-border);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ks-scrim, .ks-panel { animation: none; }
+}
