@@ -1,5 +1,6 @@
 import type { Store, ViewerState } from '../store';
 import type { Color } from '../annot/types';
+import { t } from '../i18n';
 import type { ZoomMode } from '../types';
 import { icons } from '../ui/icons';
 import { closeMenus, showMenu, type MenuItem } from '../ui/menu';
@@ -256,8 +257,8 @@ export class Toolbar {
       action: () => this.actions.setZoom(mode),
     });
     const items: MenuItem[] = [
-      fit('fit-width', 'Fit Width'),
-      fit('fit-page', 'Fit Page'),
+      fit('fit-width', t('menu.view.fitWidth')),
+      fit('fit-page', t('menu.view.fitPage')),
       'separator',
       ...ZOOM_PRESETS.map(
         (z): MenuItem => ({

@@ -24,7 +24,7 @@ import { MarkupController } from './markup/controller';
 import { MarkupState, type MarkKind, type Styles } from './markup/state';
 import type { Color } from './annot/types';
 import { Commands } from './commands';
-import { resolveLanguage, setLocale, type Language } from './i18n';
+import { resolveLanguage, setLocale, t, type Language, type MessageKey } from './i18n';
 import { MenuBar } from './menubar/menubar';
 import { MENUS } from './menubar/menus';
 import { showShortcuts } from './menubar/shortcutsPanel';
@@ -289,37 +289,37 @@ export class App {
     const has = () => this.hasDocument();
     const st = () => this.store.get();
     const act = (a: Action) => () => this.dispatch(a);
-    const tool = (id: string, label: string, t: Tool) => ({
+    const tool = (id: string, label: MessageKey, kind: Tool) => ({
       id,
-      label,
+      label: () => t(label),
       radio: true,
       enabled: has,
-      checked: () => st().markupOpen && this.markup.tool === t,
+      checked: () => st().markupOpen && this.markup.tool === kind,
       run: () => {
         // Tools work on the markup toolbar's state; showing it keeps the tool armed.
         this.store.set({ markupOpen: true });
-        this.markup.setTool(t);
+        this.markup.setTool(kind);
       },
     });
     const controls = this.platform.windowControls;
     this.commands.register(
       // Preview
-      { id: 'app.about', label: 'About Preview', run: () => showAbout() },
-      { id: 'app.preferences', label: 'Settings…', shortcut: 'Ctrl+,', run: () => this.openPreferences() },
+      { id: 'app.about', label: () => t('menu.app.about'), run: () => showAbout() },
+      { id: 'app.preferences', label: () => t('menu.app.preferences'), shortcut: 'Ctrl+,', run: () => this.openPreferences() },
       // File
-      { id: 'file.open', label: 'Open…', shortcut: 'Ctrl+O', run: act('open') },
-      { id: 'file.insertPages', label: 'Insert Pages from File…', enabled: has, run: () => void this.insertPagesFromFile() },
-      { id: 'file.save', label: 'Save', shortcut: 'Ctrl+S', enabled: has, run: act('save') },
-      { id: 'file.saveAs', label: 'Save As…', shortcut: 'Ctrl+Shift+S', enabled: has, run: act('save-as') },
-      { id: 'file.print', label: 'Print…', shortcut: 'Ctrl+P', enabled: has, run: () => window.print() },
-      { id: 'file.close', label: 'Close Window', shortcut: 'Ctrl+W', run: act('close-window') },
+      { id: 'file.open', label: () => t('menu.file.open'), shortcut: 'Ctrl+O', run: act('open') },
+      { id: 'file.insertPages', label: () => t('menu.file.insertPages'), enabled: has, run: () => void this.insertPagesFromFile() },
+      { id: 'file.save', label: () => t('menu.file.save'), shortcut: 'Ctrl+S', enabled: has, run: act('save') },
+      { id: 'file.saveAs', label: () => t('menu.file.saveAs'), shortcut: 'Ctrl+Shift+S', enabled: has, run: act('save-as') },
+      { id: 'file.print', label: () => t('menu.file.print'), shortcut: 'Ctrl+P', enabled: has, run: () => window.print() },
+      { id: 'file.close', label: () => t('menu.file.close'), shortcut: 'Ctrl+W', run: act('close-window') },
       // Edit
-      { id: 'edit.undo', label: 'Undo', shortcut: 'Ctrl+Z', enabled: () => has() && !!this.doc?.canUndo, run: act('undo') },
-      { id: 'edit.redo', label: 'Redo', shortcut: 'Ctrl+Y', enabled: () => has() && !!this.doc?.canRedo, run: act('redo') },
-      { id: 'edit.cut', label: 'Cut', shortcut: 'Ctrl+X', enabled: () => has() && this.editor.selection.size > 0, run: () => void this.editor.cutSelection() },
+      { id: 'edit.undo', label: () => t('menu.edit.undo'), shortcut: 'Ctrl+Z', enabled: () => has() && !!this.doc?.canUndo, run: act('undo') },
+      { id: 'edit.redo', label: () => t('menu.edit.redo'), shortcut: 'Ctrl+Y', enabled: () => has() && !!this.doc?.canRedo, run: act('redo') },
+      { id: 'edit.cut', label: () => t('menu.edit.cut'), shortcut: 'Ctrl+X', enabled: () => has() && this.editor.selection.size > 0, run: () => void this.editor.cutSelection() },
       {
         id: 'edit.copy',
-        label: 'Copy',
+        label: () => t('menu.edit.copy'),
         shortcut: 'Ctrl+C',
         enabled: has,
         // Selected text is copied as text; otherwise the selected pages.
@@ -328,10 +328,10 @@ export class App {
           else void this.editor.copySelection();
         },
       },
-      { id: 'edit.paste', label: 'Paste', shortcut: 'Ctrl+V', enabled: has, run: () => void this.editor.paste() },
+      { id: 'edit.paste', label: () => t('menu.edit.paste'), shortcut: 'Ctrl+V', enabled: has, run: () => void this.editor.paste() },
       {
         id: 'edit.delete',
-        label: 'Delete',
+        label: () => t('menu.edit.delete'),
         shortcut: 'Delete',
         enabled: has,
         // The selected annotation, otherwise the selected pages.
@@ -341,30 +341,30 @@ export class App {
       },
       {
         id: 'edit.duplicate',
-        label: 'Duplicate',
+        label: () => t('menu.edit.duplicate'),
         shortcut: 'Ctrl+D',
         enabled: () => has() && this.markupController.selected !== null,
         run: () => void this.markupController.duplicateSelected(),
       },
-      { id: 'edit.selectAll', label: 'Select All Pages', shortcut: 'Ctrl+A', enabled: has, run: () => this.editor.selectAll() },
-      { id: 'edit.find', label: 'Find…', shortcut: 'Ctrl+F', enabled: has, run: act('find') },
+      { id: 'edit.selectAll', label: () => t('menu.edit.selectAll'), shortcut: 'Ctrl+A', enabled: has, run: () => this.editor.selectAll() },
+      { id: 'edit.find', label: () => t('menu.edit.find'), shortcut: 'Ctrl+F', enabled: has, run: act('find') },
       // View
       {
         id: 'view.sidebar',
-        label: () => (st().sidebarOpen ? 'Hide Sidebar' : 'Show Sidebar'),
+        label: () => t(st().sidebarOpen ? 'menu.view.hideSidebar' : 'menu.view.showSidebar'),
         shortcut: 'Ctrl+Alt+S',
         run: act('toggle-sidebar'),
       },
       {
         id: 'view.thumbnails',
-        label: 'Thumbnails',
+        label: () => t('menu.view.thumbnails'),
         radio: true,
         checked: () => st().sidebarOpen && st().sidebarTab === 'thumbnails',
         run: () => this.store.set({ sidebarOpen: true, sidebarTab: 'thumbnails' }),
       },
       {
         id: 'view.outline',
-        label: 'Table of Contents',
+        label: () => t('menu.view.outline'),
         radio: true,
         enabled: () => this.sidebar.outlineAvailable,
         checked: () => st().sidebarOpen && st().sidebarTab === 'outline',
@@ -372,75 +372,75 @@ export class App {
       },
       {
         id: 'view.continuous',
-        label: 'Continuous Scroll',
+        label: () => t('menu.view.continuous'),
         radio: true,
         checked: () => st().displayMode === 'continuous',
         run: () => this.store.set({ displayMode: 'continuous' }),
       },
       {
         id: 'view.twoPages',
-        label: 'Two Pages',
+        label: () => t('menu.view.twoPages'),
         radio: true,
         checked: () => st().displayMode === 'two-pages',
         run: () => this.store.set({ displayMode: 'two-pages' }),
       },
       {
         id: 'view.bookMode',
-        label: 'Book Mode',
+        label: () => t('menu.view.bookMode'),
         enabled: () => st().displayMode === 'two-pages',
         checked: () => st().bookMode,
         run: () => this.store.set({ bookMode: !st().bookMode }),
       },
-      { id: 'view.actualSize', label: 'Actual Size', shortcut: 'Ctrl+0', enabled: has, run: act('zoom-100') },
-      { id: 'view.zoomIn', label: 'Zoom In', shortcut: 'Ctrl+=', enabled: has, run: act('zoom-in') },
-      { id: 'view.zoomOut', label: 'Zoom Out', shortcut: 'Ctrl+-', enabled: has, run: act('zoom-out') },
-      { id: 'view.fitWidth', label: 'Fit Width', shortcut: 'Ctrl+1', radio: true, enabled: has, checked: () => st().zoomMode === 'fit-width', run: act('fit-width') },
-      { id: 'view.fitPage', label: 'Fit Page', shortcut: 'Ctrl+2', radio: true, enabled: has, checked: () => st().zoomMode === 'fit-page', run: act('fit-page') },
-      { id: 'view.rotateLeft', label: 'Rotate Left', shortcut: 'Ctrl+Shift+L', enabled: has, run: act('rotate-ccw') },
-      { id: 'view.rotateRight', label: 'Rotate Right', shortcut: 'Ctrl+L', enabled: has, run: act('rotate-cw') },
+      { id: 'view.actualSize', label: () => t('menu.view.actualSize'), shortcut: 'Ctrl+0', enabled: has, run: act('zoom-100') },
+      { id: 'view.zoomIn', label: () => t('menu.view.zoomIn'), shortcut: 'Ctrl+=', enabled: has, run: act('zoom-in') },
+      { id: 'view.zoomOut', label: () => t('menu.view.zoomOut'), shortcut: 'Ctrl+-', enabled: has, run: act('zoom-out') },
+      { id: 'view.fitWidth', label: () => t('menu.view.fitWidth'), shortcut: 'Ctrl+1', radio: true, enabled: has, checked: () => st().zoomMode === 'fit-width', run: act('fit-width') },
+      { id: 'view.fitPage', label: () => t('menu.view.fitPage'), shortcut: 'Ctrl+2', radio: true, enabled: has, checked: () => st().zoomMode === 'fit-page', run: act('fit-page') },
+      { id: 'view.rotateLeft', label: () => t('menu.view.rotateLeft'), shortcut: 'Ctrl+Shift+L', enabled: has, run: act('rotate-ccw') },
+      { id: 'view.rotateRight', label: () => t('menu.view.rotateRight'), shortcut: 'Ctrl+L', enabled: has, run: act('rotate-cw') },
       {
         id: 'view.markupToolbar',
-        label: () => (st().markupOpen ? 'Hide Markup Toolbar' : 'Show Markup Toolbar'),
+        label: () => t(st().markupOpen ? 'menu.view.hideMarkup' : 'menu.view.showMarkup'),
         shortcut: 'Ctrl+Shift+A',
         enabled: has,
         run: act('toggle-markup'),
       },
       {
         id: 'view.menuBar',
-        label: 'Menu Bar',
+        label: () => t('menu.view.menuBar'),
         checked: () => st().menuBarVisible,
         run: () => this.store.set({ menuBarVisible: !st().menuBarVisible }),
       },
       // Go
-      { id: 'go.next', label: 'Next Page', shortcut: '→', enabled: has, run: () => this.viewer.stepPage(1) },
-      { id: 'go.previous', label: 'Previous Page', shortcut: '←', enabled: has, run: () => this.viewer.stepPage(-1) },
-      { id: 'go.first', label: 'First Page', shortcut: 'Home', enabled: has, run: act('first-page') },
-      { id: 'go.last', label: 'Last Page', shortcut: 'End', enabled: has, run: act('last-page') },
-      { id: 'go.page', label: 'Go to Page…', shortcut: 'Ctrl+G', enabled: has, run: act('goto-page') },
+      { id: 'go.next', label: () => t('menu.go.next'), shortcut: '→', enabled: has, run: () => this.viewer.stepPage(1) },
+      { id: 'go.previous', label: () => t('menu.go.previous'), shortcut: '←', enabled: has, run: () => this.viewer.stepPage(-1) },
+      { id: 'go.first', label: () => t('menu.go.first'), shortcut: 'Home', enabled: has, run: act('first-page') },
+      { id: 'go.last', label: () => t('menu.go.last'), shortcut: 'End', enabled: has, run: act('last-page') },
+      { id: 'go.page', label: () => t('menu.go.page'), shortcut: 'Ctrl+G', enabled: has, run: act('goto-page') },
       // Tools (markup)
-      tool('tools.select', 'Text Selection', 'select'),
+      tool('tools.select', 'menu.tools.select', 'select'),
       {
         id: 'tools.highlight',
-        label: 'Highlight',
+        label: () => t('menu.tools.highlight'),
         enabled: has,
         checked: () => this.markup.highlightMode,
         run: () => this.highlightButton(),
       },
-      { id: 'tools.underline', label: 'Underline', enabled: has, run: () => this.pickMark('underline') },
-      { id: 'tools.strikeout', label: 'Strikethrough', enabled: has, run: () => this.pickMark('strikeout') },
-      tool('tools.draw', 'Draw', 'draw'),
-      tool('tools.line', 'Line', 'line'),
-      tool('tools.arrow', 'Arrow', 'arrow'),
-      tool('tools.rect', 'Rectangle', 'rect'),
-      tool('tools.rounded', 'Rounded Rectangle', 'rounded'),
-      tool('tools.oval', 'Oval', 'oval'),
-      tool('tools.text', 'Text', 'text'),
-      tool('tools.note', 'Note', 'note'),
+      { id: 'tools.underline', label: () => t('menu.tools.underline'), enabled: has, run: () => this.pickMark('underline') },
+      { id: 'tools.strikeout', label: () => t('menu.tools.strikeout'), enabled: has, run: () => this.pickMark('strikeout') },
+      tool('tools.draw', 'menu.tools.draw', 'draw'),
+      tool('tools.line', 'menu.tools.line', 'line'),
+      tool('tools.arrow', 'menu.tools.arrow', 'arrow'),
+      tool('tools.rect', 'menu.tools.rect', 'rect'),
+      tool('tools.rounded', 'menu.tools.rounded', 'rounded'),
+      tool('tools.oval', 'menu.tools.oval', 'oval'),
+      tool('tools.text', 'menu.tools.text', 'text'),
+      tool('tools.note', 'menu.tools.note', 'note'),
       // Window
-      { id: 'window.minimize', label: 'Minimize', enabled: () => !!controls, run: () => void controls?.minimize() },
-      { id: 'window.zoom', label: 'Zoom', enabled: () => !!controls, run: () => void controls?.toggleMaximize() },
+      { id: 'window.minimize', label: () => t('menu.window.minimize'), enabled: () => !!controls, run: () => void controls?.minimize() },
+      { id: 'window.zoom', label: () => t('menu.window.zoom'), enabled: () => !!controls, run: () => void controls?.toggleMaximize() },
       // Help
-      { id: 'help.shortcuts', label: 'Keyboard Shortcuts', run: () => showShortcuts(MENUS, this.commands) },
+      { id: 'help.shortcuts', label: () => t('menu.help.shortcuts'), run: () => showShortcuts(MENUS, this.commands) },
     );
   }
 
@@ -789,14 +789,14 @@ export class App {
   private pageContextMenu(point: Point): void {
     const has = this.editor.selection.size > 0;
     void showMenu(point, [
-      { label: 'Cut', shortcut: 'Ctrl+X', disabled: !has, action: () => void this.editor.cutSelection() },
-      { label: 'Copy', shortcut: 'Ctrl+C', disabled: !has, action: () => void this.editor.copySelection() },
-      { label: 'Paste', shortcut: 'Ctrl+V', action: () => void this.editor.paste() },
-      { label: 'Delete', shortcut: 'Delete', disabled: !has, action: () => this.editor.deleteSelection() },
+      { label: t('menu.edit.cut'), shortcut: 'Ctrl+X', disabled: !has, action: () => void this.editor.cutSelection() },
+      { label: t('menu.edit.copy'), shortcut: 'Ctrl+C', disabled: !has, action: () => void this.editor.copySelection() },
+      { label: t('menu.edit.paste'), shortcut: 'Ctrl+V', action: () => void this.editor.paste() },
+      { label: t('menu.edit.delete'), shortcut: 'Delete', disabled: !has, action: () => this.editor.deleteSelection() },
       'separator',
-      { label: 'Select All', shortcut: 'Ctrl+A', action: () => this.editor.selectAll() },
+      { label: t('menu.pages.selectAll'), shortcut: 'Ctrl+A', action: () => this.editor.selectAll() },
       'separator',
-      { label: 'Insert Pages from File…', action: () => void this.insertPagesFromFile() },
+      { label: t('menu.file.insertPages'), action: () => void this.insertPagesFromFile() },
     ]);
   }
 
@@ -804,17 +804,17 @@ export class App {
   moreMenu(anchor: DOMRect): void {
     const doc = this.doc;
     void showMenu(anchor, [
-      { label: 'Open…', shortcut: 'Ctrl+O', action: () => void this.open() },
+      { label: t('menu.file.open'), shortcut: 'Ctrl+O', action: () => void this.open() },
       'separator',
-      { label: 'Save', shortcut: 'Ctrl+S', disabled: !doc, action: () => void this.save() },
-      { label: 'Save As…', shortcut: 'Ctrl+Shift+S', disabled: !doc, action: () => void this.saveAs() },
+      { label: t('menu.file.save'), shortcut: 'Ctrl+S', disabled: !doc, action: () => void this.save() },
+      { label: t('menu.file.saveAs'), shortcut: 'Ctrl+Shift+S', disabled: !doc, action: () => void this.saveAs() },
       'separator',
-      { label: 'Insert Pages from File…', disabled: !doc, action: () => void this.insertPagesFromFile() },
+      { label: t('menu.file.insertPages'), disabled: !doc, action: () => void this.insertPagesFromFile() },
       'separator',
-      { label: 'Undo', shortcut: 'Ctrl+Z', disabled: !doc?.canUndo, action: () => this.editor.undo() },
-      { label: 'Redo', shortcut: 'Ctrl+Y', disabled: !doc?.canRedo, action: () => this.editor.redo() },
+      { label: t('menu.edit.undo'), shortcut: 'Ctrl+Z', disabled: !doc?.canUndo, action: () => this.editor.undo() },
+      { label: t('menu.edit.redo'), shortcut: 'Ctrl+Y', disabled: !doc?.canRedo, action: () => this.editor.redo() },
       'separator',
-      { label: 'About Preview', action: () => showAbout() },
+      { label: t('menu.app.about'), action: () => showAbout() },
     ]);
   }
 
@@ -822,14 +822,14 @@ export class App {
   viewMenu(anchor: DOMRect): void {
     const s = this.store.get();
     const sidebar = (tab: SidebarTab): MenuItem => ({
-      label: tab === 'thumbnails' ? 'Thumbnails' : 'Table of Contents',
+      label: t(tab === 'thumbnails' ? 'menu.view.thumbnails' : 'menu.view.outline'),
       radio: true,
       checked: s.sidebarOpen && s.sidebarTab === tab,
       disabled: tab === 'outline' && !this.sidebar.outlineAvailable,
       action: () => this.store.set({ sidebarOpen: true, sidebarTab: tab }),
     });
     const display = (mode: DisplayMode): MenuItem => ({
-      label: mode === 'continuous' ? 'Continuous Scroll' : 'Two Pages',
+      label: t(mode === 'continuous' ? 'menu.view.continuous' : 'menu.view.twoPages'),
       radio: true,
       checked: s.displayMode === mode,
       action: () => this.store.set({ displayMode: mode }),
@@ -847,7 +847,7 @@ export class App {
     this.toolbar.setViewMenuOpen(true);
     void showMenu(at, [
       {
-        label: s.sidebarOpen ? 'Hide Sidebar' : 'Show Sidebar',
+        label: t(s.sidebarOpen ? 'menu.view.hideSidebar' : 'menu.view.showSidebar'),
         shortcut: 'Ctrl+Alt+S',
         action: () => this.store.set({ sidebarOpen: !this.store.get().sidebarOpen }),
       },
@@ -857,7 +857,7 @@ export class App {
       display('continuous'),
       display('two-pages'),
       {
-        label: 'Book Mode',
+        label: t('menu.view.bookMode'),
         checked: s.bookMode,
         disabled: s.displayMode !== 'two-pages',
         action: () => this.store.set({ bookMode: !this.store.get().bookMode }),

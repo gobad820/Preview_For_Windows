@@ -14,10 +14,10 @@ test('lists each command that has a shortcut once, under the last menu that name
   );
   // The application menu repeats Close Window; the reference lists it under File.
   const menus: MenuSpec[] = [
-    { title: 'App', key: 'a', app: true, items: ['app.about', SEPARATOR, 'file.close'] },
-    { title: 'File', key: 'f', items: ['file.open', 'file.close', SEPARATOR, 'file.save', 'file.unknown', 'file.open'] },
-    { title: 'Window', key: 'w', items: ['app.about'] },
-    { title: 'View', key: 'v', items: ['view.sidebar'] },
+    { title: () => 'App', key: 'a', app: true, items: ['app.about', SEPARATOR, 'file.close'] },
+    { title: () => 'File', key: 'f', items: ['file.open', 'file.close', SEPARATOR, 'file.save', 'file.unknown', 'file.open'] },
+    { title: () => 'Window', key: 'w', items: ['app.about'] },
+    { title: () => 'View', key: 'v', items: ['view.sidebar'] },
   ];
   expect(shortcutSections(menus, c)).toEqual([
     {

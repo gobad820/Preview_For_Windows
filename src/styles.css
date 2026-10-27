@@ -1303,6 +1303,9 @@ button, input { font: inherit; color: inherit; letter-spacing: inherit; }
 .mb-flex { flex: 1; min-width: 0; }
 /* access keys are underlined only while Alt is down or the keyboard is in the bar, as on Windows */
 .menubar.keys .mb-key { text-decoration: underline; }
+/* a title without its letter (Korean) shows it in parentheses then, "파일(F)", as Korean Windows does */
+.mb-key-hint { display: none; }
+.menubar.keys .mb-key-hint { display: inline; }
 /* Keyboard focus stays where it was, so the bar highlights a row itself, the way .menu-item:focus looks. */
 .mb-item.active { background: var(--accent-strong); color: var(--accent-fg); }
 .mb-item.active .mb-shortcut { color: color-mix(in srgb, var(--accent-fg) 78%, transparent); }
