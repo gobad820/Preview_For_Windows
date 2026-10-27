@@ -1,3 +1,4 @@
+import type { Locale } from './i18n';
 import type { Rotation, ZoomMode } from './types';
 
 export type Listener<T> = (state: T, prev: T) => void;
@@ -84,6 +85,8 @@ export interface ViewerState {
   bookMode: boolean;
   /** The in-window menu bar (File, Edit, View, …) is shown. */
   menuBarVisible: boolean;
+  /** UI language in use (Settings › General › Language); text built earlier re-renders when it changes. */
+  locale: Locale;
 }
 
 export const initialState: ViewerState = {
@@ -107,4 +110,5 @@ export const initialState: ViewerState = {
   displayMode: 'continuous',
   bookMode: false,
   menuBarVisible: true,
+  locale: 'en',
 };

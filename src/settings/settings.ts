@@ -2,6 +2,7 @@
  * Window-wide settings, remembered across launches (not per file) and edited in the Settings
  * window. Markup defaults are not here: the markup state owns and remembers them.
  */
+import type { Language } from '../i18n';
 import { loadPrefs } from '../state/prefs';
 import type { DisplayMode } from '../store';
 import type { ZoomMode } from '../types';
@@ -20,6 +21,8 @@ export interface Settings {
   rememberPosition: boolean;
   /** The in-window menu bar; View › Menu Bar changes it too. */
   menuBarVisible: boolean;
+  /** UI language; `system` follows Windows' display language. */
+  language: Language;
 }
 
 export type SettingsStorage = Pick<Storage, 'getItem' | 'setItem'>;
@@ -36,10 +39,12 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze({
   sidebarOnOpen: false,
   rememberPosition: true,
   menuBarVisible: true,
+  language: 'system',
 });
 
 const ZOOMS: ReadonlySet<unknown> = new Set<DefaultZoom>(['fit-width', 'fit-page', 'actual-size']);
 const DISPLAY_MODES: ReadonlySet<unknown> = new Set<DisplayMode>(['continuous', 'two-pages']);
+const LANGUAGES: ReadonlySet<unknown> = new Set<Language>(['system', 'en', 'ko']);
 const isBool = (v: unknown): v is boolean => typeof v === 'boolean';
 
 /** Valid fields of `v`, for a stored entry or a patch. */
@@ -53,6 +58,7 @@ function pick(v: unknown): Partial<Settings> {
   if (isBool(o['sidebarOnOpen'])) out.sidebarOnOpen = o['sidebarOnOpen'];
   if (isBool(o['rememberPosition'])) out.rememberPosition = o['rememberPosition'];
   if (isBool(o['menuBarVisible'])) out.menuBarVisible = o['menuBarVisible'];
+  if (LANGUAGES.has(o['language'])) out.language = o['language'] as Language;
   return out;
 }
 

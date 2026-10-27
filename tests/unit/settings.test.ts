@@ -30,6 +30,7 @@ const DEFAULTS: Settings = {
   sidebarOnOpen: false,
   rememberPosition: true,
   menuBarVisible: true,
+  language: 'system',
 };
 
 const stored = (storage: MemoryStorage) => JSON.parse(storage.map.get('pfw.settings') ?? 'null');
@@ -43,7 +44,7 @@ describe('settings model', () => {
     const storage = new MemoryStorage();
     const a = new SettingsModel(storage);
     a.set({ defaultZoom: 'fit-page', sidebarOnOpen: true, rememberPosition: false, menuBarVisible: false });
-    a.set({ displayMode: 'two-pages', bookMode: true });
+    a.set({ displayMode: 'two-pages', bookMode: true, language: 'ko' });
     expect(new SettingsModel(storage).get()).toEqual({
       defaultZoom: 'fit-page',
       displayMode: 'two-pages',
@@ -51,6 +52,7 @@ describe('settings model', () => {
       sidebarOnOpen: true,
       rememberPosition: false,
       menuBarVisible: false,
+      language: 'ko',
     });
   });
 
@@ -128,5 +130,15 @@ describe('default zoom', () => {
     ['actual-size', { zoomMode: 'custom', scale: 1 }],
   ] as const)('%s opens files as %o', (zoom, want) => {
     expect(zoomFor(zoom)).toEqual(want);
+  });
+
+  it('keeps the UI language to system, en or ko', () => {
+    const m = new SettingsModel(new MemoryStorage());
+    expect(m.get().language).toBe('system');
+    m.set({ language: 'ko' });
+    expect(m.get().language).toBe('ko');
+    m.set({ language: 'fr' as never });
+    expect(m.get().language).toBe('ko');
+    expect(new SettingsModel(new MemoryStorage({ 'pfw.settings': '{"language":"jp"}' })).get().language).toBe('system');
   });
 });

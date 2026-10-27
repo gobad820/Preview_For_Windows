@@ -132,6 +132,7 @@ describe('initialState', () => {
       displayMode: 'continuous',
       bookMode: false,
       menuBarVisible: true,
+      locale: 'en',
     };
     expect(initialState).toEqual(expected);
   });

@@ -104,3 +104,24 @@ test('every feature is a command the menus can run', async ({ page }) => {
   expect(r.count).toBeGreaterThan(40);
   expect(r).toMatchObject({ zoomed: true, two: 'two-pages', tool: 'rect', markupOpen: true, sidebarLabel: 'Show Sidebar' });
 });
+
+test('the UI language follows Settings and switches live', async ({ page }) => {
+  await open(page, 'simple.pdf');
+  const r = await page.evaluate(() => {
+    const app = (window as any).__pfw.app;
+    const now = () => [app.store.get().locale, document.documentElement.lang];
+    const before = now();
+    app.settings.set({ language: 'ko' });
+    const ko = now();
+    app.settings.set({ language: 'system' });
+    return { before, ko, back: now() };
+  });
+  // The test browser runs in English, so Automatic means English.
+  expect(r).toEqual({ before: ['en', 'en'], ko: ['ko', 'ko'], back: ['en', 'en'] });
+});
+
+test('a saved language applies before the window is built', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('pfw.settings', JSON.stringify({ language: 'ko' })));
+  await open(page, 'simple.pdf');
+  expect(await page.evaluate(() => [(window as any).__pfw.store.get().locale, document.documentElement.lang])).toEqual(['ko', 'ko']);
+});

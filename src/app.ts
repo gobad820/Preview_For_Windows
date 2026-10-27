@@ -24,6 +24,7 @@ import { MarkupController } from './markup/controller';
 import { MarkupState, type MarkKind, type Styles } from './markup/state';
 import type { Color } from './annot/types';
 import { Commands } from './commands';
+import { resolveLanguage, setLocale, type Language } from './i18n';
 import { MenuBar } from './menubar/menubar';
 import { MENUS } from './menubar/menus';
 import { showShortcuts } from './menubar/shortcutsPanel';
@@ -80,6 +81,12 @@ export class App {
     private readonly platform: Platform,
     private readonly root: Document,
   ) {
+    // ---- UI language first: everything built below reads its text through t() ----
+    this.applyLanguage(this.settings.get().language);
+    this.settings.onChange((p, prev) => {
+      if (p.language !== prev.language) this.applyLanguage(p.language);
+    });
+
     const appEl = this.el('app');
     const banner = this.el('.error-banner');
     this.overlay = this.el('.drop-overlay');
@@ -257,6 +264,13 @@ export class App {
     };
     (window as unknown as { __pfwUi: unknown }).__pfwUi = { showMenu, showAlert };
     this.registerCommands();
+  }
+
+  /** Sets the UI language, then the store's `locale` so text built earlier re-renders. */
+  private applyLanguage(language: Language): void {
+    const l = resolveLanguage(language);
+    setLocale(l);
+    this.store.set({ locale: l });
   }
 
   /** A document is open and ready. */
