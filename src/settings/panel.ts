@@ -39,22 +39,6 @@ const LANGUAGE_NAMES: readonly Choice[] = [
   { value: 'ko', label: '한국어', lang: 'ko' },
 ];
 
-/** The palettes in src/markup/state.ts name their colours in English. */
-const COLOR_NAMES: Readonly<Record<string, MessageKey>> = {
-  Black: 'dlg.color.black',
-  Gray: 'dlg.color.gray',
-  White: 'dlg.color.white',
-  Brown: 'dlg.color.brown',
-  Red: 'dlg.color.red',
-  Orange: 'dlg.color.orange',
-  Yellow: 'dlg.color.yellow',
-  Green: 'dlg.color.green',
-  Teal: 'dlg.color.teal',
-  Blue: 'dlg.color.blue',
-  Purple: 'dlg.color.purple',
-  Pink: 'dlg.color.pink',
-};
-
 interface Choice {
   value: string;
   label: string;
@@ -64,13 +48,10 @@ interface Choice {
   lang?: string;
 }
 
-const colorName = (name: string) => {
-  const key = COLOR_NAMES[name];
-  return key ? t(key) : name;
-};
+/** The palettes name their colours in the current UI language, as the markup toolbar shows them. */
 const colorChoices = (colors: readonly NamedColor[]): Choice[] =>
-  colors.map((c) => ({ value: c.color, label: colorName(c.name), swatch: c.color }));
-const pt = (n: number) => t('dlg.settings.points', { n });
+  colors.map((c) => ({ value: c.color, label: c.name, swatch: c.color }));
+const pt = (n: number) => t('chrome.mk.points', { n });
 const points = (values: readonly number[]): Choice[] => values.map((v) => ({ value: String(v), label: pt(v) }));
 
 export interface SettingsWindowDeps {

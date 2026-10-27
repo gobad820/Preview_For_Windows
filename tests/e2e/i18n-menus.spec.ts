@@ -190,3 +190,13 @@ test.describe('menus in Korean', () => {
     await expect(page.getByRole('dialog', { name: 'Keyboard Shortcuts' }).locator('h3').nth(1)).toHaveText('File');
   });
 });
+
+test('the menu bar is announced in the UI language', async ({ page }) => {
+  await page.goto(`/?file=${encodeURIComponent('fixtures/simple.pdf')}`);
+  await page.waitForFunction(() => (window as any).__pfw?.store.get().status === 'ready');
+  await expect(page.locator('#menubar')).toHaveAttribute('aria-label', 'Menu bar');
+  await page.evaluate(() => (window as any).__pfw.app.settings.set({ language: 'ko' }));
+  await expect(page.locator('#menubar')).toHaveAttribute('aria-label', '메뉴 막대');
+  await page.evaluate(() => (window as any).__pfw.app.settings.set({ language: 'en' }));
+  await expect(page.locator('#menubar')).toHaveAttribute('aria-label', 'Menu bar');
+});

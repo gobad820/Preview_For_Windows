@@ -8,6 +8,7 @@ import type { Message } from './types';
 export const en = {
   // Menu bar titles (the application menu is the product name in both languages)
   'menu.preview': 'Preview',
+  'menu.bar': 'Menu bar',
   'menu.file': 'File',
   'menu.edit': 'Edit',
   'menu.view': 'View',
@@ -78,6 +79,7 @@ export const en = {
 
 export const ko: Record<keyof typeof en, Message> = {
   'menu.preview': 'Preview',
+  'menu.bar': '메뉴 막대',
   'menu.file': '파일',
   'menu.edit': '편집',
   'menu.view': '보기',

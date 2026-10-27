@@ -219,7 +219,7 @@ test.describe('error messages', () => {
     await page.mouse.move(x + 40, y + 30, { steps: 4 });
     await page.mouse.move(x + 80, y + 60, { steps: 4 });
     await page.mouse.up();
-    await expect(banner(page)).toHaveText('이 페이지에 있는 마크업을 읽을 수 없어 여기에서 변경할 수 없습니다.');
+    await expect(banner(page)).toHaveText('이 페이지에 이미 있는 마크업을 읽을 수 없어 여기에서 변경할 수 없습니다.');
   });
 });
 
@@ -300,12 +300,12 @@ test.describe('Settings window', () => {
       '보라색',
       '분홍색',
     ]);
-    expect((await optionTexts(win.getByLabel('선 두께')))[0]).toBe('0.5pt');
-    expect((await optionTexts(win.getByLabel('텍스트 크기')))[0]).toMatch(/^\d+pt$/);
+    expect((await optionTexts(win.getByLabel('선 두께')))[0]).toBe('0.5 pt');
+    expect((await optionTexts(win.getByLabel('텍스트 크기')))[0]).toMatch(/^\d+ pt$/);
     // A value the list does not offer gets its own item, also in Korean.
     await page.evaluate(() => (window as any).__pfw.markup.state.setStyles({ stroke: '#123456', width: 7 }));
     await expect(win.getByLabel('도형 색상').locator('option[data-extra]')).toHaveText('사용자 지정');
-    await expect(win.getByLabel('선 두께').locator('option[data-extra]')).toHaveText('7pt');
+    await expect(win.getByLabel('선 두께').locator('option[data-extra]')).toHaveText('7 pt');
 
     await win.getByRole('tab', { name: '윈도우' }).click();
     expect(await texts(page)).toEqual(['윈도우', '일반', '마크업', '윈도우', '메뉴 막대:', '메뉴 막대 보기', '가려져 있어도 Alt 키로 열 수 있습니다.']);

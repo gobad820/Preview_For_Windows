@@ -76,24 +76,11 @@ export const en = {
   'dlg.settings.textSize': 'Text size:',
   'dlg.settings.textSize.caption': 'For new text boxes.',
   'dlg.settings.custom': 'Custom',
-  'dlg.settings.points': '{n} pt',
   'dlg.settings.menuBar': 'Menu bar:',
   'dlg.settings.showMenuBar': 'Show the menu bar',
   'dlg.settings.showMenuBar.caption': 'When it is hidden, Alt still opens it.',
 
   // ---- colour names in the Settings pop-ups (src/markup/state.ts palettes) ----
-  'dlg.color.black': 'Black',
-  'dlg.color.gray': 'Gray',
-  'dlg.color.white': 'White',
-  'dlg.color.brown': 'Brown',
-  'dlg.color.red': 'Red',
-  'dlg.color.orange': 'Orange',
-  'dlg.color.yellow': 'Yellow',
-  'dlg.color.green': 'Green',
-  'dlg.color.teal': 'Teal',
-  'dlg.color.blue': 'Blue',
-  'dlg.color.purple': 'Purple',
-  'dlg.color.pink': 'Pink',
 } satisfies Record<string, Message>;
 
 export const ko: Record<keyof typeof en, Message> = {
@@ -163,21 +150,8 @@ export const ko: Record<keyof typeof en, Message> = {
   'dlg.settings.textSize': '텍스트 크기:',
   'dlg.settings.textSize.caption': '새 텍스트 상자에 적용됩니다.',
   'dlg.settings.custom': '사용자 지정',
-  'dlg.settings.points': '{n}pt',
   'dlg.settings.menuBar': '메뉴 막대:',
   'dlg.settings.showMenuBar': '메뉴 막대 보기',
   'dlg.settings.showMenuBar.caption': '가려져 있어도 Alt 키로 열 수 있습니다.',
 
-  'dlg.color.black': '검은색',
-  'dlg.color.gray': '회색',
-  'dlg.color.white': '흰색',
-  'dlg.color.brown': '갈색',
-  'dlg.color.red': '빨간색',
-  'dlg.color.orange': '주황색',
-  'dlg.color.yellow': '노란색',
-  'dlg.color.green': '초록색',
-  'dlg.color.teal': '청록색',
-  'dlg.color.blue': '파란색',
-  'dlg.color.purple': '보라색',
-  'dlg.color.pink': '분홍색',
 };

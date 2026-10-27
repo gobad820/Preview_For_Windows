@@ -146,9 +146,9 @@ export class App {
     for (const b of root.querySelectorAll<HTMLElement>('.empty-state [data-action="open"]')) {
       b.addEventListener('click', () => void this.open());
     }
-    // index.html's own text: the empty window, the loading cue and the drop overlay
+    // index.html's own text: the menu bar's name, the empty window, the loading cue and the drop overlay
     this.store.select('locale', () => {
-      for (const el of root.querySelectorAll('.empty-state, .loading-state, .drop-overlay')) localize(el);
+      for (const el of root.querySelectorAll('#menubar, .empty-state, .loading-state, .drop-overlay')) localize(el);
     });
 
     // ---- toolbar ----
