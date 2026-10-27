@@ -15,6 +15,7 @@ import {
   type TextBoxAnnot,
 } from '../annot/types';
 import type { EditableDocument } from '../edit/document';
+import { t } from '../i18n';
 import type { Store, ViewerState } from '../store';
 import { showMenu, type MenuItem } from '../ui/menu';
 import type { PageView, PdfViewer } from '../viewer/viewer';
@@ -53,9 +54,6 @@ export interface MarkupDeps {
   /** Tells the user something went wrong (the app's error banner). */
   notify(message: string): void;
 }
-
-/** Shown when an edit waits for a page's annotations and they cannot be read. */
-export const UNREADABLE_MARKUP = "The markup already on this page couldn't be read, so it can't be changed here.";
 
 type ShapeTool = 'line' | 'arrow' | 'rect' | 'rounded' | 'oval';
 const SHAPE_TOOLS: readonly Tool[] = ['line', 'arrow', 'rect', 'rounded', 'oval'];
@@ -369,7 +367,7 @@ export class MarkupController {
   private defer(work: Promise<unknown>, doc: EditableDocument): void {
     const tracked = work.catch((e: unknown) => {
       console.warn('markup edit dropped', e);
-      if (this.deps.doc() === doc) this.deps.notify(UNREADABLE_MARKUP);
+      if (this.deps.doc() === doc) this.deps.notify(t('dlg.error.markupUnreadable'));
     });
     this.deferred.add(tracked);
     void tracked.finally(() => this.deferred.delete(tracked));

@@ -33,6 +33,25 @@ async function edit(page: Page) {
 /** Asks to close the window; resolves with whether it may close. */
 const requestClose = (page: Page) => page.evaluate(() => (window as any).__pfwRequestClose());
 
+/** How the element's text sits in lines: how many, and the words (split at spaces) broken across two. */
+const wrapping = (loc: Locator) =>
+  loc.evaluate((el) => {
+    const tops = new Set<number>();
+    const broken: string[] = [];
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      for (const m of node.textContent!.matchAll(/\S+/g)) {
+        const range = document.createRange();
+        range.setStart(node, m.index!);
+        range.setEnd(node, m.index! + m[0].length);
+        const lines = new Set([...range.getClientRects()].map((r) => Math.round(r.top)));
+        lines.forEach((top) => tops.add(top));
+        if (lines.size > 1) broken.push(m[0]);
+      }
+    }
+    return { lines: tops.size, broken };
+  });
+
 test.describe('alerts', () => {
   test('unsaved changes: Korean at startup, and the buttons still answer', async ({ page }) => {
     await startInKorean(page);
@@ -101,6 +120,22 @@ test.describe('alerts', () => {
     await expect.poll(async () => (await state(page)).status).toBe('ready');
   });
 
+  test('Korean alert text wraps between words, never inside one', async ({ page }) => {
+    await startInKorean(page);
+    await page.goto('/');
+    await page.evaluate(() => {
+      void (window as any).__pfwUi.showAlert({
+        title: '‘연간 보고서 최종본.pdf’ 문서의 변경 사항을 저장하겠습니까?',
+        message: '지금 저장하면 해당 변경 사항이 대치됩니다. 대신 이 버전을 새 파일로 저장할 수 있습니다.',
+      });
+    });
+    for (const part of ['.alert-title', '.alert-message']) {
+      const w = await wrapping(alert(page).locator(part));
+      expect(w.lines, part).toBeGreaterThan(1);
+      expect(w.broken, part).toEqual([]);
+    }
+  });
+
   test('an alert without buttons gets an OK button in the current language', async ({ page }) => {
     await page.goto('/');
     const show = () =>
@@ -162,6 +197,29 @@ test.describe('error messages', () => {
       editor.deleteSelection();
     });
     await expect(banner(page)).toHaveText('문서에는 페이지가 하나 이상 있어야 합니다.');
+  });
+
+  test("markup on a page whose annotations can't be read", async ({ page }) => {
+    await open(page, 'simple.pdf');
+    await setLanguage(page, 'ko');
+    await page.waitForSelector('#viewer .page[data-page="1"] canvas[data-rendered="true"]');
+    await page.evaluate(() => {
+      // As for a file this app wrote whose annotations do not parse.
+      const doc = (window as any).__pfw.app.document;
+      doc.annotationsAt = () => null;
+      doc.loadAnnotations = () => Promise.reject(new Error('unparsable'));
+      (window as any).__pfw.store.set({ markupOpen: true });
+      (window as any).__pfw.markup.state.setTool('rect');
+    });
+    const box = (await page.locator('#viewer .page[data-page="1"]').boundingBox())!;
+    const x = box.x + box.width / 2;
+    const y = box.y + Math.min(box.height, 600) / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + 40, y + 30, { steps: 4 });
+    await page.mouse.move(x + 80, y + 60, { steps: 4 });
+    await page.mouse.up();
+    await expect(banner(page)).toHaveText('이 페이지에 있는 마크업을 읽을 수 없어 여기에서 변경할 수 없습니다.');
   });
 });
 
@@ -251,6 +309,20 @@ test.describe('Settings window', () => {
 
     await win.getByRole('tab', { name: '윈도우' }).click();
     expect(await texts(page)).toEqual(['윈도우', '일반', '마크업', '윈도우', '메뉴 막대:', '메뉴 막대 보기', '가려져 있어도 Alt 키로 열 수 있습니다.']);
+  });
+
+  test('in a narrow window Korean captions and check boxes wrap between words', async ({ page }) => {
+    await page.setViewportSize({ width: 380, height: 800 });
+    await startInKorean(page);
+    await page.goto('/');
+    await openSettings(page);
+    let lines = 0;
+    for (const text of await settingsWindow(page).locator('.settings-caption, .settings-check span').all()) {
+      const w = await wrapping(text);
+      lines = Math.max(lines, w.lines);
+      expect(w.broken, (await text.textContent())!).toEqual([]);
+    }
+    expect(lines).toBeGreaterThan(1);
   });
 
   test('Language is the first row of General: Automatic, English, 한국어, bound to the setting', async ({ page }) => {
