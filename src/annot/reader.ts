@@ -3,6 +3,7 @@
  * decides whether parsing is needed at all, so ordinary PDFs open without pdf-lib.
  */
 import { EncryptedPDFError, PDFArray, PDFDict, PDFDocument, PDFHexString, PDFName, PDFRef, PDFString, ParseSpeeds } from '@cantoo/pdf-lib';
+import { t } from '../i18n';
 import { PdfOpenError } from '../pdf/document';
 import { ownModel } from './own';
 export { parseAnnot } from './validate';
@@ -31,7 +32,7 @@ export async function readOwnAnnotations(bytes: Uint8Array, password?: string): 
     });
   } catch (e) {
     if (e instanceof EncryptedPDFError || /password/i.test(String((e as Error)?.message))) {
-      throw new PdfOpenError('password', 'This document is password protected.');
+      throw new PdfOpenError('password', t('dlg.error.passwordProtected'));
     }
     throw e;
   }

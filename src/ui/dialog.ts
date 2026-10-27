@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { closeMenus } from './menu';
 
 export interface AlertButton {
@@ -10,7 +11,8 @@ export interface AlertButton {
 export interface AlertOptions {
   title: string;
   message?: string;
-  buttons: AlertButton[];
+  /** Defaults to a single OK button that Enter and Esc both press. */
+  buttons?: AlertButton[];
   input?: { type: 'password' | 'text'; placeholder?: string; value?: string };
 }
 
@@ -28,6 +30,7 @@ const FIELD_CHORDS = new Set(['a', 'c', 'v', 'x', 'z', 'y']);
  */
 export function showAlert(opts: AlertOptions): Promise<{ value: string; input?: string }> {
   closeMenus();
+  const specs = opts.buttons ?? [{ label: t('dlg.ok'), value: 'ok', primary: true, cancel: true }];
   return new Promise((resolve) => {
     const id = `pfw-alert-${++seq}`;
     const previousFocus = document.activeElement;
@@ -69,10 +72,8 @@ export function showAlert(opts: AlertOptions): Promise<{ value: string; input?: 
       alert.append(field);
     }
 
-    const stacked = opts.buttons.length >= 3;
-    const ordered = stacked
-      ? opts.buttons
-      : [...opts.buttons.filter((b) => !b.primary), ...opts.buttons.filter((b) => b.primary)];
+    const stacked = specs.length >= 3;
+    const ordered = stacked ? specs : [...specs.filter((b) => !b.primary), ...specs.filter((b) => b.primary)];
     const row = document.createElement('div');
     row.className = stacked ? 'alert-buttons stacked' : 'alert-buttons';
     const buttons = ordered.map((b) => {

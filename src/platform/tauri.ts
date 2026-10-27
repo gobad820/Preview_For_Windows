@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open, save } from '@tauri-apps/plugin-dialog';
+import { t } from '../i18n';
 import type { DragState, Platform, Point, WindowControls } from './types';
 
 export function isTauri(): boolean {
@@ -9,7 +10,8 @@ export function isTauri(): boolean {
 }
 
 const isPdf = (p: string) => /\.pdf$/i.test(p);
-const PDF_FILTER = [{ name: 'PDF Document', extensions: ['pdf'] }];
+/** Read per dialog: the filter name follows the UI language. */
+const pdfFilter = () => [{ name: t('dlg.file.pdf'), extensions: ['pdf'] }];
 
 /** Tauri reports physical pixels relative to the webview; the page works in CSS pixels. */
 const toCss = (p: { x: number; y: number }): Point => {
@@ -91,18 +93,18 @@ export function tauriPlatform(material: 'mica' | 'none' = 'none'): Platform {
       return new Uint8Array(buf);
     },
     async openFileDialog() {
-      const result = await open({ multiple: false, directory: false, filters: PDF_FILTER });
+      const result = await open({ title: t('dlg.file.open'), multiple: false, directory: false, filters: pdfFilter() });
       if (typeof result === 'string') return result;
       if (Array.isArray(result)) return (result[0] as string | undefined) ?? null;
       return null;
     },
     async openFilesDialog() {
-      const result = await open({ multiple: true, directory: false, filters: PDF_FILTER });
+      const result = await open({ title: t('dlg.file.insert'), multiple: true, directory: false, filters: pdfFilter() });
       if (Array.isArray(result)) return result as string[];
       return typeof result === 'string' ? [result] : [];
     },
     async saveFileDialog(defaultPath) {
-      return (await save({ defaultPath, filters: PDF_FILTER })) ?? null;
+      return (await save({ title: t('dlg.file.saveAs'), defaultPath, filters: pdfFilter() })) ?? null;
     },
     async writeFile(path, data) {
       await invoke('write_file', data, { headers: { 'x-path': encodeURIComponent(path) } });

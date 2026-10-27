@@ -784,16 +784,17 @@ button, input { font: inherit; color: inherit; letter-spacing: inherit; }
   margin-bottom: 14px;
   background: var(--app-icon) center / contain no-repeat;
 }
+/* Korean wraps between words, not syllables; a file name too long for a line still breaks. */
 .alert-title {
   margin: 0;
   font-size: 13px; font-weight: 700; line-height: 16px;
   letter-spacing: -0.003em;
-  overflow-wrap: anywhere;
+  word-break: keep-all; overflow-wrap: anywhere;
 }
 .alert-message {
   margin: 6px 0 0;
   font-size: 11px; line-height: 14px; letter-spacing: 0.005em;
-  overflow-wrap: anywhere;
+  word-break: keep-all; overflow-wrap: anywhere;
 }
 .alert-input {
   width: 100%; height: 24px; margin-top: 14px; padding: 0 7px;
@@ -1077,6 +1078,7 @@ button, input { font: inherit; color: inherit; letter-spacing: inherit; }
   overflow: hidden;
   font: 13px/16px var(--font);
   letter-spacing: -0.003em;
+  word-break: keep-all; /* Korean wraps between words, as the alerts do */
   color: var(--text);
   background: var(--chrome-bg);
   border-radius: var(--radius-alert);

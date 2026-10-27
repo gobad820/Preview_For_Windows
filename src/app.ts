@@ -53,7 +53,7 @@ export class App {
   readonly commands = new Commands();
   /** Window-wide settings (Settings…, Ctrl+,). */
   readonly settings = new SettingsModel();
-  private readonly settingsWindow = new SettingsWindow({ settings: this.settings, markup: this.markup });
+  private readonly settingsWindow = new SettingsWindow({ settings: this.settings, markup: this.markup, store: this.store });
   /** The in-window menu bar (File, Edit, View, …) built from `commands`. */
   readonly menuBar: MenuBar;
   readonly markupBar: MarkupBar;
@@ -585,7 +585,7 @@ export class App {
         spawned = await this.platform.openInNewWindow(path);
       } catch (e) {
         const reason = e instanceof Error ? e.message : String(e);
-        this.store.set({ error: `Can't open ${this.platform.fileName(path)} in a new window: ${reason}` });
+        this.store.set({ error: t('dlg.error.openInNewWindow', { name: this.platform.fileName(path), reason }) });
         return;
       }
       if (spawned) return;
@@ -666,7 +666,7 @@ export class App {
   private async saveAsNow(): Promise<boolean> {
     if (!this.doc) return false;
     const s = this.store.get();
-    const suggested = s.filePath ?? s.fileName ?? 'Untitled.pdf';
+    const suggested = s.filePath ?? s.fileName ?? `${t('dlg.untitled')}.pdf`;
     let path = await this.platform.saveFileDialog(suggested);
     if (!path) return false;
     if (!/\.pdf$/i.test(path)) path += '.pdf';
@@ -693,7 +693,7 @@ export class App {
       return true;
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e);
-      this.store.set({ error: `Couldn't save ${name}: ${reason}` });
+      this.store.set({ error: t('dlg.error.save', { name, reason }) });
       return false;
     }
   }
@@ -707,12 +707,12 @@ export class App {
 
   private async askChangedOnDisk(name: string): Promise<'save-as' | 'overwrite' | 'cancel'> {
     const { value } = await showAlert({
-      title: `“${name}” has been changed by another application.`,
-      message: 'Saving now would replace those changes. You can save your version as a new file instead.',
+      title: t('dlg.changed.title', { name }),
+      message: t('dlg.changed.message'),
       buttons: [
-        { label: 'Save As…', value: 'save-as', primary: true },
-        { label: 'Replace', value: 'overwrite' },
-        { label: 'Cancel', value: 'cancel', cancel: true },
+        { label: t('dlg.saveAs'), value: 'save-as', primary: true },
+        { label: t('dlg.replace'), value: 'overwrite' },
+        { label: t('dlg.cancel'), value: 'cancel', cancel: true },
       ],
     });
     return value === 'save-as' || value === 'overwrite' ? value : 'cancel';
@@ -740,7 +740,7 @@ export class App {
     // Text still in an open text box or note editor, or waiting for a page's annotations, counts as an edit.
     await this.markupController.settle();
     if (!this.doc?.dirty) return true;
-    const choice = await this.askUnsaved(this.store.get().fileName ?? 'Untitled');
+    const choice = await this.askUnsaved(this.store.get().fileName ?? t('dlg.untitled'));
     if (choice === 'cancel') return false;
     if (choice === 'discard') return true;
     return this.save();
@@ -748,12 +748,12 @@ export class App {
 
   private async askUnsaved(name: string): Promise<'save' | 'discard' | 'cancel'> {
     const { value } = await showAlert({
-      title: `Do you want to save the changes made to the document “${name}”?`,
-      message: "Your changes will be lost if you don't save them.",
+      title: t('dlg.unsaved.title', { name }),
+      message: t('dlg.unsaved.message'),
       buttons: [
-        { label: 'Save', value: 'save', primary: true },
-        { label: "Don't Save", value: 'discard' },
-        { label: 'Cancel', value: 'cancel', cancel: true },
+        { label: t('dlg.save'), value: 'save', primary: true },
+        { label: t('dlg.dontSave'), value: 'discard' },
+        { label: t('dlg.cancel'), value: 'cancel', cancel: true },
       ],
     });
     return value === 'save' || value === 'discard' ? value : 'cancel';
@@ -902,7 +902,7 @@ export class App {
           continue;
         }
         const reason = e instanceof Error ? e.message : String(e);
-        this.store.set({ error: `Can't add ${name}: ${reason}` });
+        this.store.set({ error: t('dlg.error.add', { name, reason }) });
         return null;
       }
     }
@@ -1033,7 +1033,7 @@ export class App {
   private fail(name: string, e: unknown): void {
     const reason = e instanceof PdfOpenError ? e.message : e instanceof Error ? e.message : String(e);
     this.store.set({
-      error: `Can't open ${name}: ${reason}`,
+      error: t('dlg.error.open', { name, reason }),
       status: this.doc ? 'ready' : 'error',
     });
     if (!this.doc) this.sidebar.setDocument(null, null);
@@ -1044,12 +1044,12 @@ export class App {
   /** Asks for `name`'s password in a modal alert; resolves with it, or null when cancelled. */
   private async askPassword(name: string, retry: boolean): Promise<string | null> {
     const { value, input } = await showAlert({
-      title: `“${name}” is password protected.`,
-      message: retry ? 'Incorrect password. Try again.' : 'Enter the password to open it.',
-      input: { type: 'password', placeholder: 'Password' },
+      title: t('dlg.password.title', { name }),
+      message: t(retry ? 'dlg.password.retry' : 'dlg.password.message'),
+      input: { type: 'password', placeholder: t('dlg.password.placeholder') },
       buttons: [
-        { label: 'Open', value: 'open', primary: true },
-        { label: 'Cancel', value: 'cancel', cancel: true },
+        { label: t('dlg.open'), value: 'open', primary: true },
+        { label: t('dlg.cancel'), value: 'cancel', cancel: true },
       ],
     });
     if (value !== 'open' || !input) {

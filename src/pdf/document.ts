@@ -8,6 +8,7 @@ import type {
 } from 'pdfjs-dist/types/src/display/api';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { hasOwnMarker } from '../annot/marker';
+import { t } from '../i18n';
 import type { PageSize } from '../types';
 import type { PageSource } from './source';
 
@@ -240,11 +241,11 @@ function sizeOf(page: PDFPageProxy): PageSize {
 function toOpenError(e: unknown): PdfOpenError {
   if (e instanceof pdfjs.PasswordException) {
     const incorrect = e.code === pdfjs.PasswordResponses.INCORRECT_PASSWORD;
-    return new PdfOpenError('password', incorrect ? 'Incorrect password.' : 'This document is password protected.');
+    return new PdfOpenError('password', t(incorrect ? 'dlg.error.incorrectPassword' : 'dlg.error.passwordProtected'));
   }
   if (e instanceof pdfjs.InvalidPDFException) {
-    return new PdfOpenError('invalid', 'This file is not a valid PDF.');
+    return new PdfOpenError('invalid', t('dlg.error.invalidPdf'));
   }
   const msg = e instanceof Error ? e.message : String(e);
-  return new PdfOpenError('unknown', msg || 'The document could not be opened.');
+  return new PdfOpenError('unknown', msg || t('dlg.error.openFailed'));
 }

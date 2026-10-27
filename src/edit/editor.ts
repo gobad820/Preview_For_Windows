@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import type { Platform } from '../platform/types';
 import type { Store, ViewerState } from '../store';
 import { canDelete, deletePages, insertPages, movePages, type PageSpec } from './composition';
@@ -125,7 +126,7 @@ export class Editor {
     const ids = new Set(this.selection.ids);
     if (!doc || ids.size === 0) return;
     if (!canDelete(doc.pages, ids)) {
-      this.host.notify('A document needs at least one page.');
+      this.host.notify(t('dlg.error.lastPage'));
       return;
     }
     const copied = this.copyIds(ids);
@@ -192,7 +193,7 @@ export class Editor {
     const doc = this.host.doc();
     if (!doc || ids.size === 0) return false;
     if (!canDelete(doc.pages, ids)) {
-      this.host.notify('A document needs at least one page.');
+      this.host.notify(t('dlg.error.lastPage'));
       return false;
     }
     const first = doc.pages.findIndex((p) => ids.has(p.id));
