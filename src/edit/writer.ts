@@ -15,6 +15,7 @@ import {
 } from '@cantoo/pdf-lib';
 import { AnnotFonts, writePageAnnotations, type FontLoader } from '../annot/pdfWrite';
 import type { Annot } from '../annot/types';
+import { t } from '../i18n';
 import { PdfOpenError, type OutlineNode } from '../pdf/document';
 
 /** One input file. `id` matches `PageRef.src`. */
@@ -105,7 +106,7 @@ export async function writePdf(
   pages: ReadonlyArray<PageSpec>,
   opts: WriteOptions,
 ): Promise<Uint8Array> {
-  if (pages.length === 0) throw new Error('A PDF needs at least one page.');
+  if (pages.length === 0) throw new Error(t('dlg.error.noPages'));
   const byId = new Map(sources.map((s) => [s.id, s]));
   const prepared = new Map<number, Prepared>();
   for (const id of new Set(pages.map((p) => p.src))) {
@@ -220,7 +221,7 @@ async function loadSource(src: WriterSource): Promise<PDFDocument> {
     });
   } catch (e) {
     if (e instanceof EncryptedPDFError || /password/i.test(String((e as Error)?.message))) {
-      throw new PdfOpenError('password', 'This document is password protected.');
+      throw new PdfOpenError('password', t('dlg.error.passwordProtected'));
     }
     throw e;
   }

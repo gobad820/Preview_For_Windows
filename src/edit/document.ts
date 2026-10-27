@@ -2,6 +2,7 @@ import type { PDFPageProxy, TextContent } from 'pdfjs-dist/types/src/display/api
 import type { FontLoader } from '../annot/pdfWrite';
 import { readOwnAnnotations } from '../annot/reader';
 import type { Annot } from '../annot/types';
+import { t } from '../i18n';
 import { PdfDocument, type OutlineNode, type PageText, type PdfAssets } from '../pdf/document';
 import type { PageSource } from '../pdf/source';
 import type { PageSize } from '../types';
@@ -163,7 +164,7 @@ export class EditableDocument implements PageSource {
     // The page may have moved or been edited meanwhile; answer for the same page.
     const now = this.pages.find((p) => p.id === ref.id) ?? ref;
     const list = this.annotationsOf(now);
-    if (!list) throw new Error('The annotations of this page could not be read.');
+    if (!list) throw new Error(t('dlg.error.annotationsUnreadable'));
     return list;
   }
 
