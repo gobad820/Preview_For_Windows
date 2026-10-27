@@ -429,7 +429,7 @@ button, input { font: inherit; color: inherit; letter-spacing: inherit; }
   /* The splash (src/assets/splash.jpg, made by scripts/make-splash.mjs), 10:7, never taller than about half the window. */
   width: min(600px, 72vw, calc(54vh * 10 / 7));
   aspect-ratio: 10 / 7;
-  border-radius: 10px;
+  border-radius: 0;
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.18), 0 0 0 0.5px rgba(0, 0, 0, 0.12);
   -webkit-user-select: none; user-select: none;
 }
@@ -1044,7 +1044,7 @@ button, input { font: inherit; color: inherit; letter-spacing: inherit; }
 .about {
   display: flex; flex-direction: column; align-items: stretch;
   width: min(640px, 90vw);
-  border-radius: 12px; overflow: hidden;
+  border-radius: 0; overflow: hidden;
   background: #ffffff;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35), 0 0 0 0.5px rgba(0, 0, 0, 0.2);
   outline: none;

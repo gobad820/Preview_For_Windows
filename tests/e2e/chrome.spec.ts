@@ -386,6 +386,8 @@ test.describe('window states', () => {
     const g = (await splash.boundingBox())!;
     expect(g.width).toBeLessThanOrEqual(600);
     expect(Math.abs(g.width / g.height - 10 / 7)).toBeLessThan(0.02);
+    // A plain rectangle: no rounded corners.
+    expect(await style(page, '.empty-state .empty-splash', 'border-radius')).toBe('0px');
     await expect(page.getByRole('heading', { name: 'Open a PDF' })).toBeVisible();
     const button = page.locator('.empty-state [data-action="open"]');
     await expect(button).toHaveText('Open…');
@@ -454,6 +456,7 @@ test('About Preview shows the splash and the version, and closes with a click or
   await expect(about).toBeVisible();
   await expect(about.locator('img')).toHaveJSProperty('complete', true);
   await expect(about).toContainText(/Version \d+\.\d+\.\d+/);
+  expect(await about.evaluate((el) => getComputedStyle(el).borderRadius)).toBe('0px');
   await page.keyboard.press('Escape');
   await expect(about).toBeHidden();
   await page.click('[data-action="more"]');
