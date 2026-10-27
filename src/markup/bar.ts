@@ -109,6 +109,7 @@ const template = `
   <button class="tb-btn mk-btn mk-menu" data-markup="fill" ${named('chrome.mk.fillColor')} aria-haspopup="dialog" aria-expanded="false">${icons.fillColor}${icons.chevronDown}</button>
   <button class="tb-btn mk-btn mk-menu" data-markup="text-style" ${named('chrome.mk.textStyle')} aria-haspopup="dialog" aria-expanded="false">${icons.textStyle}${icons.chevronDown}</button>
 `;
+
 export class MarkupBar {
   private readonly unsubscribe: Array<() => void> = [];
 
