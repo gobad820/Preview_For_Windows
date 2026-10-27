@@ -1,5 +1,7 @@
 # Preview for Windows
 
+**English** · [한국어](README.ko.md)
+
 A fast, clean PDF viewer and editor for Windows in the spirit of macOS Preview:
 a native window that opens instantly, a unified title bar and toolbar, continuous
 scrolling or two pages side by side, search, a thumbnail sidebar where you reorder,
@@ -88,9 +90,10 @@ per-user installer (about 4.6 MB) · no network access, no telemetry · GNU AGPL
   continuous with the toolbar like a macOS title bar, with every feature of the app in it.
   It is the window's title bar: the minimize, maximize and close buttons sit in its
   top-right corner (in the toolbar's corner while the bar is hidden). Click a title and
-  slide across the others like on a Mac, or use the keyboard like on Windows: `Alt` or `F10` focuses the bar,
-  `Alt`+underlined letter opens a menu, arrows move, `Enter` runs. View › Menu Bar hides
-  it; `Alt` still brings it back. Help › Keyboard Shortcuts lists every shortcut.
+  slide across the others like on a Mac, or use the keyboard like on Windows: `Alt` or
+  `F10` focuses the bar, `Alt`+underlined letter opens a menu, arrows move, `Enter` runs.
+  View › Menu Bar hides it; `Alt` still brings it back. Help › Keyboard Shortcuts lists
+  every shortcut.
 - Settings… (`Ctrl+,`) opens a macOS-style Settings window with General, Markup and Window
   panes: default zoom for new files, page layout and Book Mode, showing the sidebar when
   a document opens, remembering each file's position, the default highlight color, shape
@@ -116,7 +119,7 @@ per-user installer (about 4.6 MB) · no network access, no telemetry · GNU AGPL
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/empty-window-dark.jpg">
-  <img alt="The empty window: a lighthouse photo with the name Preview for Windows 0.3, an Open button and a hint to drop a file" src="docs/empty-window.jpg" width="640">
+  <img alt="The empty window: a lighthouse photo with the name Preview for Windows, an Open button and a hint to drop a file" src="docs/empty-window.jpg" width="640">
 </picture>
 
 Password-protected and non-PDF files show an inline error instead of a blank window.
