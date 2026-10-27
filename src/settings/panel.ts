@@ -1,8 +1,8 @@
 /**
- * The Settings window, Mac OS X Lion style: a grey title bar with the pane's name, a toolbar of
- * pane icons (the selected one pressed into a darker well) and a pane of right-aligned labels,
- * pop-up buttons and check boxes. It sits inside the app window and is modal: keys, presses and
- * focus stay in it until it closes (close button, Esc or Ctrl+W). Changes apply at once.
+ * The Settings window, in the manner of a modern macOS app's Settings: the pane's name over a
+ * toolbar of pane icons (the selected one tinted on a pressed fill), then a pane of right-aligned
+ * labels, pop-up buttons and check boxes. It sits inside the app window and is modal: keys,
+ * presses and focus stay in it until it closes (close button, Esc or Ctrl+W). Changes apply at once.
  */
 import {
   FONT_SIZES,
@@ -13,7 +13,7 @@ import {
   type NamedColor,
 } from '../markup/state';
 import { closeMenus } from '../ui/menu';
-import { settingsIcons } from './icons';
+import { popupArrows, settingsIcons } from './icons';
 import type { DefaultZoom, Settings, SettingsModel } from './settings';
 
 export type PaneId = 'general' | 'markup' | 'window';
@@ -356,14 +356,17 @@ export class SettingsWindow {
     return p;
   }
 
-  /** An Aqua pop-up button: a native select whose button and menu are drawn Lion style. */
+  /** A macOS pop-up button: a native select drawn with an accent chevron square and the app's menu look. */
   private popup(id: string, choices: readonly Choice[], onPick: (value: string) => void): HTMLSelectElement {
     const el = document.createElement('select');
     el.className = 'settings-popup';
     el.id = id;
-    // Customizable select: the button shows the chosen option, swatch included.
+    // Customizable select: the button shows the chosen option, swatch included, and the chevrons.
     const button = document.createElement('button');
-    button.append(document.createElement('selectedcontent'));
+    const arrows = document.createElement('span');
+    arrows.className = 'settings-popup-arrows';
+    arrows.innerHTML = popupArrows;
+    button.append(document.createElement('selectedcontent'), arrows);
     el.append(button);
     for (const c of choices) el.append(this.option(c));
     el.addEventListener('change', () => onPick(el.value));

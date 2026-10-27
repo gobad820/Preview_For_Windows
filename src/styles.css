@@ -1071,8 +1071,9 @@ button, input { font: inherit; color: inherit; letter-spacing: inherit; }
   background: #ffffff;
 }
 
-/* ---- Settings: a Mac OS X Lion preferences window (src/settings/panel.ts) ----------------
-   Lion had no dark mode, so the window keeps its light colours in both themes. */
+/* ---- Settings: a modern macOS Settings window (src/settings/panel.ts) --------------------
+   One surface in the toolbar colour for the title and the pane toolbar, controls from the app's
+   tokens, pop-up lists in the look of the app's menus; light and dark follow the theme. */
 .settings-scrim {
   position: fixed; inset: 0; z-index: 1050;
   display: flex; align-items: flex-start; justify-content: center;
@@ -1081,186 +1082,200 @@ button, input { font: inherit; color: inherit; letter-spacing: inherit; }
   animation: pfw-fade-in 120ms ease-out;
 }
 .settings-window {
-  color-scheme: light;
   width: 520px; max-width: 100%; max-height: 100%;
   display: flex; flex-direction: column;
   overflow: hidden;
-  font: 13px/16px var(--lion-font);
-  letter-spacing: 0;
-  color: var(--lion-text);
-  -webkit-font-smoothing: auto;
-  /* The title bar and the toolbar share one unified gradient. */
-  background: linear-gradient(var(--lion-window-top), var(--lion-window-bottom)) top / 100% 79px no-repeat, #ececec;
-  border-radius: 5px;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.32), 0 22px 56px rgba(0, 0, 0, 0.42), 0 5px 14px rgba(0, 0, 0, 0.2);
+  font: 13px/16px var(--font);
+  letter-spacing: -0.003em;
+  color: var(--text);
+  background: var(--chrome-bg);
+  border-radius: var(--radius-alert);
+  box-shadow: var(--menu-ring), 0 24px 64px rgba(0, 0, 0, 0.26), 0 4px 14px rgba(0, 0, 0, 0.1);
   outline: none;
+}
+/* The translucent Mica toolbar colour needs the alerts' blur to stay legible over the document. */
+:root[data-material="mica"] .settings-window {
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  backdrop-filter: blur(40px) saturate(1.8);
 }
 .settings-window :focus-visible { outline: none; }
 
 .settings-titlebar {
   position: relative; flex: none;
-  height: 22px;
+  height: 28px; padding: 0 76px;
   display: flex; align-items: center; justify-content: center;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
 }
 .settings-title {
-  margin: 0;
-  font: inherit; font-size: 13px;
-  color: #4d4d4d;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
+  margin: 0; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 13px; font-weight: 600; line-height: 16px;
+  letter-spacing: -0.006em;
+  color: var(--text);
 }
-.settings-lights { position: absolute; left: 8px; top: 4px; display: flex; gap: 7px; }
+/* Flat traffic lights. The panel cannot minimise or zoom, so those two are greyed out. */
+.settings-lights { position: absolute; left: 12px; top: 8px; display: flex; gap: 8px; }
 .settings-light {
   display: block; flex: none;
-  width: 13px; height: 13px; padding: 0;
-  border: 1px solid rgba(0, 0, 0, 0.28); border-radius: 50%;
-  background: radial-gradient(circle at 50% 78%, #f4f4f4 0, #d4d4d4 45%, #b4b4b4 100%);
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.8), 0 1px 0 rgba(255, 255, 255, 0.45);
+  width: 12px; height: 12px; padding: 0;
+  border: 0; border-radius: 50%;
+  background: var(--fill-pressed);
+  box-shadow: inset 0 0 0 0.5px var(--hairline);
 }
 .settings-close {
   -webkit-appearance: none; appearance: none;
   position: relative;
-  border-color: #a6372a;
-  background: radial-gradient(circle at 50% 80%, #ffb09f 0, #f2604c 42%, #c93a28 100%);
+  background: #ff5f57;
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.2);
+  outline: none;
   cursor: default;
 }
 .settings-close::after {
-  content: ""; position: absolute; inset: 2px;
+  content: ""; position: absolute; inset: 0;
   opacity: 0;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3E%3Cpath d='M1.6 1.6l4.8 4.8M6.4 1.6L1.6 6.4' stroke='%234d0a00' stroke-width='1.3' stroke-linecap='round'/%3E%3C/svg%3E") center / 7px 7px no-repeat;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3.75 3.75l4.5 4.5M8.25 3.75l-4.5 4.5' stroke='%23000' stroke-opacity='.5' stroke-width='1.2' stroke-linecap='round'/%3E%3C/svg%3E") center / 12px 12px no-repeat;
 }
 .settings-lights:hover .settings-close::after, .settings-close:focus-visible::after { opacity: 1; }
-.settings-close:active { background: radial-gradient(circle at 50% 80%, #e58b7c 0, #cf4634 42%, #a32a1b 100%); }
-.settings-close:focus-visible { box-shadow: 0 0 0 2px #7eadf9; }
+.settings-close:active { background: #bf4943; }
+.settings-close:focus-visible { box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.2), var(--focus-ring); }
 
+/* Pane toolbar: centred line icons with labels, the app toolbar's hairline under it. */
 .settings-toolbar {
   flex: none;
-  height: 57px;
-  display: flex; align-items: stretch;
-  padding: 0 6px;
-  border-bottom: 1px solid #9a9a9a;
+  display: flex; align-items: center; justify-content: center; gap: 2px;
+  padding: 0 8px 7px;
+  box-shadow: inset 0 -1px 0 var(--hairline);
 }
 .settings-tab {
   -webkit-appearance: none; appearance: none;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  min-width: 62px; padding: 2px 7px 3px;
-  border: 0; background: none;
-  font: 11px/13px var(--lion-font);
-  color: #262626;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+  min-width: 64px; height: 48px; padding: 2px 8px 0;
+  border: 0; border-radius: 6px;
+  color: var(--icon);
+  background: transparent;
+  outline: none;
   cursor: default;
+  transition: background-color 120ms ease, color 120ms ease;
 }
-.settings-tab-icon { display: block; width: 32px; height: 32px; }
+.settings-tab-icon { display: block; width: 22px; height: 22px; }
 .settings-tab-icon svg { display: block; }
-.settings-tab-label { margin-top: 2px; white-space: nowrap; }
-.settings-tab:active .settings-tab-icon { filter: brightness(0.72); }
-/* The selected pane's item sits in a darker, pressed well that runs the toolbar's height. */
-.settings-tab[aria-selected="true"] {
-  background: linear-gradient(rgba(0, 0, 0, 0.09), rgba(0, 0, 0, 0.17));
-  box-shadow: inset 1px 0 0 rgba(0, 0, 0, 0.16), inset -1px 0 0 rgba(0, 0, 0, 0.16), inset 0 1px 3px rgba(0, 0, 0, 0.18);
-}
-.settings-tab:focus-visible { box-shadow: inset 0 0 0 2px #7eadf9; }
-.settings-tab[aria-selected="true"]:focus-visible {
-  box-shadow: inset 1px 0 0 rgba(0, 0, 0, 0.16), inset -1px 0 0 rgba(0, 0, 0, 0.16), inset 0 0 0 2px #7eadf9;
-}
+.settings-tab-label { margin-top: 3px; font-size: 11px; line-height: 13px; letter-spacing: 0.004em; white-space: nowrap; }
+.settings-tab:hover { background: var(--fill-hover); }
+.settings-tab:active, .settings-tab[aria-selected="true"] { background: var(--fill-pressed); }
+.settings-tab[aria-selected="true"] { color: var(--accent); }
+.settings-tab:focus-visible { box-shadow: var(--focus-ring); }
 
+/* Panes: labels right-aligned against a shared column, controls to their right. */
 .settings-pane {
   display: flex; flex-direction: column; gap: 11px;
   min-height: 0; overflow: auto;
   padding: 20px 28px 24px 20px;
-  background: #ececec;
 }
 .settings-pane[hidden] { display: none; }
-/* Lion panes: labels right-aligned against a shared column, controls to their right. */
 .settings-row { display: grid; grid-template-columns: 172px minmax(0, 1fr); column-gap: 8px; align-items: start; }
-.settings-label { text-align: right; line-height: 20px; white-space: nowrap; }
+.settings-label { text-align: right; line-height: 22px; white-space: nowrap; }
 .settings-control { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; }
-.settings-caption { margin: 0; font-size: 11px; line-height: 14px; color: #6b6b6b; }
-.settings-check + .settings-caption { padding-left: 20px; }
+.settings-caption { margin: 0; font-size: 11px; line-height: 14px; letter-spacing: 0.004em; color: var(--text-secondary); }
+.settings-check + .settings-caption { padding-left: 21px; }
 
-/* Check boxes: a white-to-grey box with a black check mark. */
-.settings-check { display: inline-flex; align-items: center; gap: 6px; line-height: 20px; }
+/* Check boxes: a raised control when off, an accent box with a white check when on. */
+.settings-check { display: inline-flex; align-items: center; gap: 7px; line-height: 22px; }
 .settings-check input {
   -webkit-appearance: none; appearance: none;
   flex: none; width: 14px; height: 14px; margin: 0;
-  border: 1px solid rgba(0, 0, 0, 0.36); border-bottom-color: rgba(0, 0, 0, 0.48); border-radius: 3px;
-  background: linear-gradient(#ffffff, #e9e9e9);
-  box-shadow: inset 0 1px 0 #ffffff, 0 1px 0 rgba(255, 255, 255, 0.55);
+  border: 0; border-radius: 3.5px;
+  background: var(--control-bg);
+  box-shadow: var(--control-shadow);
+  outline: none;
 }
 .settings-check input:checked {
   background:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M3 7.4l2.7 2.9L11.2 2.8' fill='none' stroke='%23181818' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 12px 12px no-repeat,
-    linear-gradient(#ffffff, #e9e9e9);
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M3.6 7.3l2.3 2.4 4.5-5.4' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 14px 14px no-repeat,
+    var(--accent);
+  box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.25), 0 1px 1.5px rgba(0, 0, 0, 0.12);
 }
-.settings-check input:active:not(:disabled) { background-color: #b9c7e0; background-image: linear-gradient(#dbe3f1, #b6c5df); }
-.settings-check input:checked:active:not(:disabled) {
-  background:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M3 7.4l2.7 2.9L11.2 2.8' fill='none' stroke='%23181818' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 12px 12px no-repeat,
-    linear-gradient(#dbe3f1, #b6c5df);
-}
-.settings-check input:focus-visible { box-shadow: 0 0 0 3px rgba(126, 173, 249, 0.85); }
-.settings-check:has(input:disabled) { color: var(--lion-text-disabled); }
-.settings-check input:disabled { opacity: 0.55; }
+.settings-check input:active:not(:disabled) { filter: brightness(0.92); }
+.settings-check input:focus-visible { box-shadow: var(--control-shadow), var(--focus-ring); }
+.settings-check input:checked:focus-visible { box-shadow: var(--focus-ring); }
+.settings-check input:disabled { opacity: 0.5; }
+.settings-check:has(input:disabled) { color: var(--text-tertiary); }
 
-/* Pop-up buttons: customizable selects drawn as Aqua pop-ups with a Lion menu. */
+/* Pop-up buttons: customizable selects with an accent chevron square; the list is a .menu. */
 .settings-popup { -webkit-appearance: none; appearance: none; appearance: base-select; }
 .settings-popup::picker(select) { appearance: base-select; }
 .settings-popup {
-  min-width: 158px; height: 20px; margin: 0;
-  padding: 0 24px 0 9px;
-  font: 13px/18px var(--lion-font);
-  color: var(--lion-text);
-  border: 1px solid rgba(0, 0, 0, 0.36); border-bottom-color: rgba(0, 0, 0, 0.5); border-radius: 4px;
-  background:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 11'%3E%3Cpath d='M3.5 0.5L6.5 4H0.5zM3.5 10.5L0.5 7h6z' fill='%23222'/%3E%3C/svg%3E") right 8px center / 7px 11px no-repeat,
-    linear-gradient(#ffffff, #f2f2f2 55%, #e3e3e3);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 1px 0 rgba(255, 255, 255, 0.45);
+  min-width: 158px; height: 22px; min-height: 0; margin: 0;
+  padding: 0 3px 0 8px;
+  font: 13px/16px var(--font);
+  letter-spacing: inherit;
+  color: var(--text);
+  border: 0; border-radius: 5px;
+  background: var(--control-bg);
+  box-shadow: var(--control-shadow);
+  outline: none;
   cursor: default;
 }
+.settings-popup:focus-visible { box-shadow: var(--control-shadow), var(--focus-ring); }
 .settings-popup::picker-icon { display: none; }
 .settings-popup > button {
-  display: flex; align-items: center; min-width: 0;
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; height: 100%; min-width: 0;
   padding: 0; border: 0; background: none;
   font: inherit; color: inherit;
 }
-.settings-popup selectedcontent { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
-.settings-popup:open, .settings-popup:active {
-  background:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 11'%3E%3Cpath d='M3.5 0.5L6.5 4H0.5zM3.5 10.5L0.5 7h6z' fill='%23222'/%3E%3C/svg%3E") right 8px center / 7px 11px no-repeat,
-    linear-gradient(#e4e4e4, #d6d6d6 55%, #cbcbcb);
+.settings-popup selectedcontent {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; gap: 6px;
+  overflow: hidden; white-space: nowrap;
 }
-.settings-popup:focus-visible { box-shadow: 0 0 0 3px rgba(126, 173, 249, 0.85); }
+.settings-popup-arrows {
+  flex: none;
+  width: 16px; height: 16px;
+  border-radius: 4px;
+  color: var(--accent-fg);
+  background: var(--accent);
+}
+.settings-popup-arrows svg { display: block; }
+/* The open list: the app menus' material, ring, shadow, radius, padding, rows and highlight. */
 .settings-popup::picker(select) {
-  margin: 1px 0;
-  padding: 4px 0;
-  min-width: anchor-size(width);
-  font: 13px/16px var(--lion-font);
-  color: var(--lion-text);
-  /* Opaque, unlike the menu bar's menus: captions under a pop-up would show through. */
-  background: #ffffff;
-  border: 1px solid var(--lion-menu-border); border-radius: 5px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+  margin: 4px 0;
+  min-width: anchor-size(width); max-width: 360px;
+  padding: 5px;
+  color: var(--text);
+  background: var(--menu-bg);
+  -webkit-backdrop-filter: blur(28px) saturate(1.8);
+  backdrop-filter: blur(28px) saturate(1.8);
+  border: 0; border-radius: var(--radius-menu);
+  box-shadow: var(--menu-ring), var(--menu-shadow);
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar) transparent;
 }
 .settings-popup option {
-  position: relative;
-  display: flex; align-items: center; gap: 6px;
-  min-height: 19px; padding: 0 22px 0 20px;
-  color: var(--lion-text);
+  display: flex; align-items: center; gap: 0;
+  height: 22px; min-height: 0; padding: 0 12px 0 2px;
+  border-radius: 4px;
+  color: inherit;
   background: transparent;
   white-space: nowrap;
-}
-.settings-popup option::checkmark { position: absolute; left: 6px; content: "\2713"; font-size: 12px; }
-.settings-popup option:is(:hover, :focus-visible) {
-  background: linear-gradient(var(--lion-select-top), var(--lion-select-bottom));
-  color: #ffffff;
   outline: none;
 }
-.settings-swatch {
-  flex: none; width: 16px; height: 10px;
-  border-radius: 2px;
-  background: var(--swatch);
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.28);
+/* The check column of .menu-check: the same mark, 11px in a 20px column. */
+.settings-popup option::checkmark {
+  content: "";
+  flex: none; width: 20px; height: 11px;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='m5.5 12.5 4.5 4.5 8.5-10' fill='none' stroke='%23000' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 11px 11px no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='m5.5 12.5 4.5 4.5 8.5-10' fill='none' stroke='%23000' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 11px 11px no-repeat;
 }
+.settings-popup option:is(:hover, :focus-visible) { background: var(--accent-strong); color: var(--accent-fg); }
+/* Colour swatches: circles like the markup palette, in the place of the menus' icon column. */
+.settings-swatch {
+  flex: none; width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--swatch);
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.25);
+}
+.settings-popup option .settings-swatch { margin: 0 9px 0 5px; }
+.settings-popup option:is(:hover, :focus-visible) .settings-swatch { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.85); }
 
 /* ---- in-window menu bar (src/menubar/) -------------------------------------------------
    One title area with the toolbar under it: the same background, no line between the two (the
