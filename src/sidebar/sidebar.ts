@@ -1,4 +1,5 @@
 import type { Editor } from '../edit/editor';
+import { t, type MessageKey } from '../i18n';
 import type { PageSource } from '../pdf/source';
 import type { Point } from '../platform/types';
 import type { PageRenderer } from '../pdf/renderer';
@@ -14,9 +15,9 @@ export interface SidebarDeps {
   contextMenu(point: Point): void;
 }
 
-const TABS: { id: SidebarTab; label: string }[] = [
-  { id: 'thumbnails', label: 'Thumbnails' },
-  { id: 'outline', label: 'Contents' },
+const TABS: { id: SidebarTab; label: MessageKey }[] = [
+  { id: 'thumbnails', label: 'chrome.sidebar.thumbnails' },
+  { id: 'outline', label: 'chrome.sidebar.contents' },
 ];
 
 /**
@@ -40,14 +41,13 @@ export class Sidebar {
     const strip = document.createElement('div');
     strip.className = 'sidebar-tabs';
     strip.setAttribute('role', 'tablist');
-    for (const { id, label } of TABS) {
+    for (const { id } of TABS) {
       const tab = document.createElement('button');
       tab.type = 'button';
       tab.className = 'sidebar-tab';
       tab.tabIndex = -1;
       tab.dataset['tab'] = id;
       tab.setAttribute('role', 'tab');
-      tab.textContent = label;
       tab.addEventListener('click', () => {
         if (!tab.disabled) this.store.set({ sidebarTab: id });
       });
@@ -77,6 +77,7 @@ export class Sidebar {
     this.setOutlineAvailable(false);
 
     this.unsubscribers.push(
+      store.select('locale', () => this.relabel()),
       store.select('sidebarTab', (tab) => this.showTab(tab)),
       store.select('currentPage', (page) => this.thumbnails.setCurrent(page)),
       store.select('sidebarOpen', (open) => {
@@ -137,11 +138,23 @@ export class Sidebar {
 
   // ---- internals ----------------------------------------------------------
 
-  private setOutlineAvailable(available: boolean): void {
+  /** Writes the tabs' and panels' text in the current UI language. */
+  private relabel(): void {
+    for (const { id, label } of TABS) this.tabs.get(id)!.textContent = t(label);
+    this.labelOutlineTab();
+    this.thumbnails.relabel();
+    this.outline.relabel();
+  }
+
+  private labelOutlineTab(): void {
     const tab = this.tabs.get('outline')!;
-    tab.disabled = !available;
-    if (available) tab.removeAttribute('title');
-    else tab.title = 'No outline';
+    if (tab.disabled) tab.title = t('chrome.sidebar.noOutline');
+    else tab.removeAttribute('title');
+  }
+
+  private setOutlineAvailable(available: boolean): void {
+    this.tabs.get('outline')!.disabled = !available;
+    this.labelOutlineTab();
     if (!available && this.store.get().sidebarTab === 'outline') this.store.set({ sidebarTab: 'thumbnails' });
   }
 

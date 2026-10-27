@@ -1,7 +1,9 @@
 import type { Store, ViewerState } from '../store';
 import type { Color } from '../annot/types';
 import type { ZoomMode } from '../types';
+import { t } from '../i18n';
 import { icons } from '../ui/icons';
+import { i18n, localize } from '../ui/localize';
 import { closeMenus, showMenu, type MenuItem } from '../ui/menu';
 import { formatZoom } from '../viewer/zoom';
 
@@ -39,43 +41,41 @@ const ZOOM_SHORTCUTS: Record<string, string> = { 'fit-width': 'Ctrl+1', 'fit-pag
 /**
  * Unified title bar and toolbar (52px). The bar and the title block are window drag regions;
  * controls are not. `#findbar` lives in the search slot and replaces the search button while open.
+ * Text comes from message keys (`data-i18n*`, see `localize`) and follows the UI language.
  */
 const template = `
-  <button class="tb-btn" data-action="sidebar" title="Sidebar (Ctrl+Alt+S)" aria-label="Toggle sidebar" aria-pressed="false">${icons.sidebar}</button>
-  <button class="tb-btn tb-chevron" data-action="view-menu" title="View" aria-label="View options" aria-haspopup="menu" aria-expanded="false">${icons.chevronDown}</button>
+  <button class="tb-btn" data-action="sidebar" ${i18n({ title: 'chrome.tb.sidebar', keys: 'Ctrl+Alt+S', label: 'chrome.tb.sidebarLabel' })} aria-pressed="false">${icons.sidebar}</button>
+  <button class="tb-btn tb-chevron" data-action="view-menu" ${i18n({ title: 'chrome.tb.view', label: 'chrome.tb.viewLabel' })} aria-haspopup="menu" aria-expanded="false">${icons.chevronDown}</button>
   <div class="tb-title" data-tauri-drag-region>
     <div class="tb-title-line" data-tauri-drag-region>
       <span class="tb-doc-title" data-doc-title data-tauri-drag-region>Preview</span>
-      <span class="tb-doc-edited" data-doc-edited data-tauri-drag-region hidden>— Edited</span>
+      <span class="tb-doc-edited" data-doc-edited data-tauri-drag-region hidden></span>
     </div>
     <div class="tb-subtitle" data-tauri-drag-region hidden>
-      <span data-tauri-drag-region>Page</span>
-      <input class="tb-page-input" data-page-input type="text" inputmode="numeric" aria-label="Page number" autocomplete="off" spellcheck="false" disabled />
-      <span data-tauri-drag-region>of</span>
+      <input class="tb-page-input" data-page-input ${i18n({ label: 'chrome.tb.pageNumber' })} type="text" inputmode="numeric" autocomplete="off" spellcheck="false" disabled />
       <span class="tb-page-total" data-page-total data-tauri-drag-region>–</span>
     </div>
   </div>
   <div class="tb-flex" data-tauri-drag-region></div>
   <div class="tb-items">
-    <div class="tb-split" role="group" aria-label="Highlight">
-      <button class="tb-btn tb-split-main" data-action="highlight" title="Highlight" aria-label="Highlight" aria-pressed="false" disabled>${icons.highlighter}<span class="tb-swatch" data-highlight-swatch></span></button>
-      <button class="tb-btn tb-split-menu" data-action="highlight-menu" title="Highlight Style" aria-label="Highlight style" aria-haspopup="menu" aria-expanded="false" disabled>${icons.chevronDown}</button>
+    <div class="tb-split" role="group" ${i18n({ label: 'chrome.mk.highlight' })}>
+      <button class="tb-btn tb-split-main" data-action="highlight" ${i18n({ title: 'chrome.mk.highlight', label: 'chrome.mk.highlight' })} aria-pressed="false" disabled>${icons.highlighter}<span class="tb-swatch" data-highlight-swatch></span></button>
+      <button class="tb-btn tb-split-menu" data-action="highlight-menu" ${i18n({ title: 'chrome.mk.highlightStyle', label: 'chrome.mk.highlightStyleLabel' })} aria-haspopup="menu" aria-expanded="false" disabled>${icons.chevronDown}</button>
     </div>
-    <button class="tb-btn" data-action="markup" title="Show Markup Toolbar (Ctrl+Shift+A)" aria-label="Markup toolbar" aria-pressed="false" disabled>${icons.markup}</button>
-    <div class="tb-segmented" role="group" aria-label="Zoom">
-      <button class="tb-btn" data-action="zoom-out" title="Zoom Out (Ctrl+-)" aria-label="Zoom out" disabled>${icons.zoomOut}</button>
-      <button class="tb-btn" data-action="zoom-in" title="Zoom In (Ctrl+=)" aria-label="Zoom in" disabled>${icons.zoomIn}</button>
+    <button class="tb-btn" data-action="markup" ${i18n({ title: 'chrome.tb.markup', keys: 'Ctrl+Shift+A', label: 'chrome.tb.markupLabel' })} aria-pressed="false" disabled>${icons.markup}</button>
+    <div class="tb-segmented" role="group" ${i18n({ label: 'chrome.tb.zoom' })}>
+      <button class="tb-btn" data-action="zoom-out" ${i18n({ title: 'chrome.tb.zoomOut', keys: 'Ctrl+-', label: 'chrome.tb.zoomOutLabel' })} disabled>${icons.zoomOut}</button>
+      <button class="tb-btn" data-action="zoom-in" ${i18n({ title: 'chrome.tb.zoomIn', keys: 'Ctrl+=', label: 'chrome.tb.zoomInLabel' })} disabled>${icons.zoomIn}</button>
     </div>
-    <button class="tb-pill" data-zoom-menu title="Zoom" aria-haspopup="menu" aria-expanded="false" disabled><span class="tb-pill-label">100%</span>${icons.chevronDown}</button>
-    <button class="tb-btn tb-rotate" data-action="rotate" title="Rotate (Ctrl+L)" aria-label="Rotate clockwise" disabled>${icons.rotateRight}</button>
-    <button class="tb-btn" data-action="more" title="More" aria-label="More" aria-haspopup="menu">${icons.ellipsis}</button>
+    <button class="tb-pill" data-zoom-menu aria-haspopup="menu" aria-expanded="false" disabled><span class="tb-pill-label">100%</span>${icons.chevronDown}</button>
+    <button class="tb-btn tb-rotate" data-action="rotate" ${i18n({ title: 'chrome.tb.rotate', keys: 'Ctrl+L', label: 'chrome.tb.rotateLabel' })} disabled>${icons.rotateRight}</button>
+    <button class="tb-btn" data-action="more" ${i18n({ title: 'chrome.tb.more', label: 'chrome.tb.more' })} aria-haspopup="menu">${icons.ellipsis}</button>
     <div class="tb-search">
-      <button class="tb-btn" data-action="find" title="Search (Ctrl+F)" aria-label="Find" aria-pressed="false" disabled>${icons.search}</button>
+      <button class="tb-btn" data-action="find" ${i18n({ title: 'chrome.search', keys: 'Ctrl+F', label: 'chrome.tb.find' })} aria-pressed="false" disabled>${icons.search}</button>
       <div id="findbar" class="findbar" hidden></div>
     </div>
   </div>
 `;
-
 export class Toolbar {
   private readonly pageInput: HTMLInputElement;
   private readonly pageTotal: HTMLElement;
@@ -159,8 +159,7 @@ export class Toolbar {
         if (s.fileName !== prev.fileName || s.numPages !== prev.numPages || s.dirty !== prev.dirty) this.syncTitle(s);
       }),
     );
-    this.syncZoom(store.get());
-    this.syncTitle(store.get());
+    this.unsubscribe.push(store.select('locale', () => this.relabel()));
     this.pressed('sidebar', store.get().sidebarOpen);
     this.syncFind(store.get().findOpen);
   }
@@ -203,6 +202,37 @@ export class Toolbar {
     this.q(`[data-action="${action}"]`).setAttribute('aria-pressed', String(on));
   }
 
+  /** Writes every text of the bar in the current UI language. */
+  private relabel(): void {
+    localize(this.host);
+    this.layoutSubtitle();
+    this.syncZoom(this.store.get());
+    this.syncTitle(this.store.get());
+  }
+
+  /**
+   * Lays out "Page [n] of N" from its message, so each language keeps its own word order: the
+   * page field between runs of text, the page count inside the run its message puts it in.
+   */
+  private layoutSubtitle(): void {
+    const PAGE = '\u0001';
+    const TOTAL = '\u0002';
+    const run = (text: string) => {
+      const span = document.createElement('span');
+      span.setAttribute('data-tauri-drag-region', '');
+      const [head = '', tail] = text.trim().split(TOTAL);
+      span.append(head);
+      if (tail !== undefined) span.append(this.pageTotal, tail);
+      return span;
+    };
+    const [before = '', after = ''] = t('chrome.tb.pageOf', { page: PAGE, total: TOTAL }).split(PAGE);
+    this.subtitle.replaceChildren(
+      ...(before.trim() ? [run(before)] : []),
+      this.pageInput,
+      ...(after.trim() ? [run(after)] : []),
+    );
+  }
+
   private syncFind(open: boolean): void {
     this.pressed('find', open);
     this.host.classList.toggle('find-open', open);
@@ -214,6 +244,7 @@ export class Toolbar {
     const name = hasDoc && s.fileName ? s.fileName : 'Preview';
     this.docTitle.textContent = name;
     this.q('.tb-title').title = hasDoc ? name : '';
+    this.edited.textContent = `— ${t('chrome.edited')}`;
     this.edited.hidden = !(hasDoc && s.dirty);
     this.subtitle.hidden = !hasDoc;
   }
@@ -241,9 +272,10 @@ export class Toolbar {
   }
 
   private syncZoom(s: ViewerState): void {
-    const label = s.zoomMode === 'fit-width' ? 'Fit Width' : s.zoomMode === 'fit-page' ? 'Fit Page' : formatZoom(s.scale);
+    const label =
+      s.zoomMode === 'fit-width' ? t('chrome.tb.fitWidth') : s.zoomMode === 'fit-page' ? t('chrome.tb.fitPage') : formatZoom(s.scale);
     this.zoomLabel.textContent = label;
-    this.zoomButton.title = `Zoom: ${formatZoom(s.scale)}`;
+    this.zoomButton.title = t('chrome.tb.zoomTitle', { zoom: formatZoom(s.scale) });
   }
 
   private openZoomMenu(): void {

@@ -1,4 +1,5 @@
 import type { Editor } from '../edit/editor';
+import { t as tr } from '../i18n';
 import { CSS_UNITS, type PageRenderer, type RenderHandle } from '../pdf/renderer';
 import type { PageSource } from '../pdf/source';
 import type { Point } from '../platform/types';
@@ -85,7 +86,6 @@ export class ThumbnailList {
     scroller.tabIndex = 0;
     scroller.setAttribute('role', 'listbox');
     scroller.setAttribute('aria-multiselectable', 'true');
-    scroller.setAttribute('aria-label', 'Pages');
     this.indicator = document.createElement('div');
     this.indicator.className = 'drop-indicator';
     scroller.addEventListener('pointerdown', this.onPointerDown);
@@ -98,6 +98,7 @@ export class ThumbnailList {
       store.select('rotation', (r) => this.setRotation(r)),
       deps.editor.onSelectionChange(() => this.renderSelection()),
     );
+    this.relabel();
   }
 
   setDocument(doc: PageSource | null, renderer: PageRenderer | null): void {
@@ -114,7 +115,7 @@ export class ThumbnailList {
       frag.append(t.el);
     }
     this.scroller.append(frag, this.indicator);
-    this.relabel();
+    this.renumber();
     this.setCurrent(this.store.get().currentPage);
     this.renderSelection();
   }
@@ -152,7 +153,7 @@ export class ThumbnailList {
     const frag = document.createDocumentFragment();
     for (const t of next) frag.append(t.el);
     this.scroller.append(frag, this.indicator);
-    this.relabel();
+    this.renumber();
     for (const t of next) this.emitView(t);
     for (const t of next) {
       if (t.near) void this.ensureRendered(t);
@@ -486,12 +487,18 @@ export class ThumbnailList {
     return t;
   }
 
+  /** Writes the list's and the thumbnails' accessible names in the current UI language. */
+  relabel(): void {
+    this.scroller.setAttribute('aria-label', tr('chrome.sidebar.pages'));
+    this.renumber();
+  }
+
   /** Numbers, labels and placeholder sizes follow positions. */
-  private relabel(): void {
+  private renumber(): void {
     this.thumbs.forEach((t, i) => {
       const n = String(i + 1);
       t.el.dataset['page'] = n;
-      t.el.setAttribute('aria-label', `Page ${n}`);
+      t.el.setAttribute('aria-label', tr('chrome.sidebar.page', { n }));
       if (t.label.textContent !== n) t.label.textContent = n;
       if (t.renderedKey === null) this.placeholder(t, i);
     });

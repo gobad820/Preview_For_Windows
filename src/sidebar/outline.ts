@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import type { OutlineNode } from '../pdf/document';
 
 export interface OutlineDeps {
@@ -22,11 +23,19 @@ export class OutlineTree {
     this.tree.setAttribute('role', 'tree');
     this.empty = document.createElement('p');
     this.empty.className = 'outline-empty';
-    this.empty.textContent = 'No outline';
     host.append(this.tree, this.empty);
     host.addEventListener('click', this.onClick);
+    this.relabel();
   }
 
+  /** Writes the tree's own text (not the document's titles) in the current UI language. */
+  relabel(): void {
+    this.empty.textContent = t('chrome.sidebar.noOutline');
+    for (const item of this.tree.querySelectorAll<HTMLElement>('.outline-item[data-untitled]')) {
+      item.textContent = item.title = t('chrome.outline.untitled');
+    }
+    for (const li of this.tree.querySelectorAll<HTMLLIElement>('.outline-node.has-children')) labelToggle(li);
+  }
 
   setOutline(nodes: OutlineNode[]): void {
     this.nodes = nodes;
@@ -51,7 +60,7 @@ export class OutlineTree {
     row.className = 'outline-row';
     row.style.setProperty('--depth', String(depth));
 
-    const title = node.title.replace(/\s+/g, ' ').trim() || '(untitled)';
+    const title = node.title.replace(/\s+/g, ' ').trim();
     const hasChildren = node.children.length > 0;
 
     const expanded = hasChildren && depth === 0;
@@ -62,7 +71,6 @@ export class OutlineTree {
       toggle.type = 'button';
       toggle.className = 'outline-toggle';
       toggle.tabIndex = -1;
-      toggle.setAttribute('aria-label', `${expanded ? 'Collapse' : 'Expand'} ${title}`);
       row.append(toggle);
     } else {
       const spacer = document.createElement('span');
@@ -74,8 +82,8 @@ export class OutlineTree {
     item.type = 'button';
     item.className = 'outline-item';
     item.tabIndex = -1;
-    item.textContent = title;
-    item.title = title;
+    item.textContent = item.title = title || t('chrome.outline.untitled');
+    if (!title) item.dataset['untitled'] = '';
     if (node.pageIndex != null) {
       item.dataset['page'] = String(node.pageIndex + 1);
       if (node.top != null) item.dataset['top'] = String(node.top);
@@ -92,6 +100,7 @@ export class OutlineTree {
       ul.hidden = !expanded;
       ul.append(...node.children.map((c) => this.renderNode(c, depth + 1)));
       li.append(ul);
+      labelToggle(li);
     }
     return li;
   }
@@ -120,7 +129,14 @@ export class OutlineTree {
     li.classList.toggle('expanded', expand);
     li.classList.toggle('collapsed', !expand);
     li.setAttribute('aria-expanded', String(expand));
-    const title = li.querySelector<HTMLElement>(':scope > .outline-row > .outline-item')?.textContent ?? '';
-    button.setAttribute('aria-label', `${expand ? 'Collapse' : 'Expand'} ${title}`);
+    labelToggle(li);
   }
+}
+
+/** "Collapse Chapter 1" or "Expand Chapter 1" on the disclosure toggle of `li`, a node with children. */
+function labelToggle(li: HTMLLIElement): void {
+  const toggle = li.querySelector<HTMLElement>(':scope > .outline-row > .outline-toggle');
+  const title = li.querySelector<HTMLElement>(':scope > .outline-row > .outline-item')?.textContent ?? '';
+  const expanded = li.getAttribute('aria-expanded') === 'true';
+  toggle?.setAttribute('aria-label', t(expanded ? 'chrome.outline.collapse' : 'chrome.outline.expand', { title }));
 }

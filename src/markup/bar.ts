@@ -3,7 +3,10 @@
  * the style controls. It only reads and sets `MarkupState`; what a style change does to the
  * selected annotation is up to `actions.applyStyles`.
  */
+import { t, type MessageKey } from '../i18n';
+import type { Store, ViewerState } from '../store';
 import { icons } from '../ui/icons';
+import { i18n, localize } from '../ui/localize';
 import { showMenu, type MenuItem } from '../ui/menu';
 import { colorGrid, showPopover } from './popover';
 import {
@@ -30,12 +33,12 @@ export interface MarkupBarActions {
 
 type ShapeTool = 'line' | 'arrow' | 'rect' | 'rounded' | 'oval';
 
-const SHAPES: ReadonlyArray<{ tool: ShapeTool; label: string; icon: string }> = [
-  { tool: 'line', label: 'Line', icon: icons.shapeLine },
-  { tool: 'arrow', label: 'Arrow', icon: icons.shapeArrow },
-  { tool: 'rect', label: 'Rectangle', icon: icons.shapeRect },
-  { tool: 'rounded', label: 'Rounded Rectangle', icon: icons.shapeRounded },
-  { tool: 'oval', label: 'Oval', icon: icons.shapeOval },
+const SHAPES: ReadonlyArray<{ tool: ShapeTool; label: MessageKey; icon: string }> = [
+  { tool: 'line', label: 'chrome.mk.line', icon: icons.shapeLine },
+  { tool: 'arrow', label: 'chrome.mk.arrow', icon: icons.shapeArrow },
+  { tool: 'rect', label: 'chrome.mk.rect', icon: icons.shapeRect },
+  { tool: 'rounded', label: 'chrome.mk.rounded', icon: icons.shapeRounded },
+  { tool: 'oval', label: 'chrome.mk.oval', icon: icons.shapeOval },
 ];
 
 const isShape = (t: Tool): t is ShapeTool => SHAPES.some((s) => s.tool === t);
@@ -59,14 +62,14 @@ export function highlightMenuItems(state: MarkupState, pick: (kind: MarkKind, co
     ),
     'separator',
     {
-      label: 'Underline',
+      label: t('chrome.mk.underline'),
       icon: markIcon('underline', state.markColorFor('underline')),
       radio: true,
       checked: markKind === 'underline',
       action: () => pick('underline'),
     },
     {
-      label: 'Strikethrough',
+      label: t('chrome.mk.strikethrough'),
       icon: markIcon('strikeout', state.markColorFor('strikeout')),
       radio: true,
       checked: markKind === 'strikeout',
@@ -86,24 +89,26 @@ export function openHighlightMenu(
   void showMenu(anchor, highlightMenuItems(state, pick)).then(() => button?.setAttribute('aria-expanded', 'false'));
 }
 
+/** A button's tooltip and accessible name: one message. */
+const named = (key: MessageKey) => i18n({ title: key, label: key });
+
 const template = `
-  <button class="tb-btn mk-btn" data-markup="select" title="Text Selection" aria-label="Text Selection" aria-pressed="true">${icons.textCursor}</button>
-  <button class="tb-btn mk-btn" data-markup="draw" title="Draw" aria-label="Draw" aria-pressed="false">${icons.pencil}</button>
-  <button class="tb-btn mk-btn mk-menu" data-markup="shapes" title="Shapes" aria-label="Shapes" aria-haspopup="menu" aria-expanded="false" aria-pressed="false"><span class="mk-glyph">${icons.shapes}</span>${icons.chevronDown}</button>
-  <button class="tb-btn mk-btn" data-markup="text" title="Text" aria-label="Text" aria-pressed="false">${icons.textBox}</button>
-  <button class="tb-btn mk-btn" data-markup="note" title="Note" aria-label="Note" aria-pressed="false">${icons.note}</button>
+  <button class="tb-btn mk-btn" data-markup="select" ${named('chrome.mk.select')} aria-pressed="true">${icons.textCursor}</button>
+  <button class="tb-btn mk-btn" data-markup="draw" ${named('chrome.mk.draw')} aria-pressed="false">${icons.pencil}</button>
+  <button class="tb-btn mk-btn mk-menu" data-markup="shapes" ${named('chrome.mk.shapes')} aria-haspopup="menu" aria-expanded="false" aria-pressed="false"><span class="mk-glyph">${icons.shapes}</span>${icons.chevronDown}</button>
+  <button class="tb-btn mk-btn" data-markup="text" ${named('chrome.mk.text')} aria-pressed="false">${icons.textBox}</button>
+  <button class="tb-btn mk-btn" data-markup="note" ${named('chrome.mk.note')} aria-pressed="false">${icons.note}</button>
   <span class="mk-sep" data-markup="separator" role="separator"></span>
-  <div class="tb-split" role="group" aria-label="Highlight">
-    <button class="tb-btn tb-split-main" data-markup="highlight" title="Highlight" aria-label="Highlight" aria-pressed="false">${icons.highlighter}<span class="tb-swatch" data-highlight-swatch></span></button>
-    <button class="tb-btn tb-split-menu" data-markup="highlight-menu" title="Highlight Style" aria-label="Highlight style" aria-haspopup="menu" aria-expanded="false">${icons.chevronDown}</button>
+  <div class="tb-split" role="group" ${i18n({ label: 'chrome.mk.highlight' })}>
+    <button class="tb-btn tb-split-main" data-markup="highlight" ${named('chrome.mk.highlight')} aria-pressed="false">${icons.highlighter}<span class="tb-swatch" data-highlight-swatch></span></button>
+    <button class="tb-btn tb-split-menu" data-markup="highlight-menu" ${i18n({ title: 'chrome.mk.highlightStyle', label: 'chrome.mk.highlightStyleLabel' })} aria-haspopup="menu" aria-expanded="false">${icons.chevronDown}</button>
   </div>
   <span class="mk-sep" data-markup="separator" role="separator"></span>
-  <button class="tb-btn mk-btn mk-menu" data-markup="width" title="Line Width" aria-label="Line Width" aria-haspopup="menu" aria-expanded="false">${icons.lineWidth}${icons.chevronDown}</button>
-  <button class="tb-btn mk-btn mk-menu" data-markup="stroke" title="Border Color" aria-label="Border Color" aria-haspopup="dialog" aria-expanded="false">${icons.borderColor}${icons.chevronDown}</button>
-  <button class="tb-btn mk-btn mk-menu" data-markup="fill" title="Fill Color" aria-label="Fill Color" aria-haspopup="dialog" aria-expanded="false">${icons.fillColor}${icons.chevronDown}</button>
-  <button class="tb-btn mk-btn mk-menu" data-markup="text-style" title="Text Style" aria-label="Text Style" aria-haspopup="dialog" aria-expanded="false">${icons.textStyle}${icons.chevronDown}</button>
+  <button class="tb-btn mk-btn mk-menu" data-markup="width" ${named('chrome.mk.lineWidth')} aria-haspopup="menu" aria-expanded="false">${icons.lineWidth}${icons.chevronDown}</button>
+  <button class="tb-btn mk-btn mk-menu" data-markup="stroke" ${named('chrome.mk.borderColor')} aria-haspopup="dialog" aria-expanded="false">${icons.borderColor}${icons.chevronDown}</button>
+  <button class="tb-btn mk-btn mk-menu" data-markup="fill" ${named('chrome.mk.fillColor')} aria-haspopup="dialog" aria-expanded="false">${icons.fillColor}${icons.chevronDown}</button>
+  <button class="tb-btn mk-btn mk-menu" data-markup="text-style" ${named('chrome.mk.textStyle')} aria-haspopup="dialog" aria-expanded="false">${icons.textStyle}${icons.chevronDown}</button>
 `;
-
 export class MarkupBar {
   private readonly unsubscribe: Array<() => void> = [];
 
@@ -111,10 +116,11 @@ export class MarkupBar {
     private readonly host: HTMLElement,
     private readonly state: MarkupState,
     private readonly actions: MarkupBarActions,
+    store: Store<ViewerState>,
   ) {
     host.innerHTML = template;
     host.setAttribute('role', 'toolbar');
-    host.setAttribute('aria-label', 'Markup');
+    host.dataset['i18nLabel'] = 'chrome.mk.toolbar' satisfies MessageKey;
     const on = (name: string, fn: (b: HTMLElement) => void) => {
       const b = this.q(name);
       b.addEventListener('click', () => fn(b));
@@ -132,7 +138,10 @@ export class MarkupBar {
     on('stroke', (b) => this.strokePopover(b));
     on('fill', (b) => this.fillPopover(b));
     on('text-style', (b) => this.textStylePopover(b));
-    this.unsubscribe.push(state.onChange(() => this.sync()));
+    this.unsubscribe.push(
+      state.onChange(() => this.sync()),
+      store.select('locale', () => localize(host)),
+    );
     this.sync();
   }
 
@@ -179,7 +188,7 @@ export class MarkupBar {
     void showMenu(
       button.getBoundingClientRect(),
       SHAPES.map(
-        (s): MenuItem => ({ label: s.label, icon: s.icon, radio: true, checked: tool === s.tool, action: () => this.state.setTool(s.tool) }),
+        (s): MenuItem => ({ label: t(s.label), icon: s.icon, radio: true, checked: tool === s.tool, action: () => this.state.setTool(s.tool) }),
       ),
     ).then(() => button.setAttribute('aria-expanded', 'false'));
   }
@@ -191,7 +200,7 @@ export class MarkupBar {
       button.getBoundingClientRect(),
       LINE_WIDTHS.map(
         (w): MenuItem => ({
-          label: `${w} pt`,
+          label: t('chrome.mk.points', { n: w }),
           icon: `<span class="menu-width" style="--w: ${Math.max(0.5, Math.min(w, 6))}px"></span>`,
           radio: true,
           checked: width === w,
@@ -209,7 +218,7 @@ export class MarkupBar {
           close();
           this.actions.applyStyles({ stroke: c });
         }),
-      'Border Color',
+      t('chrome.mk.borderColor'),
     );
   }
 
@@ -223,7 +232,8 @@ export class MarkupBar {
         none.className = 'palette-row';
         none.dataset['noFill'] = '';
         none.setAttribute('aria-checked', String(this.state.styles.fill === null));
-        none.innerHTML = `<span class="palette-nofill" aria-hidden="true"></span>No Fill`;
+        none.innerHTML = `<span class="palette-nofill" aria-hidden="true"></span>`;
+        none.append(t('chrome.mk.noFill'));
         none.addEventListener('click', () => {
           close();
           this.actions.applyStyles({ fill: null });
@@ -237,7 +247,7 @@ export class MarkupBar {
         );
         return wrap;
       },
-      'Fill Color',
+      t('chrome.mk.fillColor'),
     );
   }
 
@@ -250,7 +260,7 @@ export class MarkupBar {
         row.className = 'palette-size';
         const label = document.createElement('span');
         label.className = 'palette-size-label';
-        label.textContent = 'Size';
+        label.textContent = t('chrome.mk.size');
         const value = document.createElement('span');
         value.className = 'palette-size-value';
         value.dataset['fontSize'] = '';
@@ -259,7 +269,7 @@ export class MarkupBar {
           b.type = 'button';
           b.className = 'palette-step';
           b.dataset['sizeStep'] = String(dir);
-          b.setAttribute('aria-label', dir > 0 ? 'Bigger' : 'Smaller');
+          b.setAttribute('aria-label', t(dir > 0 ? 'chrome.mk.bigger' : 'chrome.mk.smaller'));
           b.textContent = dir > 0 ? '+' : '−';
           b.addEventListener('click', () => {
             const next = nextFontSize(this.state.styles.fontSize, dir);
@@ -272,7 +282,7 @@ export class MarkupBar {
         const bigger = step(1);
         const render = () => {
           const size = this.state.styles.fontSize;
-          value.textContent = `${size} pt`;
+          value.textContent = t('chrome.mk.points', { n: size });
           smaller.disabled = size <= MIN_FONT_SIZE;
           bigger.disabled = size >= MAX_FONT_SIZE;
           for (const s of grid.querySelectorAll<HTMLElement>('[data-color]')) {
@@ -288,7 +298,7 @@ export class MarkupBar {
         render();
         return wrap;
       },
-      'Text Style',
+      t('chrome.mk.textStyle'),
     );
   }
 }

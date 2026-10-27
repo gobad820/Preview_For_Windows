@@ -1,6 +1,8 @@
+import { t } from '../i18n';
 import type { PageSource } from '../pdf/source';
 import type { Store, ViewerState } from '../store';
 import { icons } from '../ui/icons';
+import { i18n, localize } from '../ui/localize';
 import type { PdfViewer } from '../viewer/viewer';
 import {
   buildPageIndex,
@@ -86,14 +88,14 @@ function textIndex(doc: PageSource): Promise<PageTextIndex[]> {
 const TEMPLATE = `
   <div class="find-field">
     <span class="find-glyph" aria-hidden="true">${icons.search}</span>
-    <input type="text" data-find-input placeholder="Search" aria-label="Find in document"
+    <input type="text" data-find-input ${i18n({ placeholder: 'chrome.search', label: 'chrome.find.label' })}
            autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
     <span class="find-count" data-find-count aria-live="polite"></span>
-    <button type="button" class="find-clear" data-action="find-close" title="Done (Esc)" aria-label="Close find bar">${icons.xmarkCircleFill}</button>
+    <button type="button" class="find-clear" data-action="find-close" ${i18n({ title: 'chrome.find.done', keys: 'Esc', label: 'chrome.find.close' })}>${icons.xmarkCircleFill}</button>
   </div>
   <div class="find-nav">
-    <button type="button" class="find-btn" data-action="find-prev" title="Previous match (Shift+Enter)" aria-label="Previous match">${icons.chevronUp}</button>
-    <button type="button" class="find-btn" data-action="find-next" title="Next match (Enter)" aria-label="Next match">${icons.chevronDown}</button>
+    <button type="button" class="find-btn" data-action="find-prev" ${i18n({ title: 'chrome.find.previous', keys: 'Shift+Enter', label: 'chrome.find.previous' })}>${icons.chevronUp}</button>
+    <button type="button" class="find-btn" data-action="find-next" ${i18n({ title: 'chrome.find.next', keys: 'Enter', label: 'chrome.find.next' })}>${icons.chevronDown}</button>
   </div>
 `;
 
@@ -197,6 +199,7 @@ export class FindBar {
   private readonly prevBtn: HTMLButtonElement;
   private readonly nextBtn: HTMLButtonElement;
   private readonly offTextLayer: () => void;
+  private readonly offLocale: () => void;
   private doc: PageSource | null;
   /** Query whose results are currently shown ('' while idle or closed). */
   private activeQuery = '';
@@ -204,6 +207,8 @@ export class FindBar {
   /** Text item holding the start of each match, for scrolling to it. */
   private firstItem: number[] = [];
   private current = -1;
+  /** The text index of the active query's document is still being built. */
+  private searching = false;
   private ranges: RangeMap = new Map();
   /** Text divs that currently contain `<mark>`s, per page. */
   private marked = new Map<number, HTMLElement[]>();
@@ -238,6 +243,10 @@ export class FindBar {
       b.addEventListener('mousedown', (e) => e.preventDefault());
     }
     this.offTextLayer = this.viewer.onTextLayer((index, _el, divs) => this.onTextLayer(index, divs));
+    this.offLocale = store.select('locale', () => {
+      localize(host);
+      this.renderCount();
+    });
     this.publish();
   }
 
@@ -308,6 +317,7 @@ export class FindBar {
     this.cancelPending();
     this.reset();
     this.offTextLayer();
+    this.offLocale();
     this.input.removeEventListener('keydown', this.onKeydown);
   }
 
@@ -353,15 +363,20 @@ export class FindBar {
       this.publish();
       return;
     }
-    if (!indexReady.has(doc)) this.countEl.textContent = 'Searching…';
+    this.searching = !indexReady.has(doc);
+    if (this.searching) this.renderCount();
     let pages: PageTextIndex[];
     try {
       pages = await textIndex(doc);
     } catch {
-      if (seq === this.seq) this.publish();
+      if (seq === this.seq) {
+        this.searching = false;
+        this.publish();
+      }
       return;
     }
     if (seq !== this.seq) return;
+    this.searching = false;
     this.matches = findMatches(query, pages);
     ({ ranges: this.ranges, firstItem: this.firstItem } = groupRanges(pages, this.matches));
     this.current = this.matches.length > 0 ? 0 : -1;
@@ -392,13 +407,14 @@ export class FindBar {
     this.ranges = new Map();
     this.current = -1;
     this.pendingReveal = -1;
+    this.searching = false;
   }
 
   /** Writes the count label, button state and store fields for the current result set. */
   private publish(): void {
     const total = this.matches.length;
     const idle = this.activeQuery.trim() === '' || !this.doc;
-    this.countEl.textContent = idle ? '' : total === 0 ? 'No results' : `${this.current + 1} of ${total}`;
+    this.renderCount();
     this.host.classList.toggle('no-results', !idle && total === 0);
     this.prevBtn.disabled = total === 0;
     this.nextBtn.disabled = total === 0;
@@ -406,6 +422,19 @@ export class FindBar {
     if (s.findTotal !== total || s.findIndex !== this.current) {
       this.store.set({ findTotal: total, findIndex: this.current });
     }
+  }
+
+  /** The count label: "Searching…" while the index is built, then "No results" or "2 of 5". */
+  private renderCount(): void {
+    const total = this.matches.length;
+    const idle = this.activeQuery.trim() === '' || !this.doc;
+    this.countEl.textContent = idle
+      ? ''
+      : this.searching
+        ? t('chrome.find.searching')
+        : total === 0
+          ? t('chrome.find.none')
+          : t('chrome.find.count', { index: this.current + 1, total });
   }
 
   // ---- highlights -------------------------------------------------------------

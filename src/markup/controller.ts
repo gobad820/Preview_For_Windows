@@ -15,6 +15,7 @@ import {
   type TextBoxAnnot,
 } from '../annot/types';
 import type { EditableDocument } from '../edit/document';
+import { t } from '../i18n';
 import type { Store, ViewerState } from '../store';
 import { showMenu, type MenuItem } from '../ui/menu';
 import type { PageView, PdfViewer } from '../viewer/viewer';
@@ -33,7 +34,6 @@ export const CLICK_LINE = 100;
 export const TEXT_BOX_WIDTH = 144;
 /** Ink points closer than this (points) to the previous one are dropped. */
 export const INK_MIN_STEP = 1;
-export const PLACEHOLDER = 'Text';
 const NOTE_POPUP = { width: 220, height: 150, gap: 8 } as const;
 /** Hit-test tolerance around strokes, CSS px. */
 const HIT_TOLERANCE = 4;
@@ -53,9 +53,6 @@ export interface MarkupDeps {
   /** Tells the user something went wrong (the app's error banner). */
   notify(message: string): void;
 }
-
-/** Shown when an edit waits for a page's annotations and they cannot be read. */
-export const UNREADABLE_MARKUP = "The markup already on this page couldn't be read, so it can't be changed here.";
 
 type ShapeTool = 'line' | 'arrow' | 'rect' | 'rounded' | 'oval';
 const SHAPE_TOOLS: readonly Tool[] = ['line', 'arrow', 'rect', 'rounded', 'oval'];
@@ -369,7 +366,7 @@ export class MarkupController {
   private defer(work: Promise<unknown>, doc: EditableDocument): void {
     const tracked = work.catch((e: unknown) => {
       console.warn('markup edit dropped', e);
-      if (this.deps.doc() === doc) this.deps.notify(UNREADABLE_MARKUP);
+      if (this.deps.doc() === doc) this.deps.notify(t('chrome.mk.unreadable'));
     });
     this.deferred.add(tracked);
     void tracked.finally(() => this.deferred.delete(tracked));
@@ -513,7 +510,7 @@ export class MarkupController {
     const items: MenuItem[] = [];
     if (hit.kind === 'text' || hit.kind === 'note') {
       items.push({
-        label: 'Edit Text',
+        label: t('chrome.mk.editText'),
         action: () => {
           const v = this.viewOf(pageId);
           const a = this.find(ref);
@@ -527,9 +524,9 @@ export class MarkupController {
         this.restyleSelectedMark(kind, color);
       }), 'separator');
     } else {
-      items.push({ label: 'Duplicate', shortcut: 'Ctrl+D', action: () => this.duplicateSelected() });
+      items.push({ label: t('chrome.mk.duplicate'), shortcut: 'Ctrl+D', action: () => this.duplicateSelected() });
     }
-    items.push({ label: 'Delete', shortcut: 'Delete', action: () => this.deleteSelected() });
+    items.push({ label: t('chrome.mk.delete'), shortcut: 'Delete', action: () => this.deleteSelected() });
     void showMenu(p, items);
   };
 
@@ -896,7 +893,8 @@ export class MarkupController {
       opacity: 1,
       modified: now(),
       rect: normRect(this.toPdfOnPage(view, a), this.toPdfOnPage(view, b)),
-      text: PLACEHOLDER,
+      // The placeholder a new box starts with, selected so typing replaces it.
+      text: t('chrome.mk.text'),
       fontSize: s.fontSize,
       fill: null,
       border: null,
@@ -942,15 +940,15 @@ export class MarkupController {
       input.style.color = annot.color;
       input.style.background = annot.fill ?? 'transparent';
       if (annot.border && annot.borderWidth > 0) input.style.border = `${annot.borderWidth}px solid ${annot.border}`;
-      input.setAttribute('aria-label', 'Text box');
+      input.setAttribute('aria-label', t('chrome.mk.textBox'));
       el = input;
       host = view.el;
     } else {
       el = document.createElement('div');
       el.className = 'mk-note-popup';
       el.style.setProperty('--note', annot.color);
-      input.setAttribute('aria-label', 'Note');
-      input.placeholder = 'Note';
+      input.setAttribute('aria-label', t('chrome.mk.note'));
+      input.placeholder = t('chrome.mk.note');
       el.append(input);
       host = view.el.parentElement ?? view.el;
     }
