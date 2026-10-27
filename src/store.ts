@@ -82,6 +82,8 @@ export interface ViewerState {
   displayMode: DisplayMode;
   /** In Two Pages, the first page sits alone on the right like a book cover. */
   bookMode: boolean;
+  /** The in-window menu bar (File, Edit, View, …) is shown. */
+  menuBarVisible: boolean;
 }
 
 export const initialState: ViewerState = {
@@ -104,4 +106,5 @@ export const initialState: ViewerState = {
   markupOpen: false,
   displayMode: 'continuous',
   bookMode: false,
+  menuBarVisible: true,
 };

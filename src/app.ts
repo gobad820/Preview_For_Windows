@@ -23,6 +23,8 @@ import { OverlayHost } from './markup/overlay';
 import { MarkupController } from './markup/controller';
 import { MarkupState, type MarkKind, type Styles } from './markup/state';
 import type { Color } from './annot/types';
+import { Commands } from './commands';
+import type { Tool } from './markup/state';
 
 /** Horizontal pan per arrow-key press when the page is wider than the viewport (CSS px). */
 const PAN_STEP = 80;
@@ -41,6 +43,8 @@ export class App {
   readonly editor: Editor;
   /** Markup tool and default styles for this window. */
   readonly markup = new MarkupState();
+  /** Every feature by id; the menu bar and other menus are built from these. */
+  readonly commands = new Commands();
   readonly markupBar: MarkupBar;
   /** Annotation drawing over document pages and thumbnails. */
   readonly overlays: OverlayHost;
@@ -219,6 +223,174 @@ export class App {
       markup: { state: this.markup, overlays: this.overlays, controller: this.markupController },
     };
     (window as unknown as { __pfwUi: unknown }).__pfwUi = { showMenu, showAlert };
+    this.registerCommands();
+  }
+
+  /** A document is open and ready. */
+  private hasDocument(): boolean {
+    const s = this.store.get();
+    return s.status === 'ready' && s.numPages > 0 && this.doc !== null;
+  }
+
+  /** Settings (Ctrl+,). The preferences window replaces this. */
+  openPreferences(): void {}
+
+  /** Registers every feature as a command (see src/commands.ts). */
+  private registerCommands(): void {
+    const has = () => this.hasDocument();
+    const st = () => this.store.get();
+    const act = (a: Action) => () => this.dispatch(a);
+    const tool = (id: string, label: string, t: Tool) => ({
+      id,
+      label,
+      radio: true,
+      enabled: has,
+      checked: () => st().markupOpen && this.markup.tool === t,
+      run: () => {
+        // Tools work on the markup toolbar's state; showing it keeps the tool armed.
+        this.store.set({ markupOpen: true });
+        this.markup.setTool(t);
+      },
+    });
+    const controls = this.platform.windowControls;
+    this.commands.register(
+      // Preview
+      { id: 'app.about', label: 'About Preview', run: () => showAbout() },
+      { id: 'app.preferences', label: 'Settings…', shortcut: 'Ctrl+,', run: () => this.openPreferences() },
+      // File
+      { id: 'file.open', label: 'Open…', shortcut: 'Ctrl+O', run: act('open') },
+      { id: 'file.insertPages', label: 'Insert Pages from File…', enabled: has, run: () => void this.insertPagesFromFile() },
+      { id: 'file.save', label: 'Save', shortcut: 'Ctrl+S', enabled: has, run: act('save') },
+      { id: 'file.saveAs', label: 'Save As…', shortcut: 'Ctrl+Shift+S', enabled: has, run: act('save-as') },
+      { id: 'file.print', label: 'Print…', shortcut: 'Ctrl+P', enabled: has, run: () => window.print() },
+      { id: 'file.close', label: 'Close Window', shortcut: 'Ctrl+W', run: act('close-window') },
+      // Edit
+      { id: 'edit.undo', label: 'Undo', shortcut: 'Ctrl+Z', enabled: () => has() && !!this.doc?.canUndo, run: act('undo') },
+      { id: 'edit.redo', label: 'Redo', shortcut: 'Ctrl+Y', enabled: () => has() && !!this.doc?.canRedo, run: act('redo') },
+      { id: 'edit.cut', label: 'Cut', shortcut: 'Ctrl+X', enabled: () => has() && this.editor.selection.size > 0, run: () => void this.editor.cutSelection() },
+      {
+        id: 'edit.copy',
+        label: 'Copy',
+        shortcut: 'Ctrl+C',
+        enabled: has,
+        // Selected text is copied as text; otherwise the selected pages.
+        run: () => {
+          if (!(window.getSelection()?.isCollapsed ?? true)) document.execCommand('copy');
+          else void this.editor.copySelection();
+        },
+      },
+      { id: 'edit.paste', label: 'Paste', shortcut: 'Ctrl+V', enabled: has, run: () => void this.editor.paste() },
+      {
+        id: 'edit.delete',
+        label: 'Delete',
+        shortcut: 'Delete',
+        enabled: has,
+        // The selected annotation, otherwise the selected pages.
+        run: () => {
+          if (!this.markupController.deleteSelected()) this.editor.deleteSelection();
+        },
+      },
+      {
+        id: 'edit.duplicate',
+        label: 'Duplicate',
+        shortcut: 'Ctrl+D',
+        enabled: () => has() && this.markupController.selected !== null,
+        run: () => void this.markupController.duplicateSelected(),
+      },
+      { id: 'edit.selectAll', label: 'Select All Pages', shortcut: 'Ctrl+A', enabled: has, run: () => this.editor.selectAll() },
+      { id: 'edit.find', label: 'Find…', shortcut: 'Ctrl+F', enabled: has, run: act('find') },
+      // View
+      {
+        id: 'view.sidebar',
+        label: () => (st().sidebarOpen ? 'Hide Sidebar' : 'Show Sidebar'),
+        shortcut: 'Ctrl+Alt+S',
+        run: act('toggle-sidebar'),
+      },
+      {
+        id: 'view.thumbnails',
+        label: 'Thumbnails',
+        radio: true,
+        checked: () => st().sidebarOpen && st().sidebarTab === 'thumbnails',
+        run: () => this.store.set({ sidebarOpen: true, sidebarTab: 'thumbnails' }),
+      },
+      {
+        id: 'view.outline',
+        label: 'Table of Contents',
+        radio: true,
+        enabled: () => this.sidebar.outlineAvailable,
+        checked: () => st().sidebarOpen && st().sidebarTab === 'outline',
+        run: () => this.store.set({ sidebarOpen: true, sidebarTab: 'outline' }),
+      },
+      {
+        id: 'view.continuous',
+        label: 'Continuous Scroll',
+        radio: true,
+        checked: () => st().displayMode === 'continuous',
+        run: () => this.store.set({ displayMode: 'continuous' }),
+      },
+      {
+        id: 'view.twoPages',
+        label: 'Two Pages',
+        radio: true,
+        checked: () => st().displayMode === 'two-pages',
+        run: () => this.store.set({ displayMode: 'two-pages' }),
+      },
+      {
+        id: 'view.bookMode',
+        label: 'Book Mode',
+        enabled: () => st().displayMode === 'two-pages',
+        checked: () => st().bookMode,
+        run: () => this.store.set({ bookMode: !st().bookMode }),
+      },
+      { id: 'view.actualSize', label: 'Actual Size', shortcut: 'Ctrl+0', enabled: has, run: act('zoom-100') },
+      { id: 'view.zoomIn', label: 'Zoom In', shortcut: 'Ctrl+=', enabled: has, run: act('zoom-in') },
+      { id: 'view.zoomOut', label: 'Zoom Out', shortcut: 'Ctrl+-', enabled: has, run: act('zoom-out') },
+      { id: 'view.fitWidth', label: 'Fit Width', shortcut: 'Ctrl+1', radio: true, enabled: has, checked: () => st().zoomMode === 'fit-width', run: act('fit-width') },
+      { id: 'view.fitPage', label: 'Fit Page', shortcut: 'Ctrl+2', radio: true, enabled: has, checked: () => st().zoomMode === 'fit-page', run: act('fit-page') },
+      { id: 'view.rotateLeft', label: 'Rotate Left', shortcut: 'Ctrl+Shift+L', enabled: has, run: act('rotate-ccw') },
+      { id: 'view.rotateRight', label: 'Rotate Right', shortcut: 'Ctrl+L', enabled: has, run: act('rotate-cw') },
+      {
+        id: 'view.markupToolbar',
+        label: () => (st().markupOpen ? 'Hide Markup Toolbar' : 'Show Markup Toolbar'),
+        shortcut: 'Ctrl+Shift+A',
+        enabled: has,
+        run: act('toggle-markup'),
+      },
+      {
+        id: 'view.menuBar',
+        label: 'Menu Bar',
+        checked: () => st().menuBarVisible,
+        run: () => this.store.set({ menuBarVisible: !st().menuBarVisible }),
+      },
+      // Go
+      { id: 'go.next', label: 'Next Page', shortcut: '→', enabled: has, run: () => this.viewer.stepPage(1) },
+      { id: 'go.previous', label: 'Previous Page', shortcut: '←', enabled: has, run: () => this.viewer.stepPage(-1) },
+      { id: 'go.first', label: 'First Page', shortcut: 'Home', enabled: has, run: act('first-page') },
+      { id: 'go.last', label: 'Last Page', shortcut: 'End', enabled: has, run: act('last-page') },
+      { id: 'go.page', label: 'Go to Page…', shortcut: 'Ctrl+G', enabled: has, run: act('goto-page') },
+      // Tools (markup)
+      tool('tools.select', 'Text Selection', 'select'),
+      {
+        id: 'tools.highlight',
+        label: 'Highlight',
+        enabled: has,
+        checked: () => this.markup.highlightMode,
+        run: () => this.highlightButton(),
+      },
+      { id: 'tools.underline', label: 'Underline', enabled: has, run: () => this.pickMark('underline') },
+      { id: 'tools.strikeout', label: 'Strikethrough', enabled: has, run: () => this.pickMark('strikeout') },
+      tool('tools.draw', 'Draw', 'draw'),
+      tool('tools.line', 'Line', 'line'),
+      tool('tools.arrow', 'Arrow', 'arrow'),
+      tool('tools.rect', 'Rectangle', 'rect'),
+      tool('tools.rounded', 'Rounded Rectangle', 'rounded'),
+      tool('tools.oval', 'Oval', 'oval'),
+      tool('tools.text', 'Text', 'text'),
+      tool('tools.note', 'Note', 'note'),
+      // Window
+      { id: 'window.minimize', label: 'Minimize', enabled: () => !!controls, run: () => void controls?.minimize() },
+      { id: 'window.zoom', label: 'Zoom', enabled: () => !!controls, run: () => void controls?.toggleMaximize() },
+    );
   }
 
   /** The document being edited, if any. */

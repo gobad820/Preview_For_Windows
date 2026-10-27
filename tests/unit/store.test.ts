@@ -131,6 +131,7 @@ describe('initialState', () => {
       markupOpen: false,
       displayMode: 'continuous',
       bookMode: false,
+      menuBarVisible: true,
     };
     expect(initialState).toEqual(expected);
   });

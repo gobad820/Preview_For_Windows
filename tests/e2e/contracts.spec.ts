@@ -87,3 +87,20 @@ test('annotation edits mark the document edited without re-rendering the canvas'
   expect(same).toEqual({ same: true, dirty: true });
   await expect(page.locator('[data-doc-edited]')).toBeVisible();
 });
+
+test('every feature is a command the menus can run', async ({ page }) => {
+  await open(page, 'simple.pdf');
+  const r = await page.evaluate(() => {
+    const app = (window as any).__pfw.app;
+    const ids = app.commands.all().map((c: any) => c.id);
+    const before = app.store.get().scale;
+    app.commands.run('view.zoomIn');
+    const zoomed = app.store.get().scale > before;
+    app.commands.run('view.twoPages');
+    const two = app.store.get().displayMode;
+    app.commands.run('tools.rect');
+    return { count: ids.length, zoomed, two, tool: app.markup.tool, markupOpen: app.store.get().markupOpen, sidebarLabel: app.commands.label('view.sidebar') };
+  });
+  expect(r.count).toBeGreaterThan(40);
+  expect(r).toMatchObject({ zoomed: true, two: 'two-pages', tool: 'rect', markupOpen: true, sidebarLabel: 'Show Sidebar' });
+});
