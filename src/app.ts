@@ -14,6 +14,7 @@ import type { DocPoint } from './viewer/layout';
 import { showAbout } from './ui/about';
 import { WindowCaption } from './ui/caption';
 import { showAlert } from './ui/dialog';
+import { localize } from './ui/localize';
 import { showMenu, type MenuItem } from './ui/menu';
 import { PdfViewer } from './viewer/viewer';
 import { zoomIn, zoomOut } from './viewer/zoom';
@@ -127,7 +128,7 @@ export class App {
       banner.textContent = e ?? '';
     });
     this.store.subscribe((s, prev) => {
-      if (s.fileName !== prev.fileName || s.dirty !== prev.dirty) this.updateTitle();
+      if (s.fileName !== prev.fileName || s.dirty !== prev.dirty || s.locale !== prev.locale) this.updateTitle();
     });
     this.updateTitle();
     banner.addEventListener('click', () => this.store.set({ error: null }));
@@ -145,6 +146,10 @@ export class App {
     for (const b of root.querySelectorAll<HTMLElement>('.empty-state [data-action="open"]')) {
       b.addEventListener('click', () => void this.open());
     }
+    // index.html's own text: the empty window, the loading cue and the drop overlay
+    this.store.select('locale', () => {
+      for (const el of root.querySelectorAll('.empty-state, .loading-state, .drop-overlay')) localize(el);
+    });
 
     // ---- toolbar ----
     this.toolbar = new Toolbar(this.el('toolbar'), this.store, {
@@ -170,7 +175,7 @@ export class App {
       highlight: () => this.highlightButton(),
       pickMark: (kind, color) => this.pickMark(kind, color),
       applyStyles: (patch) => this.applyStyles(patch),
-    });
+    }, this.store);
     this.store.select('markupOpen', (open) => {
       markupBar.hidden = !open;
       // Hiding the markup toolbar puts its tools away, like Preview.
@@ -244,7 +249,7 @@ export class App {
     // ---- window buttons: always the top-right corner, in the menu bar or, while it is hidden, the toolbar ----
     const controls = this.platform.windowControls;
     if (controls) {
-      const caption = new WindowCaption(controls);
+      const caption = new WindowCaption(controls, this.store);
       const place = (barShown: boolean) => caption.mount(barShown ? this.el('menubar') : this.el('toolbar'));
       place(this.store.get().menuBarVisible);
       this.store.select('menuBarVisible', place);
@@ -1008,7 +1013,7 @@ export class App {
   private updateTitle(): void {
     const s = this.store.get();
     const name = s.fileName ?? 'Preview';
-    void this.platform.setTitle(s.dirty ? `${name} — Edited` : name);
+    void this.platform.setTitle(s.dirty ? `${name} — ${t('chrome.edited')}` : name);
   }
 
   private scheduleSave(): void {

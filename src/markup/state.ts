@@ -3,6 +3,7 @@
  * are remembered across launches (Preview's behaviour); the armed tool and highlight mode are not.
  */
 import type { Color } from '../annot/types';
+import { t, type MessageKey } from '../i18n';
 
 export type Tool = 'select' | 'draw' | 'line' | 'arrow' | 'rect' | 'rounded' | 'oval' | 'text' | 'note';
 export type MarkKind = 'highlight' | 'underline' | 'strikeout';
@@ -23,33 +24,41 @@ export interface Styles {
 }
 
 export interface NamedColor {
+  /** The color's name in the current UI language. */
   readonly name: string;
   readonly color: Color;
 }
 
+const named = (key: MessageKey, color: Color): NamedColor => ({
+  get name() {
+    return t(key);
+  },
+  color,
+});
+
 /** Highlight colors in Preview's order. Light enough to read through with multiply blending. */
 export const HIGHLIGHT_COLORS: readonly NamedColor[] = [
-  { name: 'Yellow', color: '#ffe14d' },
-  { name: 'Green', color: '#8ee07a' },
-  { name: 'Blue', color: '#8ac4ff' },
-  { name: 'Pink', color: '#ff8fb6' },
-  { name: 'Purple', color: '#c99bf0' },
+  named('chrome.color.yellow', '#ffe14d'),
+  named('chrome.color.green', '#8ee07a'),
+  named('chrome.color.blue', '#8ac4ff'),
+  named('chrome.color.pink', '#ff8fb6'),
+  named('chrome.color.purple', '#c99bf0'),
 ];
 
 /** Border, fill and text colors (two rows of six, like Preview's palette). */
 export const PALETTE: readonly NamedColor[] = [
-  { name: 'Black', color: '#000000' },
-  { name: 'Gray', color: '#8e8e93' },
-  { name: 'White', color: '#ffffff' },
-  { name: 'Brown', color: '#a2845e' },
-  { name: 'Red', color: '#ff3b30' },
-  { name: 'Orange', color: '#ff9500' },
-  { name: 'Yellow', color: '#ffcc00' },
-  { name: 'Green', color: '#34c759' },
-  { name: 'Teal', color: '#30b0c7' },
-  { name: 'Blue', color: '#007aff' },
-  { name: 'Purple', color: '#af52de' },
-  { name: 'Pink', color: '#ff2d55' },
+  named('chrome.color.black', '#000000'),
+  named('chrome.color.gray', '#8e8e93'),
+  named('chrome.color.white', '#ffffff'),
+  named('chrome.color.brown', '#a2845e'),
+  named('chrome.color.red', '#ff3b30'),
+  named('chrome.color.orange', '#ff9500'),
+  named('chrome.color.yellow', '#ffcc00'),
+  named('chrome.color.green', '#34c759'),
+  named('chrome.color.teal', '#30b0c7'),
+  named('chrome.color.blue', '#007aff'),
+  named('chrome.color.purple', '#af52de'),
+  named('chrome.color.pink', '#ff2d55'),
 ];
 
 export const LINE_WIDTHS: readonly number[] = [0.5, 1, 2, 3, 5, 8];

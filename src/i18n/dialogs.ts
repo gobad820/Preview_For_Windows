@@ -38,7 +38,6 @@ export const en = {
   'dlg.error.noPages': 'A PDF needs at least one page.',
   'dlg.error.lastPage': 'A document needs at least one page.',
   'dlg.error.annotationsUnreadable': 'The annotations of this page could not be read.',
-  'dlg.error.markupUnreadable': "The markup already on this page couldn't be read, so it can't be changed here.",
 
   // ---- native open and save dialogs ----
   'dlg.file.open': 'Open',
@@ -128,7 +127,6 @@ export const ko: Record<keyof typeof en, Message> = {
   'dlg.error.noPages': 'PDF에는 페이지가 하나 이상 있어야 합니다.',
   'dlg.error.lastPage': '문서에는 페이지가 하나 이상 있어야 합니다.',
   'dlg.error.annotationsUnreadable': '이 페이지의 주석을 읽을 수 없습니다.',
-  'dlg.error.markupUnreadable': '이 페이지에 있는 마크업을 읽을 수 없어 여기에서 변경할 수 없습니다.',
 
   'dlg.file.open': '열기',
   'dlg.file.insert': '파일에서 페이지 삽입',

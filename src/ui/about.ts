@@ -1,4 +1,5 @@
 import splashUrl from '../assets/splash.jpg';
+import { t } from '../i18n';
 
 let open: HTMLElement | null = null;
 
@@ -11,18 +12,18 @@ export function showAbout(): void {
   const card = document.createElement('div');
   card.className = 'about';
   card.setAttribute('role', 'dialog');
-  card.setAttribute('aria-label', 'About Preview');
+  card.setAttribute('aria-label', t('chrome.about.title'));
   card.tabIndex = -1;
   const img = document.createElement('img');
   img.src = splashUrl;
-  img.alt = 'Preview for Windows';
+  img.alt = t('chrome.about.image');
   img.draggable = false;
   const caption = document.createElement('div');
   caption.className = 'about-caption';
   const version = document.createElement('span');
-  version.textContent = `Version ${__APP_VERSION__} · Photo: Vincent Yap, Unsplash`;
+  version.textContent = t('chrome.about.version', { version: __APP_VERSION__ });
   const what = document.createElement('span');
-  what.textContent = 'PDF viewer and editor. No network access, no telemetry.';
+  what.textContent = t('chrome.about.what');
   caption.append(version, what);
   card.append(img, caption);
   scrim.append(card);

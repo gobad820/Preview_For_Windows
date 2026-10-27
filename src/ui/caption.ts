@@ -1,4 +1,6 @@
+import { t } from '../i18n';
 import type { WindowControls } from '../platform/types';
+import type { Store, ViewerState } from '../store';
 
 /** Segoe Fluent Icons glyphs of the Windows caption buttons. */
 const GLYPH = { minimize: '', maximize: '', restore: '', close: '' } as const;
@@ -10,34 +12,44 @@ const GLYPH = { minimize: '', maximize: '', restore: '', close: '' }
  */
 export class WindowCaption {
   readonly el: HTMLElement;
-  private readonly unsubscribe: () => void;
+  private readonly unsubscribe: Array<() => void>;
 
-  constructor(controls: WindowControls) {
+  constructor(controls: WindowControls, store: Store<ViewerState>) {
     const group = (this.el = document.createElement('div'));
     group.className = 'tb-caption';
-    const make = (kind: 'minimize' | 'maximize' | 'close', label: string, run: () => Promise<void>) => {
+    const make = (kind: 'minimize' | 'maximize' | 'close', run: () => Promise<void>) => {
       const b = document.createElement('button');
       b.type = 'button';
       b.tabIndex = -1;
       b.dataset['window'] = kind;
-      b.setAttribute('aria-label', label);
-      b.title = label;
       b.textContent = GLYPH[kind];
       b.addEventListener('click', () => void run());
       group.append(b);
       return b;
     };
-    make('minimize', 'Minimize', () => controls.minimize());
-    const max = make('maximize', 'Maximize', () => controls.toggleMaximize());
-    make('close', 'Close', () => controls.close());
+    const min = make('minimize', () => controls.minimize());
+    const max = make('maximize', () => controls.toggleMaximize());
+    const close = make('close', () => controls.close());
 
-    const sync = (maximized: boolean) => {
+    let maximized = false;
+    /** Glyphs, tooltips and names in the current UI language; maximize reads Restore while maximized. */
+    const sync = () => {
+      const label = (b: HTMLElement, name: string, title = name) => {
+        b.setAttribute('aria-label', name);
+        b.title = title;
+      };
+      label(min, t('chrome.win.minimize'));
+      label(close, t('chrome.win.close'));
       max.textContent = maximized ? GLYPH.restore : GLYPH.maximize;
-      max.setAttribute('aria-label', maximized ? 'Restore' : 'Maximize');
-      max.title = maximized ? 'Restore Down' : 'Maximize';
+      if (maximized) label(max, t('chrome.win.restore'), t('chrome.win.restoreDown'));
+      else label(max, t('chrome.win.maximize'));
     };
-    this.unsubscribe = controls.onMaximizedChange(sync);
-    void controls.isMaximized().then(sync, () => {});
+    const setMaximized = (m: boolean) => {
+      maximized = m;
+      sync();
+    };
+    this.unsubscribe = [controls.onMaximizedChange(setMaximized), store.select('locale', sync)];
+    void controls.isMaximized().then(setMaximized, () => {});
   }
 
   /** Moves the buttons to the end of `row`. */
@@ -49,7 +61,7 @@ export class WindowCaption {
   }
 
   destroy(): void {
-    this.unsubscribe();
+    for (const u of this.unsubscribe) u();
     this.el.parentElement?.classList.remove('has-caption');
     this.el.remove();
   }

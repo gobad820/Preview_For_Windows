@@ -232,6 +232,8 @@ button, input { font: inherit; color: inherit; letter-spacing: inherit; }
   background: var(--control-bg);
   box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
 }
+/* where the field leads ("3 / 12페이지"), its digits line up with the file name above */
+.tb-subtitle > .tb-page-input:first-child { margin-left: -3px; }
 .tb-page-total { font-variant-numeric: tabular-nums; }
 .tb-flex { flex: 1 1 0; min-width: 0; align-self: stretch; }
 
