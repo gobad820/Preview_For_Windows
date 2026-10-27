@@ -426,7 +426,7 @@ button, input { font: inherit; color: inherit; letter-spacing: inherit; }
 }
 .app:not([data-status="empty"]):not([data-status="error"]) .empty-state { display: none; }
 .empty-splash {
-  /* The classic splash artwork (src/assets/splash.svg), 10:7, never taller than about half the window. */
+  /* The splash (src/assets/splash.jpg, made by scripts/make-splash.mjs), 10:7, never taller than about half the window. */
   width: min(600px, 72vw, calc(54vh * 10 / 7));
   aspect-ratio: 10 / 7;
   border-radius: 10px;

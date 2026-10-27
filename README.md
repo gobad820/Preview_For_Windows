@@ -156,8 +156,13 @@ against real files on Windows.
 
 The app icon is the logo artwork in `src-tauri/icons/source/logo.png` (a blue filter ring
 over a beach); `python scripts/make-icons.py` crops it to the lens, rounds the corners and
-writes every icon file (needs Pillow). The splash shown on the empty window and in About
-Preview is `src/assets/splash.svg`.
+writes every icon file (needs Pillow).
+
+The splash on the empty window and in About Preview is `src/assets/splash.jpg`, rendered by
+`node scripts/make-splash.mjs` from `scripts/splash/splash.html`: a photo by Vincent Yap
+(Unsplash License, free for commercial use) with the name set in EB Garamond (SIL Open
+Font License 1.1, from the `@fontsource/eb-garamond` dev dependency; only the rendered
+image ships).
 
 ### Checking saved annotations in other viewers
 

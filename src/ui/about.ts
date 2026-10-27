@@ -1,4 +1,4 @@
-import splashUrl from '../assets/splash.svg';
+import splashUrl from '../assets/splash.jpg';
 
 let open: HTMLElement | null = null;
 
@@ -20,7 +20,7 @@ export function showAbout(): void {
   const caption = document.createElement('div');
   caption.className = 'about-caption';
   const version = document.createElement('span');
-  version.textContent = `Version ${__APP_VERSION__}`;
+  version.textContent = `Version ${__APP_VERSION__} · Photo: Vincent Yap, Unsplash`;
   const what = document.createElement('span');
   what.textContent = 'PDF viewer and editor. No network access, no telemetry.';
   caption.append(version, what);

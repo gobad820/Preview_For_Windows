@@ -382,7 +382,7 @@ test.describe('window states', () => {
     await boot(page);
     const splash = page.locator('.empty-state .empty-splash');
     await expect(splash).toBeVisible();
-    await expect.poll(() => splash.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBe(1000);
+    await expect.poll(() => splash.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBe(2000);
     const g = (await splash.boundingBox())!;
     expect(g.width).toBeLessThanOrEqual(600);
     expect(Math.abs(g.width / g.height - 10 / 7)).toBeLessThan(0.02);

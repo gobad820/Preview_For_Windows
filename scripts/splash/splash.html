@@ -1,0 +1,22 @@
+<!doctype html>
+<!--
+  The splash shown on the empty window and in About Preview. Rendered to src/assets/splash.jpg by
+  scripts/make-splash.mjs. Photo: Vincent Yap on Unsplash (Unsplash License), cropped to 10:7.
+  Type: EB Garamond (SIL Open Font License 1.1), one typeface throughout, after the
+  "Adobe Photoshop 7.0" logotype: a coloured first word, the rest in ink, a smaller version.
+-->
+<html><head><meta charset="utf-8"><style>
+@font-face { font-family: 'EB Garamond'; font-weight: 400; src: url('../../node_modules/@fontsource/eb-garamond/files/eb-garamond-latin-400-normal.woff2'); }
+html, body { margin: 0; }
+.card { position: relative; width: 1000px; height: 700px; overflow: hidden; background: url('photo.jpg') center / cover; }
+.card > * { position: absolute; }
+/* The photo dissolves into white at the top and, more, at the bottom where the name sits. */
+.top { left: 0; right: 0; top: 0; height: 230px; background: linear-gradient(to top, rgba(255,255,255,0) 0%, rgba(255,255,255,0.7) 55%, #fff 100%); }
+.bottom { left: 0; right: 0; bottom: 0; height: 330px; background: linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0.82) 38%, #fff 62%); }
+.logo { left: 58px; bottom: 58px; white-space: nowrap; font: 400 100px/1 'EB Garamond', serif; letter-spacing: -0.01em; font-variant-numeric: lining-nums; color: #111; -webkit-font-smoothing: antialiased; font-kerning: normal; }
+.logo .accent { color: #a8381f; }
+.logo .ver { font-size: 0.5em; margin-left: 0.18em; }
+</style></head><body>
+<div class="card"><div class="top"></div><div class="bottom"></div>
+<div class="logo" data-width="880"><span class="accent">Preview</span> for Windows<span class="ver">0.3</span></div></div>
+</body></html>
