@@ -161,6 +161,30 @@ test.describe('Korean chrome', () => {
     expect(english(await chromeText(page))).toEqual([]);
   });
 
+  test('the subtitle starts flush with the file name in either word order', async ({ page }) => {
+    await open(page, 'long300.pdf');
+    await page.evaluate(() => (window as any).__pfw.viewer.goToPage(41));
+    await expect(page.locator('[data-page-input]')).toHaveValue('42');
+    /** Left edge of the subtitle's first glyph minus the file name's: the page field's digits are centred in it. */
+    const indent = () =>
+      page.evaluate(() => {
+        const title = document.querySelector('[data-doc-title]')!.getBoundingClientRect().left;
+        const first = document.querySelector('.tb-subtitle')!.firstElementChild as HTMLElement;
+        const r = first.getBoundingClientRect();
+        if (!(first instanceof HTMLInputElement)) return r.left - title;
+        const probe = document.createElement('span');
+        probe.style.font = getComputedStyle(first).font;
+        probe.textContent = first.value;
+        document.body.append(probe);
+        const width = probe.getBoundingClientRect().width;
+        probe.remove();
+        return r.left + (r.width - width) / 2 - title;
+      });
+    expect(Math.abs(await indent())).toBeLessThan(1);
+    await setLanguage(page, 'ko');
+    expect(Math.abs(await indent())).toBeLessThan(1);
+  });
+
   test('markup menus and popovers read their labels in Korean', async ({ page }) => {
     await open(page, 'simple.pdf');
     await setLanguage(page, 'ko');
