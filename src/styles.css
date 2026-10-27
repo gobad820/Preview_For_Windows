@@ -204,6 +204,8 @@ button, input { font: inherit; color: inherit; letter-spacing: inherit; }
   letter-spacing: -0.006em;
   color: var(--text);
 }
+/* with no document the title would only repeat the menu bar's "Preview", so it gives way to it */
+.app[data-status="empty"]:has(> .menubar:not([hidden], .peek)) .tb-title { visibility: hidden; }
 .tb-doc-edited { flex: none; margin-left: 4px; font-size: 13px; line-height: 16px; color: var(--text-secondary); }
 .tb-doc-edited[hidden] { display: none; }
 .tb-subtitle {
@@ -294,10 +296,11 @@ button, input { font: inherit; color: inherit; letter-spacing: inherit; }
 .tb-search { display: flex; align-items: center; }
 .toolbar.find-open [data-action="find"] { display: none; }
 
-/* Windows caption buttons: square, flush with the window edge */
+/* Windows caption buttons (src/ui/caption.ts): flush with the window's top-right corner, as tall
+   as the row they are in (the menu bar, or the toolbar while the menu bar is hidden) */
 .tb-caption { flex: none; display: flex; align-self: stretch; margin-left: 10px; }
 .tb-caption button {
-  width: 46px; height: var(--toolbar-h); padding: 0;
+  width: 46px; padding: 0;
   border: 0; border-radius: 0;
   font-family: var(--caption-font); font-size: 10px;
   color: var(--text);
@@ -1063,7 +1066,8 @@ button, input { font: inherit; color: inherit; letter-spacing: inherit; }
 .settings-scrim {
   position: fixed; inset: 0; z-index: 1050;
   display: flex; align-items: flex-start; justify-content: center;
-  padding: max(16px, 9vh) 16px 16px;
+  /* just below the title bar and toolbar; the top edge stays put while panes change height */
+  padding: clamp(16px, calc(var(--menubar-h) + var(--toolbar-h) + 20px), 18vh) 16px 16px;
   background: var(--scrim);
   animation: pfw-fade-in 120ms ease-out;
 }
@@ -1266,26 +1270,33 @@ button, input { font: inherit; color: inherit; letter-spacing: inherit; }
 /* ---- in-window menu bar (src/menubar/) -------------------------------------------------
    One title area with the toolbar under it: the same background, no line between the two (the
    toolbar keeps its own bottom hairline). Its drop-downs are the app's menus (.menu above). */
-.app { --menubar-h: 24px; }
-.app:has(> .menubar:is([hidden], .peek)) { --menubar-h: 0px; }
+/* The bar is the window's title bar: Windows caption height, so the caption buttons in it are the
+   standard 46 x 32. Defined on :root so panels outside .app (Settings) can sit below the chrome. */
+:root { --menubar-h: 32px; }
+:root:has(#menubar:is([hidden], .peek)) { --menubar-h: 0px; }
 .menubar {
   position: relative; z-index: 21;
-  display: flex; flex: none;
-  height: 24px; padding: 0 5px; overflow: hidden;
+  display: flex; flex: none; align-items: center;
+  height: 32px; padding: 0 0 0 12px; overflow: hidden;
   font-size: 13px; font-weight: 400; line-height: 20px;
   color: var(--text);
   background: var(--chrome-bg);
 }
 .menubar[hidden] { display: none; }
-/* hidden by View › Menu Bar but in use (Alt): over the toolbar, so the document does not move */
+/* hidden by View › Menu Bar but in use (Alt): it takes the toolbar's whole height, so nothing
+   moves and no control is cut in half, and leaves the caption buttons in the toolbar uncovered */
 .menubar.peek {
   position: absolute; top: 0; left: 0; right: 0;
+  height: var(--toolbar-h);
   box-shadow: inset 0 -1px 0 var(--hairline);
   -webkit-backdrop-filter: blur(28px) saturate(1.8);
   backdrop-filter: blur(28px) saturate(1.8);
 }
-.mb-titles { display: flex; flex: none; align-items: center; }
-.mb-title { padding: 0 8px; border-radius: 5px; white-space: nowrap; }
+.app:has(> .toolbar.has-caption) > .menubar.peek { right: calc(3 * 46px); }
+/* titles give way before the caption buttons do in a narrow window; the first title's text lines
+   up with the sidebar button under it */
+.mb-titles { display: flex; flex: 0 1 auto; min-width: 0; overflow: hidden; align-items: center; }
+.mb-title { padding: 0 8px; border-radius: 5px; line-height: 24px; white-space: nowrap; }
 .mb-title.mb-app { font-weight: 600; }
 /* open, or the keyboard is on it: a pressed rounded rect behind the title, as since Big Sur */
 .mb-title.open, .mb-title.focused { background: var(--fill-pressed); }

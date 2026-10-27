@@ -1,4 +1,4 @@
-import type { DragState, Platform, Point } from './types';
+import type { DragState, Platform, Point, WindowControls } from './types';
 
 /** Test hooks the Playwright suite drives through `window`. */
 interface TestHooks {
@@ -15,6 +15,10 @@ interface TestHooks {
   __pfwClipboardFail?: boolean;
   /** Font for text box appearances; tests may provide one (none by default). */
   __pfwAnnotFont?: Uint8Array | null;
+  /** With `?caption` in the URL: the window buttons pressed so far, in order. */
+  __pfwWindowCalls?: string[];
+  /** With `?caption`: reports the window as maximized or restored, as the host would. */
+  __pfwSetMaximized?: (maximized: boolean) => void;
 }
 
 const sleep = (ms: number | undefined) => new Promise((r) => setTimeout(r, ms ?? 0));
@@ -176,10 +180,39 @@ export function browserPlatform(): Platform {
         return last;
       }
     },
-    windowControls: null,
+    windowControls: new URLSearchParams(location.search).has('caption') ? fakeWindowControls(hooks) : null,
     material: 'none',
     async loadAnnotationFont() {
       return hooks.__pfwAnnotFont ?? null;
+    },
+  };
+}
+
+/** Window buttons that only record what was pressed, so tests can lay out and drive the title bar. */
+function fakeWindowControls(hooks: TestHooks): WindowControls {
+  const calls: string[] = (hooks.__pfwWindowCalls = []);
+  const listeners = new Set<(maximized: boolean) => void>();
+  let maximized = false;
+  hooks.__pfwSetMaximized = (m) => {
+    maximized = m;
+    listeners.forEach((cb) => cb(m));
+  };
+  return {
+    async minimize() {
+      calls.push('minimize');
+    },
+    async toggleMaximize() {
+      calls.push('toggleMaximize');
+    },
+    async close() {
+      calls.push('close');
+    },
+    async isMaximized() {
+      return maximized;
+    },
+    onMaximizedChange(cb) {
+      listeners.add(cb);
+      return () => listeners.delete(cb);
     },
   };
 }

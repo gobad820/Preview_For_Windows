@@ -89,6 +89,10 @@ test.describe('unified toolbar', () => {
     await expect(page.locator('[data-doc-title]')).toHaveText('Preview');
     await expect(page.locator('[data-doc-edited]')).toBeHidden();
     await expect(page.locator('.tb-subtitle')).toBeHidden();
+    // The menu bar already says Preview right above it; the title only shows without the bar.
+    await expect(page.locator('[data-doc-title]')).toBeHidden();
+    await page.evaluate(() => (window as any).__pfw.store.set({ menuBarVisible: false }));
+    await expect(page.locator('[data-doc-title]')).toBeVisible();
   });
 
   test('shows the file name, Page N of M and — Edited while dirty', async ({ page }) => {
@@ -163,54 +167,93 @@ test.describe('unified toolbar', () => {
   });
 
   test('caption buttons drive platform window controls', async ({ page }) => {
-    await open(page, 'simple.pdf');
-    // The browser host has no window controls: rebuild the toolbar in place with a fake set.
-    await page.evaluate(() => {
-      const w = window as any;
-      const calls: string[] = (w.__calls = []);
-      let notify: (m: boolean) => void = () => {};
-      const controls = {
-        minimize: async () => void calls.push('minimize'),
-        toggleMaximize: async () => void calls.push('toggleMaximize'),
-        close: async () => void calls.push('close'),
-        isMaximized: async () => false,
-        onMaximizedChange: (cb: (m: boolean) => void) => {
-          notify = cb;
-          return () => {};
-        },
-      };
-      w.__setMaximized = (m: boolean) => notify(m);
-      const old = w.__pfw.toolbar;
-      old.destroy();
-      w.__pfw.toolbar = new old.constructor(document.getElementById('toolbar'), w.__pfw.store, old.actions, controls);
-    });
-    const buttons = page.locator('#toolbar [data-window]');
+    // `?caption` gives the browser host window buttons that record what they were asked to do.
+    await page.goto(`/?caption&file=${encodeURIComponent('fixtures/simple.pdf')}`);
+    await page.waitForFunction(() => (window as any).__pfw?.store.get().status === 'ready');
+    const buttons = page.locator('[data-window]');
     await expect(buttons).toHaveCount(3);
     expect(await buttons.evaluateAll((els) => els.map((e) => e.getAttribute('data-window')))).toEqual([
       'minimize', 'maximize', 'close',
     ]);
-    const close = (await page.locator('[data-window="close"]').boundingBox())!;
-    expect(close).toMatchObject({ width: 46, height: 52 });
-    expect(Math.round(close.x + close.width)).toBe(1200);
     expect(await page.locator('[data-window="close"]').evaluate((e) => getComputedStyle(e).fontFamily)).toContain('Segoe Fluent Icons');
 
     await page.locator('[data-window="minimize"]').click();
     await page.locator('[data-window="maximize"]').click();
     await page.locator('[data-window="close"]').click();
-    expect(await page.evaluate(() => (window as any).__calls)).toEqual(['minimize', 'toggleMaximize', 'close']);
+    expect(await page.evaluate(() => (window as any).__pfwWindowCalls)).toEqual(['minimize', 'toggleMaximize', 'close']);
 
     const max = page.locator('[data-window="maximize"]');
     await expect(max).toHaveAttribute('aria-label', 'Maximize');
-    await page.evaluate(() => (window as any).__setMaximized(true));
+    await page.evaluate(() => (window as any).__pfwSetMaximized(true));
     await expect(max).toHaveAttribute('aria-label', 'Restore');
-    await expect(max).toHaveText('');
-    await page.evaluate(() => (window as any).__setMaximized(false));
-    await expect(max).toHaveText('');
+    await expect(max).toHaveText('\uE923');
+    await page.evaluate(() => (window as any).__pfwSetMaximized(false));
+    await expect(max).toHaveText('\uE922');
 
     await page.locator('[data-window="close"]').hover();
     await expect.poll(() => page.locator('[data-window="close"]').evaluate((e) => getComputedStyle(e).backgroundColor)).toBe(
       'rgb(196, 43, 28)',
     );
+  });
+
+  test('caption buttons sit in the window\'s top-right corner, in whichever row is on top', async ({ page }) => {
+    await page.goto(`/?caption&file=${encodeURIComponent('fixtures/simple.pdf')}`);
+    await page.waitForFunction(() => (window as any).__pfw?.store.get().status === 'ready');
+    const corner = async () => {
+      const b = (await page.locator('[data-window="close"]').boundingBox())!;
+      return { right: Math.round(b.x + b.width), top: Math.round(b.y), width: b.width, height: b.height };
+    };
+    // With the menu bar: in it, the standard 46 x 32, and the toolbar keeps its own right margin.
+    await expect(page.locator('#menubar [data-window]')).toHaveCount(3);
+    expect(await corner()).toEqual({ right: 1200, top: 0, width: 46, height: 32 });
+    await expect(page.locator('#menubar')).toHaveClass(/\bhas-caption\b/);
+    await expect(page.locator('#toolbar')).not.toHaveClass(/\bhas-caption\b/);
+    const search = (await page.locator('#toolbar [data-action="find"]').boundingBox())!;
+    expect(1200 - (search.x + search.width)).toBe(10);
+
+    // Menu bar hidden: the toolbar is on top, so they move there, as tall as it.
+    await page.evaluate(() => (window as any).__pfw.store.set({ menuBarVisible: false }));
+    await expect(page.locator('#toolbar [data-window]')).toHaveCount(3);
+    expect(await corner()).toEqual({ right: 1200, top: 0, width: 46, height: 52 });
+    await expect(page.locator('#toolbar')).toHaveClass(/\bhas-caption\b/);
+
+    // Alt shows the bar over the toolbar without covering them; they still take the press.
+    await page.keyboard.press('Alt');
+    await expect(page.locator('#menubar')).toHaveClass(/\bpeek\b/);
+    const peek = (await page.locator('#menubar').boundingBox())!;
+    expect(peek).toMatchObject({ y: 0, height: 52, width: 1200 - 3 * 46 });
+    const hit = await page.evaluate(() => {
+      const b = document.querySelector('[data-window="close"]')!.getBoundingClientRect();
+      return document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2)?.getAttribute('data-window');
+    });
+    expect(hit).toBe('close');
+    await page.keyboard.press('Escape');
+
+    // And back.
+    await page.evaluate(() => (window as any).__pfw.store.set({ menuBarVisible: true }));
+    await expect(page.locator('#menubar [data-window]')).toHaveCount(3);
+    expect(await corner()).toEqual({ right: 1200, top: 0, width: 46, height: 32 });
+  });
+
+  test('the menu bar lines up with the toolbar under it', async ({ page }) => {
+    await open(page, 'simple.pdf');
+    const first = (await page.locator('#menubar .mb-title').first().boundingBox())!;
+    const sidebar = (await page.locator('#toolbar [data-action="sidebar"]').boundingBox())!;
+    expect(first.x).toBe(sidebar.x);
+    // the title text starts where the sidebar icon does, give or take a pixel
+    const textLeft = first.x + 8;
+    const icon = (await page.locator('#toolbar [data-action="sidebar"] svg').boundingBox())!;
+    expect(Math.abs(textLeft - icon.x)).toBeLessThanOrEqual(1.5);
+    // vertically centred in its row
+    expect(first.y + first.height / 2).toBe(16);
+  });
+
+  test('Settings opens below the title bar and toolbar', async ({ page }) => {
+    await open(page, 'simple.pdf');
+    await page.keyboard.press('Control+Comma');
+    const win = (await page.locator('.settings-window').boundingBox())!;
+    const toolbar = (await page.locator('#toolbar').boundingBox())!;
+    expect(win.y).toBeGreaterThanOrEqual(toolbar.y + toolbar.height + 16);
   });
 
   test('fits a 480px window without overflowing', async ({ page }) => {

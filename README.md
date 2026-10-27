@@ -12,7 +12,7 @@ annotations.
   <img alt="The menu bar above a document in Two Pages, with the thumbnail sidebar and the markup toolbar open, showing a highlight, an underline, a strikethrough, a rounded rectangle, an arrow, a text box, a note, an oval and a freehand check mark" src="docs/screenshot.png">
 </picture>
 
-**Version 0.4.1** · Windows 10 and 11, x64 · portable `Preview.exe` (about 7 MB) or a
+**Version 0.4.2** · Windows 10 and 11, x64 · portable `Preview.exe` (about 7 MB) or a
 per-user installer (about 4.6 MB) · no network access, no telemetry.
 
 ## Contents
@@ -83,7 +83,9 @@ per-user installer (about 4.6 MB) · no network access, no telemetry.
 **Menu bar and Settings**
 
 - A menu bar inside the window (Preview, File, Edit, View, Go, Tools, Window, Help),
-  continuous with the toolbar like a macOS title bar, with every feature of the app in it. Click a title and slide across the others
+  continuous with the toolbar like a macOS title bar, with every feature of the app in it.
+  It is the window's title bar: the minimize, maximize and close buttons sit in its
+  top-right corner (in the toolbar's corner while the bar is hidden). Click a title and slide across the others
   like on a Mac, or use the keyboard like on Windows: `Alt` or `F10` focuses the bar,
   `Alt`+underlined letter opens a menu, arrows move, `Enter` runs. View › Menu Bar hides
   it; `Alt` still brings it back. Help › Keyboard Shortcuts lists every shortcut.
@@ -153,7 +155,7 @@ A build produces two files:
 | Reading PDFs | [pdf.js](https://mozilla.github.io/pdf.js/) 6.4 (`pdfjs-dist`), assets bundled for offline use |
 | Writing PDFs | `@cantoo/pdf-lib` 2.11 and `@cantoo/fontkit` 2.0 (Malgun Gothic subsets) |
 | Build | Cross-compiled from Linux/WSL2 with cargo-xwin, clang-cl and lld-link; NSIS installer |
-| Tests | Vitest 5 (508 unit tests), Playwright 1.64 (255 end-to-end tests), PDFium checks of saved files, WebView2 DevTools checks of the real exe |
+| Tests | Vitest 5 (508 unit tests), Playwright 1.64 (258 end-to-end tests), PDFium checks of saved files, WebView2 DevTools checks of the real exe |
 
 Versions, licenses, the reasons behind each choice and how the tests are layered are in
 [docs/tech-stack.md](docs/tech-stack.md).
@@ -227,7 +229,8 @@ ring over a beach); `python scripts/make-icons.py` crops it to the lens, rounds 
 corners and writes every icon file (needs Pillow).
 
 The splash on the empty window and in About Preview is `src/assets/splash.jpg`, rendered
-by `node scripts/make-splash.mjs` from `scripts/splash/splash.html`.
+by `node scripts/make-splash.mjs` from `scripts/splash/splash.html`; it shows the major and minor
+version from `package.json`, so re-run it after a minor version bump.
 
 ## Project layout
 
@@ -276,6 +279,7 @@ Each feature has a design document in `docs/superpowers/specs/` and a plan in
 | 0.3.5 | 2026-10-27 | Square corners on the splash and the About window |
 | 0.4.0 | 2026-10-27 | In-window menu bar and Settings window (first in the style of Mac OS X Lion); every feature is a named command |
 | 0.4.1 | 2026-10-27 | Menu bar, its menus, Keyboard Shortcuts and Settings restyled to match the modern macOS look of the rest of the window, with dark mode |
+| 0.4.2 | 2026-10-27 | Window buttons in the top-right corner of the title bar; menu bar lined up with the toolbar; Settings opens below the toolbar; the splash shows the current version |
 
 ## Credits and licenses
 

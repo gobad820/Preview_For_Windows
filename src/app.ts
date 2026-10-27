@@ -12,6 +12,7 @@ import { Toolbar } from './toolbar/toolbar';
 import type { Rotation } from './types';
 import type { DocPoint } from './viewer/layout';
 import { showAbout } from './ui/about';
+import { WindowCaption } from './ui/caption';
 import { showAlert } from './ui/dialog';
 import { showMenu, type MenuItem } from './ui/menu';
 import { PdfViewer } from './viewer/viewer';
@@ -156,7 +157,7 @@ export class App {
           this.pickMark(kind, color),
         ),
       viewMenu: (anchor) => this.viewMenu(anchor),
-    }, this.platform.windowControls);
+    });
     const markupBar = this.el('markupbar');
     this.markupBar = new MarkupBar(markupBar, this.markup, {
       highlight: () => this.highlightButton(),
@@ -232,6 +233,15 @@ export class App {
 
     // ---- menu bar ----
     this.menuBar = new MenuBar(this.el('menubar'), this.commands, this.store);
+
+    // ---- window buttons: always the top-right corner, in the menu bar or, while it is hidden, the toolbar ----
+    const controls = this.platform.windowControls;
+    if (controls) {
+      const caption = new WindowCaption(controls);
+      const place = (barShown: boolean) => caption.mount(barShown ? this.el('menubar') : this.el('toolbar'));
+      place(this.store.get().menuBarVisible);
+      this.store.select('menuBarVisible', place);
+    }
 
     (window as unknown as { __pfw: unknown }).__pfw = {
       app: this,

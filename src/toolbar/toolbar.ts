@@ -1,4 +1,3 @@
-import type { WindowControls } from '../platform/types';
 import type { Store, ViewerState } from '../store';
 import type { Color } from '../annot/types';
 import type { ZoomMode } from '../types';
@@ -36,9 +35,6 @@ export interface HighlightButtonState {
 
 const ZOOM_PRESETS = [0.5, 0.75, 1, 1.25, 1.5, 2, 4];
 const ZOOM_SHORTCUTS: Record<string, string> = { 'fit-width': 'Ctrl+1', 'fit-page': 'Ctrl+2', '1': 'Ctrl+0' };
-
-/** Caption glyphs from "Segoe Fluent Icons" / "Segoe MDL2 Assets". */
-const GLYPH = { minimize: '', maximize: '', restore: '', close: '' } as const;
 
 /**
  * Unified title bar and toolbar (52px). The bar and the title block are window drag regions;
@@ -96,7 +92,6 @@ export class Toolbar {
     private readonly host: HTMLElement,
     private readonly store: Store<ViewerState>,
     private readonly actions: ToolbarActions,
-    windowControls: WindowControls | null = null,
   ) {
     host.innerHTML = template;
     host.setAttribute('data-tauri-drag-region', '');
@@ -113,7 +108,6 @@ export class Toolbar {
           '[data-action="highlight"], [data-action="highlight-menu"], [data-action="markup"]',
       ),
     );
-    if (windowControls) this.addCaptionButtons(windowControls);
 
     this.q('[data-action="sidebar"]').addEventListener('click', () => actions.toggleSidebar());
     this.q('[data-action="zoom-out"]').addEventListener('click', () => actions.zoomOut());
@@ -193,7 +187,7 @@ export class Toolbar {
   destroy(): void {
     for (const u of this.unsubscribe) u();
     if (this.zoomMenuOpen) closeMenus();
-    this.host.classList.remove('has-caption', 'find-open');
+    this.host.classList.remove('find-open');
     this.host.innerHTML = '';
   }
 
@@ -281,35 +275,5 @@ export class Toolbar {
       this.zoomMenuOpen = false;
       this.zoomButton.setAttribute('aria-expanded', 'false');
     });
-  }
-
-  private addCaptionButtons(controls: WindowControls): void {
-    const group = document.createElement('div');
-    group.className = 'tb-caption';
-    const make = (kind: 'minimize' | 'maximize' | 'close', label: string, run: () => Promise<void>) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.tabIndex = -1;
-      b.dataset['window'] = kind;
-      b.setAttribute('aria-label', label);
-      b.title = label;
-      b.textContent = GLYPH[kind];
-      b.addEventListener('click', () => void run());
-      group.append(b);
-      return b;
-    };
-    make('minimize', 'Minimize', () => controls.minimize());
-    const max = make('maximize', 'Maximize', () => controls.toggleMaximize());
-    make('close', 'Close', () => controls.close());
-    this.host.append(group);
-    this.host.classList.add('has-caption');
-
-    const sync = (maximized: boolean) => {
-      max.textContent = maximized ? GLYPH.restore : GLYPH.maximize;
-      max.setAttribute('aria-label', maximized ? 'Restore' : 'Maximize');
-      max.title = maximized ? 'Restore Down' : 'Maximize';
-    };
-    this.unsubscribe.push(controls.onMaximizedChange(sync));
-    void controls.isMaximized().then(sync, () => {});
   }
 }

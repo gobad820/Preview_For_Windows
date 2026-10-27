@@ -87,13 +87,13 @@ async function choose(page: Page, menuName: string, label: string) {
 }
 
 test.describe('menu bar look and place', () => {
-  test('a 24px bar in the toolbar\'s colours and type, one title area with it, semibold application menu', async ({ page }) => {
+  test('a 32px title bar in the toolbar\'s colours and type, one title area with it, semibold application menu', async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'light' });
     await open(page, 'simple.pdf');
     await expect(bar(page)).toBeVisible();
     const b = (await bar(page).boundingBox())!;
-    expect(b).toMatchObject({ x: 0, y: 0, height: 24, width: 1200 });
-    expect((await page.locator('#toolbar').boundingBox())!.y).toBe(24);
+    expect(b).toMatchObject({ x: 0, y: 0, height: 32, width: 1200 });
+    expect((await page.locator('#toolbar').boundingBox())!.y).toBe(32);
     await expect(page.locator('#menubar .mb-title')).toHaveText(['Preview', 'File', 'Edit', 'View', 'Go', 'Tools', 'Window', 'Help']);
     expect(await css(title(page, 'Preview'), 'font-weight')).toBe('600');
     expect(await css(title(page, 'File'), 'font-weight')).toBe('400');
@@ -178,7 +178,7 @@ test.describe('menu bar look and place', () => {
     // Just under the bar, left edge under the title.
     const t = (await view.boundingBox())!;
     const m = (await menu(page).boundingBox())!;
-    expect(Math.round(m.y)).toBe(26);
+    expect(Math.round(m.y)).toBe(34);
     expect(Math.abs(m.x - t.x)).toBeLessThanOrEqual(1);
 
     // Shortcuts are right-aligned.
@@ -578,9 +578,10 @@ test.describe('hidden menu bar', () => {
     expect((await page.locator('#toolbar').boundingBox())!.y).toBe(0);
     // With the same look as when it shows.
     expect(await css(bar(page), 'background-color')).toBe(await css(page.locator('#toolbar'), 'background-color'));
-    expect(await css(bar(page), 'height')).toBe('24px');
+    // It takes the toolbar's whole height, so no toolbar control shows half covered under it.
+    expect(await css(bar(page), 'height')).toBe('52px');
     await page.keyboard.press('ArrowDown');
-    expect(Math.round((await menu(page).boundingBox())!.y)).toBe(26);
+    expect(Math.round((await menu(page).boundingBox())!.y)).toBe(54);
     await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
     await expect(bar(page)).toBeHidden();
@@ -597,7 +598,7 @@ test.describe('hidden menu bar', () => {
     await open(page, 'simple.pdf');
     await page.evaluate(() => (window as any).__pfw.store.set({ error: 'Something went wrong' }));
     await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished)));
-    const toolbarBottom = 24 + 52;
+    const toolbarBottom = 32 + 52;
     expect(Math.round((await page.locator('.error-banner').boundingBox())!.y)).toBe(toolbarBottom + 12);
     await page.evaluate(() => (window as any).__pfw.store.set({ menuBarVisible: false }));
     expect(Math.round((await page.locator('.error-banner').boundingBox())!.y)).toBe(52 + 12);
