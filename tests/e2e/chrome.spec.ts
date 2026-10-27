@@ -404,8 +404,10 @@ test.describe('window states', () => {
     await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished)));
     const box = (await toast.boundingBox())!;
     expect(Math.abs(box.x + box.width / 2 - 600)).toBeLessThanOrEqual(1);
-    expect(box.y).toBeGreaterThanOrEqual(52);
-    expect(box.y).toBeLessThanOrEqual(76);
+    // Just under the toolbar, which sits under the menu bar.
+    const bar = (await page.locator('#toolbar').boundingBox())!;
+    expect(box.y).toBeGreaterThanOrEqual(bar.y + bar.height);
+    expect(box.y).toBeLessThanOrEqual(bar.y + bar.height + 24);
     expect(await style(page, '.error-banner', 'border-top-left-radius')).toBe('10px');
     expect(await style(page, '.error-banner', 'backdrop-filter')).not.toBe('none');
     const bg = await style(page, '.error-banner', 'background-color');
