@@ -9,14 +9,11 @@ annotations.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-dark.png">
-  <img alt="A document in Two Pages with the thumbnail sidebar and the markup toolbar open, showing a highlight, an underline, a strikethrough, a rounded rectangle, an arrow, a text box, a note, an oval and a freehand check mark" src="docs/screenshot.png">
+  <img alt="The Lion-style menu bar above a document in Two Pages, with the thumbnail sidebar and the markup toolbar open, showing a highlight, an underline, a strikethrough, a rounded rectangle, an arrow, a text box, a note, an oval and a freehand check mark" src="docs/screenshot.png">
 </picture>
 
-**Version 0.3.5** · Windows 10 and 11, x64 · portable `Preview.exe` (about 7 MB) or a
+**Version 0.4.0** · Windows 10 and 11, x64 · portable `Preview.exe` (about 7 MB) or a
 per-user installer (about 4.6 MB) · no network access, no telemetry.
-
-In progress: an in-window menu bar (Preview, File, Edit, View, Go, Tools, Window, Help)
-and a Settings window, both in the style of Mac OS X Lion.
 
 ## Contents
 
@@ -83,6 +80,19 @@ and a Settings window, both in the style of Mac OS X Lion.
   they use. Reopening a file saved by this app makes its annotations editable again;
   annotations made by other apps are shown and kept, but not editable.
 
+**Menu bar and Settings**, in the style of Mac OS X Lion
+
+- A menu bar inside the window (Preview, File, Edit, View, Go, Tools, Window, Help) set in
+  Lucida, with every feature of the app in it. Click a title and slide across the others
+  like on a Mac, or use the keyboard like on Windows: `Alt` or `F10` focuses the bar,
+  `Alt`+underlined letter opens a menu, arrows move, `Enter` runs. View › Menu Bar hides
+  it; `Alt` still brings it back. Help › Keyboard Shortcuts lists every shortcut.
+- Settings… (`Ctrl+,`) opens a Lion preferences window with General, Markup and Window
+  panes: default zoom for new files, page layout and Book Mode, showing the sidebar when
+  a document opens, remembering each file's position, the default highlight color, shape
+  color, line width and text size, and showing the menu bar. Changes apply at once.
+- The menu bar and Settings stay light in the dark theme, as Lion had no dark mode.
+
 **Looks like a Mac app**
 
 - Unified 52 px title bar and toolbar, Mica backdrop on Windows 11, Inter, SF-style
@@ -101,6 +111,8 @@ Password-protected and non-PDF files show an inline error instead of a blank win
 | Action | Keys |
 | --- | --- |
 | Open | `Ctrl+O` |
+| Settings | `Ctrl+,` |
+| Menu bar: focus / open a menu | `Alt` or `F10` / `Alt`+underlined letter |
 | Find / close find | `Ctrl+F` / `Esc` |
 | Next / previous match (in the find field) | `Enter` / `Shift+Enter` |
 | Zoom in / out / 100% | `Ctrl+=` / `Ctrl+-` / `Ctrl+0` |
@@ -141,7 +153,7 @@ A build produces two files:
 | Reading PDFs | [pdf.js](https://mozilla.github.io/pdf.js/) 6.4 (`pdfjs-dist`), assets bundled for offline use |
 | Writing PDFs | `@cantoo/pdf-lib` 2.11 and `@cantoo/fontkit` 2.0 (Malgun Gothic subsets) |
 | Build | Cross-compiled from Linux/WSL2 with cargo-xwin, clang-cl and lld-link; NSIS installer |
-| Tests | Vitest 5 (460 unit tests), Playwright 1.64 (202 end-to-end tests), PDFium checks of saved files, WebView2 DevTools checks of the real exe |
+| Tests | Vitest 5 (499 unit tests), Playwright 1.64 (242 end-to-end tests), PDFium checks of saved files, WebView2 DevTools checks of the real exe |
 
 Versions, licenses, the reasons behind each choice and how the tests are layered are in
 [docs/tech-stack.md](docs/tech-stack.md).
@@ -225,6 +237,9 @@ src-tauri/          Tauri 2 shell (Rust): file read/write, startup file, dialogs
 src/app.ts          wires platform, store and components; open/save/close flows; shortcut dispatch;
                     registers every feature as a command
 src/commands.ts     the command registry menus are built from
+src/menubar/        the in-window menu bar: menus as lists of command ids, Lion drop-downs,
+                    keyboard handling, the Keyboard Shortcuts panel
+src/settings/       the settings model (localStorage) and the Lion Settings window
 src/store.ts        app state with subscriptions
 src/viewer/         virtualised page view (continuous and two pages) + pure layout and zoom math
 src/pdf/            pdf.js document wrapper, cancellable page renderer, text layer
@@ -237,7 +252,7 @@ src/sidebar/        thumbnails and outline
 src/toolbar/        toolbar, page indicator, zoom menu
 src/platform/       Platform interface, Tauri implementation, browser shim for tests
 src/ui/             Mac-style icons, menus, alerts and the About window
-src/state/          per-file last position and window-wide preferences (localStorage)
+src/state/          per-file last position (localStorage)
 src/assets/         Inter font, splash image
 tests/unit/         Vitest
 tests/e2e/          Playwright
@@ -259,6 +274,7 @@ Each feature has a design document in `docs/superpowers/specs/` and a plan in
 | 0.3.1 – 0.3.3 | 2026-10-26 – 27 | App icon from the author's artwork, splash and About window |
 | 0.3.4 | 2026-10-27 | Photographic splash with the name set in EB Garamond |
 | 0.3.5 | 2026-10-27 | Square corners on the splash and the About window |
+| 0.4.0 | 2026-10-27 | In-window menu bar and Settings window in the style of Mac OS X Lion; every feature is a named command |
 
 ## Credits and licenses
 
