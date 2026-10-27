@@ -1,12 +1,14 @@
 import type { Commands } from '../commands';
+import { t } from '../i18n';
 
 /** Marks a separator line between groups of items. */
 export const SEPARATOR = '-';
 
 /** One menu of the in-window menu bar. Adding a feature: register a command, name its id here. */
 export interface MenuSpec {
-  readonly title: string;
-  /** The underlined letter: Alt+key opens the menu. Lowercase, a letter of the title. */
+  /** The title in the current UI language, read each time it is shown. */
+  readonly title: () => string;
+  /** The underlined letter: Alt+key opens the menu, in every language. Lowercase, a letter of the English title. */
   readonly key: string;
   /** The application menu, shown in bold. */
   readonly app?: boolean;
@@ -18,10 +20,10 @@ const _ = SEPARATOR;
 
 /** Preview's menus, with Windows access keys. */
 export const MENUS: readonly MenuSpec[] = [
-  { title: 'Preview', key: 'p', app: true, items: ['app.about', _, 'app.preferences', _, 'file.close'] },
-  { title: 'File', key: 'f', items: ['file.open', _, 'file.close', 'file.save', 'file.saveAs', _, 'file.print'] },
+  { title: () => t('menu.preview'), key: 'p', app: true, items: ['app.about', _, 'app.preferences', _, 'file.close'] },
+  { title: () => t('menu.file'), key: 'f', items: ['file.open', _, 'file.close', 'file.save', 'file.saveAs', _, 'file.print'] },
   {
-    title: 'Edit',
+    title: () => t('menu.edit'),
     key: 'e',
     items: [
       'edit.undo', 'edit.redo', _,
@@ -31,7 +33,7 @@ export const MENUS: readonly MenuSpec[] = [
     ],
   },
   {
-    title: 'View',
+    title: () => t('menu.view'),
     key: 'v',
     items: [
       'view.sidebar', 'view.thumbnails', 'view.outline', _,
@@ -40,9 +42,9 @@ export const MENUS: readonly MenuSpec[] = [
       'view.markupToolbar', 'view.menuBar',
     ],
   },
-  { title: 'Go', key: 'g', items: ['go.previous', 'go.next', _, 'go.first', 'go.last', _, 'go.page'] },
+  { title: () => t('menu.go'), key: 'g', items: ['go.previous', 'go.next', _, 'go.first', 'go.last', _, 'go.page'] },
   {
-    title: 'Tools',
+    title: () => t('menu.tools'),
     key: 't',
     items: [
       'view.rotateLeft', 'view.rotateRight', _,
@@ -52,9 +54,26 @@ export const MENUS: readonly MenuSpec[] = [
       'tools.text', 'tools.note',
     ],
   },
-  { title: 'Window', key: 'w', items: ['window.minimize', 'window.zoom'] },
-  { title: 'Help', key: 'h', items: ['help.shortcuts', _, 'app.about'] },
+  { title: () => t('menu.window'), key: 'w', items: ['window.minimize', 'window.zoom'] },
+  { title: () => t('menu.help'), key: 'h', items: ['help.shortcuts', _, 'app.about'] },
 ];
+
+/** A title split around its access key, which is underlined while access keys are shown. */
+export interface AccessKeyParts {
+  before: string;
+  /** The letter, as shown (upper case where the title does not have it). */
+  key: string;
+  after: string;
+  /** The title does not have the letter (Korean): it follows in parentheses, "파일(F)", while access keys are shown. */
+  hint: boolean;
+}
+
+/** Where `key` sits in `title`; Korean Windows writes a title without it as "파일(F)". */
+export function accessKey(title: string, key: string): AccessKeyParts {
+  const at = title.toLowerCase().indexOf(key);
+  if (at < 0) return { before: title, key: key.toUpperCase(), after: '', hint: true };
+  return { before: title.slice(0, at), key: title.charAt(at), after: title.slice(at + 1), hint: false };
+}
 
 /** A menu row as shown right now. */
 export interface MenuRow {

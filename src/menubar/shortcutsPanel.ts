@@ -1,4 +1,5 @@
 import type { Commands } from '../commands';
+import { t } from '../i18n';
 import { icons } from '../ui/icons';
 import { SEPARATOR, type MenuSpec } from './menus';
 
@@ -25,7 +26,7 @@ export function shortcutSections(menus: readonly MenuSpec[], commands: Commands)
       seen.add(id);
       rows.push({ label: commands.label(id), shortcut });
     }
-    if (rows.length > 0) sections.push({ title: menu.title, rows });
+    if (rows.length > 0) sections.push({ title: menu.title(), rows });
   }
   return sections;
 }
@@ -59,12 +60,12 @@ export function showShortcuts(menus: readonly MenuSpec[], commands: Commands): v
   const closeButton = document.createElement('button');
   closeButton.type = 'button';
   closeButton.className = 'ks-close';
-  closeButton.setAttribute('aria-label', 'Close');
+  closeButton.setAttribute('aria-label', t('menu.shortcuts.close'));
   closeButton.innerHTML = icons.closeSmall;
   const heading = document.createElement('h2');
   heading.className = 'ks-title';
   heading.id = 'ks-title';
-  heading.textContent = 'Keyboard Shortcuts';
+  heading.textContent = t('menu.help.shortcuts');
   bar.append(closeButton, heading);
 
   const body = document.createElement('div');

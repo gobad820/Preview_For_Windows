@@ -3,7 +3,7 @@ import type { Store, ViewerState } from '../store';
 import { icons } from '../ui/icons';
 import { closeMenus } from '../ui/menu';
 import { AltTap } from './keys';
-import { MENUS, SEPARATOR, keyLetter, menuForKey, menuItems, type MenuRow, type MenuSpec } from './menus';
+import { MENUS, SEPARATOR, accessKey, keyLetter, menuForKey, menuItems, type MenuRow, type MenuSpec } from './menus';
 
 /** Open dialogs and other menus: the menu bar does not open over them. */
 const MODAL = '[role="dialog"], [role="alertdialog"], [role="menu"]:not(.mb-menu)';
@@ -79,6 +79,12 @@ export class MenuBar {
       if (this.drop) this.close();
     });
     store.select('menuBarVisible', () => this.syncHidden());
+    // A new UI language: titles re-render; an open menu closes rather than show the old one.
+    store.subscribe((s, prev) => {
+      if (s.locale === prev.locale) return;
+      this.close();
+      menus.forEach((m, i) => this.label(this.titles[i]!, m));
+    });
   }
 
   // ---- titles -----------------------------------------------------------------
@@ -90,11 +96,7 @@ export class MenuBar {
     t.setAttribute('aria-haspopup', 'menu');
     t.setAttribute('aria-expanded', 'false');
     t.setAttribute('aria-keyshortcuts', `Alt+${m.key.toUpperCase()}`);
-    const at = m.title.toLowerCase().indexOf(m.key);
-    const key = document.createElement('span');
-    key.className = 'mb-key';
-    key.textContent = m.title.charAt(at);
-    t.append(m.title.slice(0, at), key, m.title.slice(at + 1));
+    this.label(t, m);
     t.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
       e.stopPropagation();
@@ -114,6 +116,22 @@ export class MenuBar {
     });
     this.titles.push(t);
     return t;
+  }
+
+  /** The title in the current UI language around its access key; Korean ones get "(F)", shown with the underline. */
+  private label(t: HTMLElement, m: MenuSpec): void {
+    const parts = accessKey(m.title(), m.key);
+    const key = document.createElement('span');
+    key.className = 'mb-key';
+    key.textContent = parts.key;
+    if (!parts.hint) {
+      t.replaceChildren(parts.before, key, parts.after);
+      return;
+    }
+    const hint = document.createElement('span');
+    hint.className = 'mb-key-hint';
+    hint.append('(', key, ')');
+    t.replaceChildren(parts.before, hint);
   }
 
   private sync(): void {
@@ -192,7 +210,7 @@ export class MenuBar {
     const drop = document.createElement('div');
     drop.className = 'menu mb-menu';
     drop.setAttribute('role', 'menu');
-    drop.setAttribute('aria-label', spec.title);
+    drop.setAttribute('aria-label', spec.title());
     for (const entry of menuItems(spec, this.commands)) {
       if (entry === SEPARATOR) {
         const sep = document.createElement('div');
