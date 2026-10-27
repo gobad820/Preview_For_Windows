@@ -95,8 +95,14 @@ export function menuItems(menu: MenuSpec, commands: Commands): MenuEntry[] {
   return out;
 }
 
-/** The menu that Alt+`key` opens, or -1. An IME may report a Hangul letter: the physical key counts then. */
+/** The Latin letter a key types; when an IME reports another script (ㄹ for F), the letter on the physical key. */
+export function keyLetter(k: { key: string; code?: string }): string | null {
+  if (/^[a-z]$/i.test(k.key)) return k.key.toLowerCase();
+  return /^Key([A-Z])$/.exec(k.code ?? '')?.[1]?.toLowerCase() ?? null;
+}
+
+/** The menu that Alt+`key` opens, or -1. */
 export function menuForKey(menus: readonly MenuSpec[], k: { key: string; code?: string }): number {
-  const ch = /^[a-z]$/i.test(k.key) ? k.key.toLowerCase() : /^Key([A-Z])$/.exec(k.code ?? '')?.[1]?.toLowerCase();
+  const ch = keyLetter(k);
   return ch ? menus.findIndex((m) => m.key === ch) : -1;
 }

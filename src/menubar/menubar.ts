@@ -3,7 +3,7 @@ import type { Store, ViewerState } from '../store';
 import { icons } from '../ui/icons';
 import { closeMenus } from '../ui/menu';
 import { AltTap } from './keys';
-import { MENUS, SEPARATOR, menuForKey, menuItems, type MenuRow, type MenuSpec } from './menus';
+import { MENUS, SEPARATOR, keyLetter, menuForKey, menuItems, type MenuRow, type MenuSpec } from './menus';
 
 /** Open dialogs and other menus: the menu bar does not open over them. */
 const MODAL = '[role="dialog"], [role="alertdialog"], [role="menu"]:not(.mb-menu)';
@@ -33,6 +33,8 @@ export class MenuBar {
   private keyboard = false;
   private altHeld = false;
   private swallowing = false;
+  /** A mouse button, pen or finger is down: Alt released now ends a drag, not a tap. */
+  private pressed = false;
 
   constructor(
     private readonly host: HTMLElement,
@@ -55,10 +57,19 @@ export class MenuBar {
     window.addEventListener('keyup', this.onKeyUp, true);
     window.addEventListener('pointerdown', this.onPointerDown, true);
     for (const type of SWALLOWED) window.addEventListener(type, this.onSwallow, true);
+    const released = (e: PointerEvent) => {
+      this.pressed = false;
+      // A cancelled press (a touch that became a pan) has no pointerup to end the swallowing.
+      if (e.type === 'pointercancel') this.swallowing = false;
+    };
+    window.addEventListener('pointerup', released, true);
+    window.addEventListener('pointercancel', released, true);
+    window.addEventListener('wheel', () => this.tap.reset(), { capture: true, passive: true });
     window.addEventListener('blur', () => {
       this.tap.reset();
       this.altHeld = false;
       this.swallowing = false;
+      this.pressed = false;
       this.close();
     });
     window.addEventListener('resize', () => {
@@ -113,9 +124,11 @@ export class MenuBar {
     this.syncHidden();
   }
 
-  /** Hidden by View › Menu Bar, except while it is in use. */
+  /** Hidden by View › Menu Bar, except while in use; then it shows over the toolbar so nothing moves. */
   private syncHidden(): void {
-    this.host.hidden = !this.store.get().menuBarVisible && this.current < 0;
+    const shown = this.store.get().menuBarVisible;
+    this.host.hidden = !shown && this.current < 0;
+    this.host.classList.toggle('peek', !shown && this.current >= 0);
   }
 
   // ---- open and close -----------------------------------------------------------
@@ -338,33 +351,33 @@ export class MenuBar {
         this.close();
         return;
     }
+    // Ctrl and AltGr chords are neither access keys nor type-select.
+    if (e.ctrlKey || e.metaKey) return;
     if (!this.drop || e.altKey) {
       const i = menuForKey(this.menus, e);
       if (i >= 0) {
         this.keyboard = true;
         this.open(i, 'first');
       }
-    } else if (e.key.length === 1) {
-      this.jump(e.key.toLowerCase());
+    } else {
+      const ch = keyLetter(e) ?? (e.key.length === 1 ? e.key.toLowerCase() : null);
+      if (ch) this.jump(ch);
     }
   };
 
   /** Idle: Alt+letter and F10 enter the menu bar (Alt alone does, on release). */
   private idleKey(e: KeyboardEvent): void {
-    if (e.isComposing || e.ctrlKey || e.metaKey || e.shiftKey || this.blocked()) return;
-    if (e.key === 'F10' && !e.altKey) {
-      e.preventDefault();
-      e.stopPropagation();
-      this.focusBar(0);
-      return;
-    }
-    if (!e.altKey || e.repeat) return;
-    const i = menuForKey(this.menus, e);
-    if (i < 0) return;
+    if (e.isComposing || e.ctrlKey || e.metaKey || e.shiftKey || e.repeat) return;
+    const f10 = e.key === 'F10' && !e.altKey;
+    const i = e.altKey ? menuForKey(this.menus, e) : -1;
+    if ((!f10 && i < 0) || this.blocked()) return;
     e.preventDefault();
     e.stopPropagation();
-    this.keyboard = true;
-    this.open(i, 'first');
+    if (f10) this.focusBar(0);
+    else {
+      this.keyboard = true;
+      this.open(i, 'first');
+    }
   }
 
   private readonly onKeyUp = (e: KeyboardEvent): void => {
@@ -374,7 +387,7 @@ export class MenuBar {
       this.sync();
     }
     if (this.current >= 0) e.stopPropagation();
-    if (!tapped || (this.current < 0 && this.blocked())) return;
+    if (!tapped || this.pressed || (this.current < 0 && this.blocked())) return;
     // Handled here, so the host window does not enter its own menu mode.
     e.preventDefault();
     if (this.current >= 0) this.close();
@@ -385,6 +398,7 @@ export class MenuBar {
 
   private readonly onPointerDown = (e: PointerEvent): void => {
     this.tap.reset();
+    this.pressed = true;
     if (this.current < 0) return;
     const t = e.target as Node;
     if (this.titles.some((x) => x.contains(t)) || this.drop?.contains(t)) return;

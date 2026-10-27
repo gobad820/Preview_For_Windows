@@ -1074,7 +1074,7 @@ button, input { font: inherit; color: inherit; letter-spacing: inherit; }
 /* ---- in-window menu bar, Mac OS X Lion (src/menubar/) ------------------------------
    Lion has no dark mode: the bar, its drop-downs and the shortcuts panel stay light. */
 .app { --menubar-h: 22px; }
-.app:has(> .menubar[hidden]) { --menubar-h: 0px; }
+.app:has(> .menubar:is([hidden], .peek)) { --menubar-h: 0px; }
 .menubar {
   display: flex; flex: none;
   height: 22px; padding: 0 4px; overflow: hidden;
@@ -1086,6 +1086,8 @@ button, input { font: inherit; color: inherit; letter-spacing: inherit; }
   position: relative; z-index: 21;
 }
 .menubar[hidden] { display: none; }
+/* hidden by View › Menu Bar but in use (Alt): over the toolbar, so the document does not move */
+.menubar.peek { position: absolute; top: 0; left: 0; right: 0; }
 .mb-titles { display: flex; flex: none; }
 .mb-title { padding: 0 9px; white-space: nowrap; }
 .mb-title.mb-app { font-weight: bold; }

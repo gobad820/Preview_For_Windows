@@ -165,6 +165,20 @@ test.describe('menus and commands', () => {
     expect(await page.evaluate(() => (window as any).__pfw.app.document.pages.length)).toBe(before);
   });
 
+  test('a closing press that is cancelled (touch pan) does not swallow the next click', async ({ page }) => {
+    await open(page, 'simple.pdf');
+    await title(page, 'File').click();
+    await page.evaluate(() => {
+      const viewer = document.getElementById('viewer')!;
+      const init = { bubbles: true, cancelable: true, pointerType: 'touch', isPrimary: true, clientX: 400, clientY: 400 };
+      viewer.dispatchEvent(new PointerEvent('pointerdown', init));
+      viewer.dispatchEvent(new PointerEvent('pointercancel', init));
+    });
+    await expect(menu(page)).toHaveCount(0);
+    await page.locator('#toolbar [data-action="sidebar"]').click();
+    expect((await state(page)).sidebarOpen).toBe(true);
+  });
+
   test('press on a title, drag to an item and release runs it', async ({ page }) => {
     await open(page, 'simple.pdf');
     const go = (await title(page, 'Go').boundingBox())!;
@@ -286,6 +300,13 @@ test.describe('keyboard', () => {
     await expect(item(page, 'Last Page')).toHaveClass(/\bactive\b/);
     await page.keyboard.press('ArrowLeft');
     await expect(menu(page)).toHaveAttribute('aria-label', 'View');
+    // Type-select by label, by the physical key when the Korean IME reports a Hangul letter, never with Ctrl.
+    await page.keyboard.press('z');
+    await expect(item(page, 'Zoom In')).toHaveClass(/\bactive\b/);
+    await page.keyboard.press('Control+a');
+    await expect(item(page, 'Zoom In')).toHaveClass(/\bactive\b/);
+    await page.evaluate(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ㅋ', code: 'KeyZ', bubbles: true, cancelable: true })));
+    await expect(item(page, 'Zoom Out')).toHaveClass(/\bactive\b/);
     await page.keyboard.press('ArrowRight');
     await expect(menu(page)).toHaveAttribute('aria-label', 'Go');
     await page.keyboard.press('Escape');
@@ -306,6 +327,10 @@ test.describe('keyboard', () => {
     await open(page, 'simple.pdf');
     await page.keyboard.press('F10');
     await expect(title(page, 'Preview')).toHaveClass(/\bfocused\b/);
+    // Ctrl shortcuts are not access keys.
+    await page.keyboard.press('Control+f');
+    await expect(menu(page)).toHaveCount(0);
+    await expect(title(page, 'Preview')).toHaveClass(/\bfocused\b/);
     await page.keyboard.press('Escape');
     await expect(page.locator('#menubar .mb-title.focused')).toHaveCount(0);
   });
@@ -321,6 +346,14 @@ test.describe('keyboard', () => {
     const v = (await page.locator('#viewer').boundingBox())!;
     await page.mouse.click(v.x + 10, v.y + v.height - 10);
     await page.keyboard.up('Alt');
+    // Alt+wheel, and Alt pressed and released while a mouse button is held.
+    await page.mouse.move(v.x + 200, v.y + 200);
+    await page.keyboard.down('Alt');
+    await page.mouse.wheel(0, 120);
+    await page.keyboard.up('Alt');
+    await page.mouse.down();
+    await page.keyboard.press('Alt');
+    await page.mouse.up();
     await page.evaluate(() => {
       for (const type of ['keydown', 'keyup']) {
         window.dispatchEvent(new KeyboardEvent(type, { key: 'HangulMode', code: 'Lang1', bubbles: true }));
@@ -434,6 +467,12 @@ test.describe('hidden menu bar', () => {
     await page.keyboard.press('Alt');
     await expect(bar(page)).toBeVisible();
     await expect(title(page, 'Preview')).toHaveClass(/\bfocused\b/);
+    // It shows over the toolbar: nothing below moves or resizes.
+    expect((await bar(page).boundingBox())!.y).toBe(0);
+    expect((await page.locator('#toolbar').boundingBox())!.y).toBe(0);
+    await page.keyboard.press('ArrowDown');
+    expect(Math.round((await menu(page).boundingBox())!.y)).toBe(22);
+    await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
     await expect(bar(page)).toBeHidden();
 
@@ -468,6 +507,7 @@ test.describe('Help › Keyboard Shortcuts', () => {
     const row = panel.locator('.ks-row:has(.ks-label:text-is("Open…"))');
     await expect(row.locator('kbd')).toHaveText('Ctrl+O');
     await expect(panel.locator('.ks-row:has(.ks-label:text-is("Close Window"))')).toHaveCount(1);
+    await expect(panel.locator('.ks-section:has(h3:text-is("File")) .ks-label:text-is("Close Window")')).toHaveCount(1);
     expect(await css(panel.locator('.lion-titlebar'), 'background-image')).toBe('linear-gradient(rgb(235, 235, 235), rgb(207, 207, 207))');
     expect(await css(panel.locator('.lion-panel-body'), 'background-color')).toBe('rgb(236, 236, 236)');
     // Modal: keys do not reach the document, and the menu bar stays put.
@@ -475,6 +515,13 @@ test.describe('Help › Keyboard Shortcuts', () => {
     expect((await state(page)).currentPage).toBe(1);
     await page.keyboard.press('Alt');
     await expect(page.locator('#menubar .mb-title.focused')).toHaveCount(0);
+    // Browser keys (reload, print) do nothing behind it.
+    const notPrevented = await page.evaluate(() =>
+      [{ key: 'F5' }, { key: 'r', ctrlKey: true }, { key: 'p', ctrlKey: true }].map((k) =>
+        document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { ...k, bubbles: true, cancelable: true })),
+      ),
+    );
+    expect(notPrevented).toEqual([false, false, false]);
     await page.keyboard.press('Escape');
     await expect(panel).toHaveCount(0);
     await expect(page.locator('#viewer')).toBeFocused();

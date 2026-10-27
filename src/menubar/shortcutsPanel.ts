@@ -6,15 +6,21 @@ export interface ShortcutSection {
   rows: { label: string; shortcut: string }[];
 }
 
-/** The commands that have a shortcut, grouped by menu; a command named in two menus is listed under the first. */
+/**
+ * The commands that have a shortcut, grouped by menu. A command named in several menus is listed
+ * once, under the last: the application menu comes first and repeats commands (Close Window) that
+ * people look for under File.
+ */
 export function shortcutSections(menus: readonly MenuSpec[], commands: Commands): ShortcutSection[] {
+  const owner = new Map<string, MenuSpec>();
+  for (const menu of menus) for (const id of menu.items) owner.set(id, menu);
   const seen = new Set<string>();
   const sections: ShortcutSection[] = [];
   for (const menu of menus) {
     const rows: ShortcutSection['rows'] = [];
     for (const id of menu.items) {
       const shortcut = id === SEPARATOR ? undefined : commands.get(id)?.shortcut;
-      if (!shortcut || seen.has(id)) continue;
+      if (!shortcut || owner.get(id) !== menu || seen.has(id)) continue;
       seen.add(id);
       rows.push({ label: commands.label(id), shortcut });
     }
@@ -85,15 +91,12 @@ export function showShortcuts(menus: readonly MenuSpec[], commands: Commands): v
     scrim.remove();
     if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus({ preventScroll: true });
   };
+  // Modal: no key reaches the app, and none does its browser default (reload, print, page zoom).
   const onKey = (e: KeyboardEvent) => {
     e.stopPropagation();
-    if (e.key === 'Escape' || e.key === 'Enter') {
-      e.preventDefault();
-      close();
-    } else if (e.key === 'Tab') {
-      e.preventDefault();
-      closeButton.focus();
-    }
+    e.preventDefault();
+    if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') close();
+    else if (e.key === 'Tab') closeButton.focus();
   };
   closeButton.addEventListener('click', close);
   // Presses outside the panel neither reach the window nor take focus away.
