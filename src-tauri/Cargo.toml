@@ -1,6 +1,6 @@
 [package]
 name = "preview"
-version = "0.4.2"
+version = "0.5.0"
 description = "A fast, clean PDF viewer for Windows"
 authors = ["Sanghae"]
 edition = "2021"

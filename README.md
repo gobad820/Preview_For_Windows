@@ -12,7 +12,7 @@ annotations.
   <img alt="The menu bar above a document in Two Pages, with the thumbnail sidebar and the markup toolbar open, showing a highlight, an underline, a strikethrough, a rounded rectangle, an arrow, a text box, a note, an oval and a freehand check mark" src="docs/screenshot.png">
 </picture>
 
-**Version 0.4.2** · Windows 10 and 11, x64 · portable `Preview.exe` (about 7 MB) or a
+**Version 0.5.0** · English and Korean · Windows 10 and 11, x64 · portable `Preview.exe` (about 7 MB) or a
 per-user installer (about 4.6 MB) · no network access, no telemetry.
 
 ## Contents
@@ -85,8 +85,8 @@ per-user installer (about 4.6 MB) · no network access, no telemetry.
 - A menu bar inside the window (Preview, File, Edit, View, Go, Tools, Window, Help),
   continuous with the toolbar like a macOS title bar, with every feature of the app in it.
   It is the window's title bar: the minimize, maximize and close buttons sit in its
-  top-right corner (in the toolbar's corner while the bar is hidden). Click a title and slide across the others
-  like on a Mac, or use the keyboard like on Windows: `Alt` or `F10` focuses the bar,
+  top-right corner (in the toolbar's corner while the bar is hidden). Click a title and
+  slide across the others like on a Mac, or use the keyboard like on Windows: `Alt` or `F10` focuses the bar,
   `Alt`+underlined letter opens a menu, arrows move, `Enter` runs. View › Menu Bar hides
   it; `Alt` still brings it back. Help › Keyboard Shortcuts lists every shortcut.
 - Settings… (`Ctrl+,`) opens a macOS-style Settings window with General, Markup and Window
@@ -94,6 +94,17 @@ per-user installer (about 4.6 MB) · no network access, no telemetry.
   a document opens, remembering each file's position, the default highlight color, shape
   color, line width and text size, and showing the menu bar. Changes apply at once.
 - Both follow the light and dark theme like the rest of the window.
+
+**English and Korean**
+
+- Settings › General › Language: Automatic (follows the Windows display language),
+  English or 한국어. The whole interface switches at once — menus, toolbar, markup tools,
+  alerts, error messages, the open and save dialogs and Settings itself — without
+  restarting or closing the document.
+- Korean follows the terms of macOS Preview in Korean (파일, 편집, 보기, 축소판, 폭 맞춤,
+  하이라이트, …); menu access keys show as 파일(F) while Alt is held, as on Korean Windows.
+
+<img alt="The window in Korean on Windows: the 보기 menu open from the menu bar, the sidebar with 축소판 and 목차, and the toolbar reading 1 / 6페이지 and 폭 맞춤" src="docs/screenshot-ko.png" width="640">
 
 **Looks like a Mac app**
 
@@ -155,7 +166,7 @@ A build produces two files:
 | Reading PDFs | [pdf.js](https://mozilla.github.io/pdf.js/) 6.4 (`pdfjs-dist`), assets bundled for offline use |
 | Writing PDFs | `@cantoo/pdf-lib` 2.11 and `@cantoo/fontkit` 2.0 (Malgun Gothic subsets) |
 | Build | Cross-compiled from Linux/WSL2 with cargo-xwin, clang-cl and lld-link; NSIS installer |
-| Tests | Vitest 5 (508 unit tests), Playwright 1.64 (258 end-to-end tests), PDFium checks of saved files, WebView2 DevTools checks of the real exe |
+| Tests | Vitest 5 (526 unit tests), Playwright 1.64 (290 end-to-end tests), PDFium checks of saved files, WebView2 DevTools checks of the real exe |
 
 Versions, licenses, the reasons behind each choice and how the tests are layered are in
 [docs/tech-stack.md](docs/tech-stack.md).
@@ -243,6 +254,8 @@ src/commands.ts     the command registry menus are built from
 src/menubar/        the in-window menu bar: menus as lists of command ids, drop-downs,
                     keyboard handling, the Keyboard Shortcuts panel
 src/settings/       the settings model (localStorage) and the Settings window
+src/i18n/           t(key), the language setting, English and Korean text by area
+                    (menus, chrome, dialogs)
 src/store.ts        app state with subscriptions
 src/viewer/         virtualised page view (continuous and two pages) + pure layout and zoom math
 src/pdf/            pdf.js document wrapper, cancellable page renderer, text layer
@@ -280,6 +293,7 @@ Each feature has a design document in `docs/superpowers/specs/` and a plan in
 | 0.4.0 | 2026-10-27 | In-window menu bar and Settings window (first in the style of Mac OS X Lion); every feature is a named command |
 | 0.4.1 | 2026-10-27 | Menu bar, its menus, Keyboard Shortcuts and Settings restyled to match the modern macOS look of the rest of the window, with dark mode |
 | 0.4.2 | 2026-10-27 | Window buttons in the top-right corner of the title bar; menu bar lined up with the toolbar; Settings opens below the toolbar; the splash shows the current version |
+| 0.5.0 | 2026-10-27 | English and Korean interface, chosen in Settings and switched live |
 
 ## Credits and licenses
 
