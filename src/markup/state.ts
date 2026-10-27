@@ -161,6 +161,12 @@ export class MarkupState {
     this.update({ ...this.data, markKind: kind, markColors: colors });
   }
 
+  /** Changes the color new marks of `kind` get, keeping the current mark kind. */
+  setMarkColor(kind: MarkKind, color: Color): void {
+    if (!isMarkKind(kind) || !isColor(color)) return;
+    this.update({ ...this.data, markColors: { ...this.data.markColors, [kind]: color.toLowerCase() } });
+  }
+
   /** Changes the defaults; invalid values are ignored. Persists. */
   setStyles(patch: Partial<Styles>): void {
     const next: Persisted = { ...this.data };

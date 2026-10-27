@@ -1,12 +1,15 @@
 import type { DisplayMode } from '../store';
 
-/** Window-wide view preferences, remembered across launches (not per file). */
+/**
+ * The page layout as versions before Settings remembered it (`pfw.view`). Only read now, once,
+ * when Settings (src/settings/settings.ts) start without saved settings of their own.
+ */
 export interface ViewPrefs {
   displayMode: DisplayMode;
   bookMode: boolean;
 }
 
-export type PrefsStorage = Pick<Storage, 'getItem' | 'setItem'>;
+export type PrefsStorage = Pick<Storage, 'getItem'>;
 
 const KEY = 'pfw.view';
 const DISPLAY_MODES: ReadonlySet<unknown> = new Set<DisplayMode>(['continuous', 'two-pages']);
@@ -32,13 +35,5 @@ export function loadPrefs(storage: PrefsStorage | null = defaultStorage()): View
     };
   } catch {
     return { ...DEFAULTS };
-  }
-}
-
-export function savePrefs(prefs: ViewPrefs, storage: PrefsStorage | null = defaultStorage()): void {
-  try {
-    storage?.setItem(KEY, JSON.stringify({ displayMode: prefs.displayMode, bookMode: prefs.bookMode }));
-  } catch {
-    // Storage may be full, disabled or unavailable; the view then starts from the defaults.
   }
 }

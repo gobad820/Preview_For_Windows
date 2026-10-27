@@ -6,8 +6,7 @@ import type { Platform, Point } from './platform/types';
 import { FindBar } from './search/findbar';
 import { Sidebar } from './sidebar/sidebar';
 import { bindShortcuts, type Action } from './shortcuts';
-import { loadFileState, saveFileState } from './state/fileState';
-import { loadPrefs, savePrefs } from './state/prefs';
+import { clearFileStates, loadFileState, saveFileState } from './state/fileState';
 import { createStore, initialState, type DisplayMode, type SidebarTab, type Store, type ViewerState } from './store';
 import { Toolbar } from './toolbar/toolbar';
 import type { Rotation } from './types';
@@ -25,6 +24,8 @@ import { MarkupState, type MarkKind, type Styles } from './markup/state';
 import type { Color } from './annot/types';
 import { Commands } from './commands';
 import type { Tool } from './markup/state';
+import { SettingsModel, zoomFor } from './settings/settings';
+import { SettingsWindow } from './settings/panel';
 
 /** Horizontal pan per arrow-key press when the page is wider than the viewport (CSS px). */
 const PAN_STEP = 80;
@@ -45,6 +46,9 @@ export class App {
   readonly markup = new MarkupState();
   /** Every feature by id; the menu bar and other menus are built from these. */
   readonly commands = new Commands();
+  /** Window-wide settings (Settings…, Ctrl+,). */
+  readonly settings = new SettingsModel();
+  private readonly settingsWindow = new SettingsWindow({ settings: this.settings, markup: this.markup });
   readonly markupBar: MarkupBar;
   /** Annotation drawing over document pages and thumbnails. */
   readonly overlays: OverlayHost;
@@ -82,12 +86,22 @@ export class App {
       },
     });
 
-    // ---- page layout (Continuous Scroll / Two Pages): a window-wide preference ----
-    this.store.set(loadPrefs());
+    // ---- settings: page layout and the menu bar are settings the View menu changes too ----
+    const { displayMode, bookMode, menuBarVisible } = this.settings.get();
+    this.store.set({ displayMode, bookMode, menuBarVisible });
     this.store.subscribe((s, prev) => {
       if (s.displayMode !== prev.displayMode || s.bookMode !== prev.bookMode) {
         this.viewer.setDisplay(s.displayMode, s.bookMode);
-        savePrefs({ displayMode: s.displayMode, bookMode: s.bookMode });
+      }
+      if (s.displayMode !== prev.displayMode || s.bookMode !== prev.bookMode || s.menuBarVisible !== prev.menuBarVisible) {
+        this.settings.set({ displayMode: s.displayMode, bookMode: s.bookMode, menuBarVisible: s.menuBarVisible });
+      }
+    });
+    this.settings.onChange((p, prev) => {
+      this.store.set({ displayMode: p.displayMode, bookMode: p.bookMode, menuBarVisible: p.menuBarVisible });
+      if (prev.rememberPosition && !p.rememberPosition) {
+        clearTimeout(this.saveTimer);
+        clearFileStates();
       }
     });
     this.viewer.setDisplay(this.store.get().displayMode, this.store.get().bookMode);
@@ -232,8 +246,10 @@ export class App {
     return s.status === 'ready' && s.numPages > 0 && this.doc !== null;
   }
 
-  /** Settings (Ctrl+,). The preferences window replaces this. */
-  openPreferences(): void {}
+  /** Settings (Ctrl+,): the Lion-style preferences window. */
+  openPreferences(): void {
+    this.settingsWindow.open();
+  }
 
   /** Registers every feature as a command (see src/commands.ts). */
   private registerCommands(): void {
@@ -421,6 +437,9 @@ export class App {
         return;
       case 'close-window':
         void this.platform.windowControls?.close();
+        return;
+      case 'preferences':
+        this.openPreferences();
         return;
       default:
         break;
@@ -873,7 +892,9 @@ export class App {
     this.doc = doc;
     this.lastPages = doc.pages;
     doc.onChange((kind) => this.onDocChange(doc, kind));
-    const restored = path ? loadFileState(path) : null;
+    const prefs = this.settings.get();
+    const restored = path && prefs.rememberPosition ? loadFileState(path) : null;
+    const zoom = zoomFor(prefs.defaultZoom);
     this.flushSave();
     this.store.set({
       filePath: path,
@@ -883,11 +904,12 @@ export class App {
       error: null,
       dirty: false,
       // A file without saved state starts from the defaults, not the previous document's view.
-      zoomMode: restored?.zoomMode ?? initialState.zoomMode,
-      scale: restored?.scale ?? initialState.scale,
+      zoomMode: restored?.zoomMode ?? zoom.zoomMode,
+      scale: restored?.scale ?? zoom.scale,
       rotation: restored?.rotation ?? initialState.rotation,
       currentPage: 1,
       findOpen: false,
+      ...(prefs.sidebarOnOpen ? { sidebarOpen: true } : {}),
     });
     await this.viewer.setDocument(doc);
     this.sidebar.setDocument(doc, new PageRenderer(doc));
@@ -964,6 +986,7 @@ export class App {
     this.saveTimer = 0;
     const s = this.store.get();
     if (s.status !== 'ready' || !s.filePath || s.currentPage < 1) return;
+    if (!this.settings.get().rememberPosition) return;
     saveFileState(s.filePath, {
       page: s.currentPage,
       zoomMode: s.zoomMode,

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FileState } from '../../src/platform/types';
-import { loadFileState, saveFileState, type StorageLike } from '../../src/state/fileState';
+import { clearFileStates, loadFileState, saveFileState, type StorageLike } from '../../src/state/fileState';
 
 class MemoryStorage implements StorageLike {
   private map = new Map<string, string>();
@@ -135,5 +135,17 @@ describe('fileState', () => {
     expect(typeof globalThis.localStorage).toBe('undefined');
     expect(() => saveFileState('/a.pdf', sample)).not.toThrow();
     expect(loadFileState('/a.pdf')).toBeNull();
+    expect(() => clearFileStates()).not.toThrow();
+  });
+
+  it('clearing forgets every file and keeps the other keys', () => {
+    const storage = new MemoryStorage();
+    storage.setItem('pfw.settings', '{}');
+    for (let i = 0; i < 5; i++) saveFileState(`/doc-${i}.pdf`, sample, storage);
+    storage.setItem('pfw.markup', '{}');
+    clearFileStates(storage);
+    expect(storage.keys().sort()).toEqual(['pfw.markup', 'pfw.settings']);
+    expect(loadFileState('/doc-3.pdf', storage)).toBeNull();
+    expect(() => clearFileStates(new ThrowingStorage())).not.toThrow();
   });
 });

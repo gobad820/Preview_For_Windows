@@ -36,7 +36,8 @@ export type Action =
   | 'delete-pages'
   | 'toggle-markup'
   | 'duplicate-annotation'
-  | 'delete-annotation';
+  | 'delete-annotation'
+  | 'preferences';
 
 export interface KeyLike {
   key: string;
@@ -66,6 +67,8 @@ function keyChar(k: KeyLike): string | null {
 function resolveCtrl(k: KeyLike): Action | null {
   if (k.key === '=' || k.key === '+' || k.code === 'NumpadAdd') return 'zoom-in';
   if (k.key === '-' || k.code === 'NumpadSubtract') return 'zoom-out';
+  // Settings; by code so layouts that type something else on that key still reach it.
+  if (k.code === 'Comma' || k.key === ',') return k.shiftKey || k.inTextField ? null : 'preferences';
   const ch = keyChar(k);
   // Text fields keep their own undo, redo, paste and selection.
   const pages = k.inSidebar && !k.inTextField;

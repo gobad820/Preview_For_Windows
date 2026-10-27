@@ -24,6 +24,10 @@ const inSidebar = (k: string, mods: Partial<KeyLike> = {}): KeyLike => key(k, { 
 describe('resolveShortcut', () => {
   const cases: Array<[string, KeyLike, Action | null]> = [
     ['Ctrl+O → open', ctrl('o'), 'open'],
+    ['Ctrl+, → preferences', ctrl(',', { code: 'Comma' }), 'preferences'],
+    ['Ctrl+, on a layout without a comma key → preferences', ctrl('ㅡ', { code: 'Comma' }), 'preferences'],
+    ['Ctrl+, in a text field → null', ctrl(',', { code: 'Comma', inTextField: true }), null],
+    ['Ctrl+Shift+, → null', ctrl('<', { code: 'Comma', shiftKey: true }), null],
     ['Ctrl+F → find', ctrl('f'), 'find'],
     ['Ctrl+= → zoom-in', ctrl('=', { code: 'Equal' }), 'zoom-in'],
     ['Ctrl++ (numpad) → zoom-in', ctrl('+', { code: 'NumpadAdd' }), 'zoom-in'],

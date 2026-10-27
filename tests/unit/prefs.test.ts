@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadPrefs, savePrefs, type PrefsStorage } from '../../src/state/prefs';
+import { loadPrefs, type PrefsStorage } from '../../src/state/prefs';
 
 class MemoryStorage implements PrefsStorage {
   readonly map = new Map<string, string>();
@@ -15,24 +15,20 @@ class ThrowingStorage implements PrefsStorage {
   getItem(): string | null {
     throw new Error('getItem');
   }
-  setItem(): void {
-    throw new Error('setItem');
-  }
 }
 
 const DEFAULTS = { displayMode: 'continuous', bookMode: false };
 
-describe('view prefs', () => {
+describe('legacy view prefs (pfw.view)', () => {
   it('defaults to Continuous Scroll without Book Mode', () => {
     expect(loadPrefs(new MemoryStorage())).toEqual(DEFAULTS);
   });
 
-  it('round-trips under pfw.view', () => {
+  it('reads what earlier versions saved under pfw.view', () => {
     const storage = new MemoryStorage();
-    savePrefs({ displayMode: 'two-pages', bookMode: true }, storage);
-    expect([...storage.map.keys()]).toEqual(['pfw.view']);
+    storage.setItem('pfw.view', '{"displayMode":"two-pages","bookMode":true}');
     expect(loadPrefs(storage)).toEqual({ displayMode: 'two-pages', bookMode: true });
-    savePrefs({ displayMode: 'continuous', bookMode: true }, storage);
+    storage.setItem('pfw.view', '{"displayMode":"continuous","bookMode":true}');
     expect(loadPrefs(storage)).toEqual({ displayMode: 'continuous', bookMode: true });
   });
 
@@ -56,9 +52,7 @@ describe('view prefs', () => {
 
   it('survives storage that throws or is missing', () => {
     expect(loadPrefs(new ThrowingStorage())).toEqual(DEFAULTS);
-    expect(() => savePrefs({ displayMode: 'two-pages', bookMode: false }, new ThrowingStorage())).not.toThrow();
     expect(loadPrefs(null)).toEqual(DEFAULTS);
-    expect(() => savePrefs({ displayMode: 'two-pages', bookMode: false }, null)).not.toThrow();
     expect(typeof globalThis.localStorage).toBe('undefined');
     expect(loadPrefs()).toEqual(DEFAULTS);
   });
