@@ -272,6 +272,14 @@ test.describe('keyboard', () => {
     await page.keyboard.press('Alt+g');
     await expect(menu(page)).toHaveAttribute('aria-label', 'Go');
     await expect(item(page, 'Previous Page')).toHaveClass(/\bactive\b/);
+    // Home and End jump; one row is highlighted at a time.
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('End');
+    await expect(item(page, 'Go to Page…')).toHaveClass(/\bactive\b/);
+    await expect(menu(page).locator('.mb-item.active')).toHaveCount(1);
+    await page.keyboard.press('Home');
+    await expect(item(page, 'Previous Page')).toHaveClass(/\bactive\b/);
+    await expect(menu(page).locator('.mb-item.active')).toHaveCount(1);
     await page.keyboard.press('ArrowUp');
     await expect(item(page, 'Go to Page…')).toHaveClass(/\bactive\b/);
     await page.keyboard.press('ArrowUp');

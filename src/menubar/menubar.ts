@@ -72,7 +72,6 @@ export class MenuBar {
   private title(m: MenuSpec, i: number): HTMLElement {
     const t = document.createElement('span');
     t.className = m.app ? 'mb-title mb-app' : 'mb-title';
-    t.id = `mb-title-${i}`;
     t.setAttribute('role', 'menuitem');
     t.setAttribute('aria-haspopup', 'menu');
     t.setAttribute('aria-expanded', 'false');
@@ -134,9 +133,9 @@ export class MenuBar {
     closeMenus();
     this.removeDrop();
     this.current = i;
-    this.sync();
+    // A hidden bar shows while in use; it must be laid out before the drop-down is placed under it.
+    this.syncHidden();
     const drop = this.build(this.menus[i]!);
-    drop.setAttribute('aria-labelledby', this.titles[i]!.id);
     drop.style.visibility = 'hidden';
     document.body.append(drop);
     this.drop = drop;
@@ -325,7 +324,7 @@ export class MenuBar {
       case 'Home':
       case 'End':
         if (this.drop) {
-          this.active = -1;
+          this.setActive(-1);
           this.move(e.key === 'Home' ? 1 : -1);
         }
         return;
