@@ -16,6 +16,69 @@ const title = (page: Page, name: string) => page.locator('#menubar').getByRole('
 const menu = (page: Page) => page.locator('.mb-menu');
 const item = (page: Page, label: string): Locator => page.locator(`.mb-menu .mb-item:has(.mb-label:text-is("${label}"))`);
 const css = (l: Locator, prop: string) => l.evaluate((el, p) => getComputedStyle(el).getPropertyValue(p), prop);
+const styles = (l: Locator, props: string[]): Promise<Record<string, string>> =>
+  l.evaluate((el, ps) => Object.fromEntries(ps.map((p) => [p, getComputedStyle(el).getPropertyValue(p)])), props);
+/** What `value` (a theme token, usually) computes to for `prop`. */
+const resolve = (page: Page, prop: string, value: string) =>
+  page.evaluate(([p, v]) => {
+    const probe = document.createElement('div');
+    probe.style.setProperty(p!, v!);
+    document.body.append(probe);
+    const out = getComputedStyle(probe).getPropertyValue(p!);
+    probe.remove();
+    return out;
+  }, [prop, value]);
+
+/** A computed colour as [r, g, b, a], whether Chromium writes it rgb() or color(srgb …), as it does for color-mix(). */
+function channels(c: string): number[] {
+  const n = c.match(/[\d.]+/g)!.map(Number);
+  const rgb = c.startsWith('color(srgb') ? n.slice(0, 3).map((v) => Math.round(v * 255)) : n.slice(0, 3);
+  return [...rgb, n[3] ?? 1];
+}
+
+/** Class names of a menu's parts: the app's menus (src/ui/menu.ts) and the menu bar's drop-downs. */
+const MENU = { item: '.menu-item', shortcut: '.menu-shortcut', separator: '.menu-separator', check: '.menu-check svg' };
+const MB = { item: '.mb-item', shortcut: '.mb-shortcut', separator: '.mb-separator', check: '.mb-check svg' };
+
+/** The computed look of an open menu that lists Zoom In (Ctrl+=), a disabled Book Mode and a checked Continuous Scroll. */
+async function menuLook(m: Locator, parts: typeof MENU) {
+  const row = (label: string) => m.locator(parts.item).filter({ hasText: label });
+  const zoomIn = row('Zoom In');
+  const look = {
+    menu: await styles(m, [
+      'background-color', 'backdrop-filter', 'box-shadow', 'color', 'font-family', 'font-size', 'line-height', 'letter-spacing',
+      'padding-top', 'padding-left', 'border-top-left-radius', 'border-top-right-radius', 'border-bottom-left-radius', 'border-bottom-right-radius',
+    ]),
+    item: await styles(zoomIn, ['height', 'padding-left', 'padding-right', 'border-top-left-radius', 'color', 'background-color']),
+    shortcut: await styles(zoomIn.locator(parts.shortcut), ['color', 'margin-left']),
+    disabled: await styles(row('Book Mode'), ['color']),
+    separator: await styles(m.locator(parts.separator).first(), ['height', 'margin-top', 'margin-left', 'margin-right', 'background-color']),
+    check: await styles(row('Continuous Scroll').locator(parts.check), ['width', 'stroke-width']),
+    highlight: {} as Record<string, string>,
+    highlightShortcut: [] as number[],
+  };
+  await zoomIn.hover();
+  look.highlight = await styles(zoomIn, ['background-color', 'color']);
+  look.highlightShortcut = channels(await zoomIn.locator(parts.shortcut).evaluate((el) => getComputedStyle(el).color));
+  return look;
+}
+
+/** The look of an app menu (src/ui/menu.ts) with the same kinds of rows as the menu bar's View menu. */
+async function referenceMenuLook(page: Page) {
+  await page.evaluate(() => {
+    const none = () => {};
+    void (window as any).__pfwUi.showMenu({ x: 400, y: 200 }, [
+      { label: 'Zoom In', shortcut: 'Ctrl+=', action: none },
+      { label: 'Book Mode', disabled: true, checked: false, action: none },
+      'separator',
+      { label: 'Continuous Scroll', checked: true, radio: true, action: none },
+    ]);
+  });
+  const look = await menuLook(page.locator('.menu'), MENU);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.menu')).toHaveCount(0);
+  return look;
+}
 
 /** Opens `menuName` with a real click and clicks `label` in it. */
 async function choose(page: Page, menuName: string, label: string) {
@@ -24,19 +87,36 @@ async function choose(page: Page, menuName: string, label: string) {
 }
 
 test.describe('menu bar look and place', () => {
-  test('a 22px Lion bar above the toolbar with a bold application menu', async ({ page }) => {
+  test('a 24px bar in the toolbar\'s colours and type, one title area with it, semibold application menu', async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'light' });
     await open(page, 'simple.pdf');
     await expect(bar(page)).toBeVisible();
     const b = (await bar(page).boundingBox())!;
-    expect(b).toMatchObject({ x: 0, y: 0, height: 22, width: 1200 });
-    expect((await page.locator('#toolbar').boundingBox())!.y).toBe(22);
+    expect(b).toMatchObject({ x: 0, y: 0, height: 24, width: 1200 });
+    expect((await page.locator('#toolbar').boundingBox())!.y).toBe(24);
     await expect(page.locator('#menubar .mb-title')).toHaveText(['Preview', 'File', 'Edit', 'View', 'Go', 'Tools', 'Window', 'Help']);
-    expect(await css(title(page, 'Preview'), 'font-weight')).toBe('700');
+    expect(await css(title(page, 'Preview'), 'font-weight')).toBe('600');
     expect(await css(title(page, 'File'), 'font-weight')).toBe('400');
-    expect((await css(bar(page), 'font-family')).replace(/"/g, '')).toMatch(/^Lucida Grande, Lucida Sans Unicode/);
-    expect(await css(bar(page), 'background-image')).toBe('linear-gradient(rgb(246, 246, 246), rgb(220, 220, 220))');
-    expect(await css(bar(page), 'color')).toBe('rgb(0, 0, 0)');
+    expect(await css(title(page, 'File'), 'font-size')).toBe('13px');
+    const font = await css(bar(page), 'font-family');
+    expect(font).toBe(await css(page.locator('#toolbar .tb-doc-title'), 'font-family'));
+    expect(font).toMatch(/^"?Inter"?,/);
+    // Same background as the toolbar, no gradient, no line between them; the toolbar keeps its own hairline.
+    expect(await css(bar(page), 'background-color')).toBe(await css(page.locator('#toolbar'), 'background-color'));
+    expect(await css(bar(page), 'background-color')).toBe(await resolve(page, 'background-color', 'var(--chrome-bg)'));
+    expect(await css(bar(page), 'background-image')).toBe('none');
+    expect(await css(bar(page), 'box-shadow')).toBe('none');
+    expect(await css(page.locator('#toolbar'), 'box-shadow')).not.toBe('none');
+    expect(await css(bar(page), 'color')).toBe(await resolve(page, 'color', 'var(--text)'));
+  });
+
+  test('on Windows 11 Mica it turns translucent with the toolbar', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'light' });
+    await open(page, 'simple.pdf');
+    await page.evaluate(() => (document.documentElement.dataset['material'] = 'mica'));
+    const bg = await css(bar(page), 'background-color');
+    expect(bg).toBe(await css(page.locator('#toolbar'), 'background-color'));
+    expect(bg).toMatch(/^rgba\(.*, 0\.\d+\)$/);
   });
 
   test('its empty part drags the window; the titles do not', async ({ page }) => {
@@ -51,50 +131,76 @@ test.describe('menu bar look and place', () => {
     expect(flex.x + flex.width).toBeGreaterThan(1150);
   });
 
-  test('stays light in dark mode, like Lion', async ({ page }) => {
-    await page.emulateMedia({ colorScheme: 'dark' });
+  test('follows the light and dark theme, bar and drop-downs alike', async ({ page }) => {
     await open(page, 'simple.pdf');
-    expect(await css(bar(page), 'background-image')).toBe('linear-gradient(rgb(246, 246, 246), rgb(220, 220, 220))');
-    expect(await css(bar(page), 'color')).toBe('rgb(0, 0, 0)');
-    await title(page, 'View').click();
-    expect(await css(menu(page), 'background-color')).toMatch(/^rgba?\(255, 255, 255/);
-    expect(await css(item(page, 'Two Pages'), 'color')).toBe('rgb(0, 0, 0)');
+    const seen: string[] = [];
+    for (const colorScheme of ['dark', 'light'] as const) {
+      await page.emulateMedia({ colorScheme });
+      expect(await css(bar(page), 'background-color')).toBe(await css(page.locator('#toolbar'), 'background-color'));
+      expect(await css(bar(page), 'color')).toBe(await resolve(page, 'color', 'var(--text)'));
+      seen.push(await css(bar(page), 'background-color'));
+      const reference = await referenceMenuLook(page);
+      await title(page, 'View').click();
+      expect(await menuLook(menu(page), MB)).toEqual(reference);
+      await page.keyboard.press('Escape');
+    }
+    expect(seen[0]).not.toBe(seen[1]);
   });
 
-  test('drop-downs hang from their title: square top, rounded bottom, Lion blue highlight', async ({ page }) => {
+  test('drop-downs look like the app\'s menus: rounded, blurred, blue highlight with white text', async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'light' });
     await open(page, 'simple.pdf');
+    const reference = await referenceMenuLook(page);
     const view = title(page, 'View');
     await view.click();
     await expect(view).toHaveAttribute('aria-expanded', 'true');
-    expect(await css(view, 'background-image')).toBe('linear-gradient(rgb(100, 138, 245), rgb(43, 88, 223))');
-    expect(await css(view, 'color')).toBe('rgb(255, 255, 255)');
+    const look = await menuLook(menu(page), MB);
+    expect(look).toEqual(reference);
+    // And what that look is, from the theme tokens.
+    expect(look.menu['font-family']).toBe(await css(bar(page), 'font-family'));
+    expect(look.menu['background-color']).toBe(await resolve(page, 'background-color', 'var(--menu-bg)'));
+    expect(look.menu['backdrop-filter']).toMatch(/^blur\(/);
+    for (const corner of ['top-left', 'top-right', 'bottom-left', 'bottom-right']) {
+      expect(look.menu[`border-${corner}-radius`]).toBe(await resolve(page, 'border-top-left-radius', 'var(--radius-menu)'));
+    }
+    expect(look.item['height']).toBe('22px');
+    expect(look.highlight['background-color']).toBe(await resolve(page, 'background-color', 'var(--accent-strong)'));
+    expect(look.highlight['color']).toBe(await resolve(page, 'color', 'var(--accent-fg)'));
+    expect(look.shortcut['color']).toBe(await resolve(page, 'color', 'var(--text-secondary)'));
+    expect(look.disabled['color']).toBe(await resolve(page, 'color', 'var(--text-tertiary)'));
+    expect(look.separator['background-color']).toBe(await resolve(page, 'background-color', 'var(--hairline)'));
+
+    // The open title: a rounded --fill-pressed rect, text colour unchanged, no blue.
+    expect(await css(view, 'background-color')).toBe(await resolve(page, 'background-color', 'var(--fill-pressed)'));
+    expect(await css(view, 'background-image')).toBe('none');
+    expect(await css(view, 'color')).toBe(await css(bar(page), 'color'));
+    expect(await css(view, 'border-top-left-radius')).toBe('5px');
+    // Just under the bar, left edge under the title.
     const t = (await view.boundingBox())!;
     const m = (await menu(page).boundingBox())!;
-    expect(Math.round(m.y)).toBe(22);
+    expect(Math.round(m.y)).toBe(26);
     expect(Math.abs(m.x - t.x)).toBeLessThanOrEqual(1);
-    expect(await css(menu(page), 'border-top-left-radius')).toBe('0px');
-    expect(await css(menu(page), 'border-bottom-left-radius')).toBe('5px');
-    expect(await css(menu(page), 'border-bottom-right-radius')).toBe('5px');
 
+    // Shortcuts are right-aligned.
     const zoomIn = item(page, 'Zoom In');
-    expect(Math.round((await zoomIn.boundingBox())!.height)).toBe(19);
-    await zoomIn.hover();
-    expect(await css(zoomIn, 'background-image')).toBe('linear-gradient(rgb(100, 138, 245), rgb(43, 88, 223))');
-    expect(await css(zoomIn, 'color')).toBe('rgb(255, 255, 255)');
-    // Shortcuts are right-aligned, in the label's colour.
     const key = zoomIn.locator('.mb-shortcut');
     await expect(key).toHaveText('Ctrl+=');
     const k = (await key.boundingBox())!;
     const zoomOutKey = (await item(page, 'Zoom Out').locator('.mb-shortcut').boundingBox())!;
     expect(Math.abs(k.x + k.width - (zoomOutKey.x + zoomOutKey.width))).toBeLessThanOrEqual(1);
-    expect(await css(item(page, 'Zoom Out').locator('.mb-shortcut'), 'color')).toBe(await css(item(page, 'Zoom Out'), 'color'));
     // Separators and check marks.
     expect(await menu(page).locator('.mb-separator').count()).toBeGreaterThan(0);
     await expect(item(page, 'Continuous Scroll')).toHaveAttribute('aria-checked', 'true');
     await expect(item(page, 'Continuous Scroll').locator('.mb-check svg')).toBeVisible();
     await expect(item(page, 'Two Pages')).toHaveAttribute('aria-checked', 'false');
     await expect(item(page, 'Two Pages').locator('.mb-check svg')).toHaveCount(0);
+
+    // A title the keyboard is on looks the same as an open one.
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('F10');
+    await expect(title(page, 'Preview')).toHaveClass(/\bfocused\b/);
+    expect(await css(title(page, 'Preview'), 'background-color')).toBe(await resolve(page, 'background-color', 'var(--fill-pressed)'));
+    expect(await css(title(page, 'Preview'), 'color')).toBe(await css(bar(page), 'color'));
   });
 });
 
@@ -241,9 +347,9 @@ test.describe('menus and commands', () => {
     await title(page, 'File').click();
     await expect(item(page, 'Open…')).not.toHaveAttribute('aria-disabled', 'true');
     for (const label of ['Save', 'Save As…', 'Print…']) await expect(item(page, label)).toHaveAttribute('aria-disabled', 'true');
-    expect(await css(item(page, 'Save'), 'color')).toBe('rgb(166, 166, 166)');
+    expect(await css(item(page, 'Save'), 'color')).toBe(await resolve(page, 'color', 'var(--text-tertiary)'));
     await item(page, 'Save').hover();
-    expect(await css(item(page, 'Save'), 'background-image')).toBe('none');
+    expect(await css(item(page, 'Save'), 'background-color')).toBe('rgba(0, 0, 0, 0)');
     // A real click on the greyed-out row (Playwright skips aria-disabled elements unless forced).
     await item(page, 'Save').click({ force: true });
     await expect(menu(page)).toHaveCount(1);
@@ -470,8 +576,11 @@ test.describe('hidden menu bar', () => {
     // It shows over the toolbar: nothing below moves or resizes.
     expect((await bar(page).boundingBox())!.y).toBe(0);
     expect((await page.locator('#toolbar').boundingBox())!.y).toBe(0);
+    // With the same look as when it shows.
+    expect(await css(bar(page), 'background-color')).toBe(await css(page.locator('#toolbar'), 'background-color'));
+    expect(await css(bar(page), 'height')).toBe('24px');
     await page.keyboard.press('ArrowDown');
-    expect(Math.round((await menu(page).boundingBox())!.y)).toBe(22);
+    expect(Math.round((await menu(page).boundingBox())!.y)).toBe(26);
     await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
     await expect(bar(page)).toBeHidden();
@@ -488,15 +597,34 @@ test.describe('hidden menu bar', () => {
     await open(page, 'simple.pdf');
     await page.evaluate(() => (window as any).__pfw.store.set({ error: 'Something went wrong' }));
     await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished)));
-    const toolbarBottom = 22 + 52;
+    const toolbarBottom = 24 + 52;
     expect(Math.round((await page.locator('.error-banner').boundingBox())!.y)).toBe(toolbarBottom + 12);
     await page.evaluate(() => (window as any).__pfw.store.set({ menuBarVisible: false }));
     expect(Math.round((await page.locator('.error-banner').boundingBox())!.y)).toBe(52 + 12);
   });
 });
 
+/** The computed look of the app's alert (src/ui/dialog.ts) and its scrim. */
+async function alertLook(page: Page) {
+  await page.evaluate(() => {
+    void (window as any).__pfwUi.showAlert({ title: 'Probe', buttons: [{ label: 'OK', value: 'ok', primary: true, cancel: true }] });
+  });
+  const look = {
+    panel: await styles(page.locator('.alert'), PANEL),
+    scrim: await styles(page.locator('.alert-scrim'), ['background-color']),
+  };
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.alert')).toHaveCount(0);
+  return look;
+}
+const PANEL = [
+  'background-color', 'backdrop-filter', 'box-shadow', 'color',
+  'border-top-left-radius', 'border-top-right-radius', 'border-bottom-left-radius', 'border-bottom-right-radius',
+];
+const KEYCAP = ['font-family', 'font-size', 'font-weight', 'line-height', 'color', 'background-color', 'border-top-left-radius', 'box-shadow'];
+
 test.describe('Help › Keyboard Shortcuts', () => {
-  test('a Lion panel lists the shortcuts by menu; Esc or the close button closes it', async ({ page }) => {
+  test('a panel like the alerts lists the shortcuts by menu; Esc or the close button closes it', async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'dark' });
     await open(page, 'simple.pdf');
     await page.locator('#viewer').focus();
@@ -505,11 +633,10 @@ test.describe('Help › Keyboard Shortcuts', () => {
     await expect(panel).toBeVisible();
     await expect(panel.locator('h3')).toHaveText(['Preview', 'File', 'Edit', 'View', 'Go', 'Tools']);
     const row = panel.locator('.ks-row:has(.ks-label:text-is("Open…"))');
-    await expect(row.locator('kbd')).toHaveText('Ctrl+O');
+    await expect(row.locator(':scope > kbd')).toHaveText('Ctrl+O');
+    await expect(row.locator('kbd kbd')).toHaveText(['Ctrl', 'O']);
     await expect(panel.locator('.ks-row:has(.ks-label:text-is("Close Window"))')).toHaveCount(1);
     await expect(panel.locator('.ks-section:has(h3:text-is("File")) .ks-label:text-is("Close Window")')).toHaveCount(1);
-    expect(await css(panel.locator('.lion-titlebar'), 'background-image')).toBe('linear-gradient(rgb(235, 235, 235), rgb(207, 207, 207))');
-    expect(await css(panel.locator('.lion-panel-body'), 'background-color')).toBe('rgb(236, 236, 236)');
     // Modal: keys do not reach the document, and the menu bar stays put.
     await page.keyboard.press('End');
     expect((await state(page)).currentPage).toBe(1);
@@ -529,5 +656,31 @@ test.describe('Help › Keyboard Shortcuts', () => {
     await choose(page, 'Help', 'Keyboard Shortcuts');
     await panel.getByRole('button', { name: 'Close' }).click();
     await expect(panel).toHaveCount(0);
+  });
+
+  test('the panel has the alerts\' look and the empty window\'s key caps, in light and dark', async ({ page }) => {
+    await open(page, 'simple.pdf');
+    const panel = page.getByRole('dialog', { name: 'Keyboard Shortcuts' });
+    const seen: string[] = [];
+    for (const colorScheme of ['dark', 'light'] as const) {
+      await page.emulateMedia({ colorScheme });
+      const reference = await alertLook(page);
+      await choose(page, 'Help', 'Keyboard Shortcuts');
+      await expect(panel).toBeVisible();
+      expect(await styles(panel, PANEL)).toEqual(reference.panel);
+      expect(await styles(panel.locator('xpath=..'), ['background-color'])).toEqual(reference.scrim);
+      expect(await css(panel, 'background-color')).toBe(await resolve(page, 'background-color', 'var(--alert-bg)'));
+      expect(await css(panel, 'font-family')).toBe(await css(bar(page), 'font-family'));
+      seen.push(await css(panel, 'background-color'));
+      // Section headers in the secondary text colour; labels in the text colour.
+      expect(await css(panel.locator('h3').first(), 'color')).toBe(await resolve(page, 'color', 'var(--text-secondary)'));
+      expect(await css(panel.locator('.ks-label').first(), 'color')).toBe(await resolve(page, 'color', 'var(--text)'));
+      // Key caps like the empty window's hint.
+      const cap = panel.locator('.ks-row kbd kbd').first();
+      expect(await styles(cap, KEYCAP)).toEqual(await styles(page.locator('.empty-state kbd').first(), KEYCAP));
+      await page.keyboard.press('Escape');
+      await expect(panel).toHaveCount(0);
+    }
+    expect(seen[0]).not.toBe(seen[1]);
   });
 });

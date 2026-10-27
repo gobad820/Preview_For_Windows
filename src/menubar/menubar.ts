@@ -7,6 +7,8 @@ import { MENUS, SEPARATOR, keyLetter, menuForKey, menuItems, type MenuRow, type 
 
 /** Open dialogs and other menus: the menu bar does not open over them. */
 const MODAL = '[role="dialog"], [role="alertdialog"], [role="menu"]:not(.mb-menu)';
+/** CSS px between the bar and a drop-down. */
+const GAP = 2;
 /** CSS px a drop-down keeps from the bottom of the window. */
 const EDGE = 6;
 /** The rest of a mouse press that closed a menu or ran an item; it must not reach the document. */
@@ -15,8 +17,9 @@ const SWALLOWED = ['mousedown', 'pointerup', 'mouseup', 'click', 'dblclick', 'co
 type Select = 'none' | 'first' | 'last';
 
 /**
- * The in-window menu bar, Mac OS X Lion style. Mac behaviour with the mouse (press a title to
- * open, slide across titles to switch, press elsewhere or Esc to close, press-drag-release
+ * The in-window menu bar, in the modern macOS look of the toolbar under it; its drop-downs wear
+ * the app's menu classes (`.menu`, src/ui/menu.ts). Mac behaviour with the mouse (press a title
+ * to open, slide across titles to switch, press elsewhere or Esc to close, press-drag-release
  * runs an item); Windows behaviour from the keyboard (Alt or F10 focuses the bar, Alt+letter
  * opens a menu, arrows move, Enter runs, Esc steps back). Keyboard focus and selections stay
  * where they were: the bar highlights its titles and items itself.
@@ -187,36 +190,36 @@ export class MenuBar {
   /** The menu's rows, with labels and state read from the commands now. */
   private build(spec: MenuSpec): HTMLElement {
     const drop = document.createElement('div');
-    drop.className = 'mb-menu';
+    drop.className = 'menu mb-menu';
     drop.setAttribute('role', 'menu');
     drop.setAttribute('aria-label', spec.title);
     for (const entry of menuItems(spec, this.commands)) {
       if (entry === SEPARATOR) {
         const sep = document.createElement('div');
-        sep.className = 'mb-separator';
+        sep.className = 'menu-separator mb-separator';
         sep.setAttribute('role', 'separator');
         drop.append(sep);
         continue;
       }
       const el = document.createElement('div');
-      el.className = 'mb-item';
+      el.className = 'menu-item mb-item';
       el.dataset['command'] = entry.id;
       const role = entry.radio ? 'menuitemradio' : entry.checked !== undefined ? 'menuitemcheckbox' : 'menuitem';
       el.setAttribute('role', role);
       if (role !== 'menuitem') el.setAttribute('aria-checked', String(!!entry.checked));
       if (!entry.enabled) el.setAttribute('aria-disabled', 'true');
       const check = document.createElement('span');
-      check.className = 'mb-check';
+      check.className = 'menu-check mb-check';
       check.setAttribute('aria-hidden', 'true');
       if (entry.checked) check.innerHTML = icons.checkmark;
       const label = document.createElement('span');
-      label.className = 'mb-label';
+      label.className = 'menu-label mb-label';
       label.textContent = entry.label;
       el.append(check, label);
       if (entry.shortcut) {
         el.setAttribute('aria-keyshortcuts', entry.shortcut);
         const key = document.createElement('span');
-        key.className = 'mb-shortcut';
+        key.className = 'menu-shortcut mb-shortcut';
         key.setAttribute('aria-hidden', 'true');
         key.textContent = entry.shortcut;
         el.append(key);
@@ -250,9 +253,9 @@ export class MenuBar {
     return drop;
   }
 
-  /** Square top on the bar's bottom edge, left edge under the title, inside the window. */
+  /** Just under the bar, left edge under the title, inside the window. */
   private place(drop: HTMLElement, title: HTMLElement): void {
-    const top = this.host.getBoundingClientRect().bottom;
+    const top = this.host.getBoundingClientRect().bottom + GAP;
     const vw = document.documentElement.clientWidth;
     const vh = document.documentElement.clientHeight;
     drop.style.maxHeight = `${Math.max(0, vh - top - EDGE)}px`;
