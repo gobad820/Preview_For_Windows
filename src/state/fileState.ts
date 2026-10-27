@@ -68,6 +68,21 @@ function evictOldest(storage: StorageLike): void {
   for (const { key } of entries.slice(0, excess)) storage.removeItem(key);
 }
 
+/** Forgets every file's position (Settings › Remember each file's last page and zoom, off). */
+export function clearFileStates(storage: StorageLike | null = defaultStorage()): void {
+  if (!storage) return;
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < storage.length; i++) {
+      const key = storage.key(i);
+      if (key !== null && key.startsWith(KEY_PREFIX)) keys.push(key);
+    }
+    for (const key of keys) storage.removeItem(key);
+  } catch {
+    // Storage unavailable: nothing was remembered there either.
+  }
+}
+
 export function saveFileState(
   path: string,
   state: Omit<FileState, 'updatedAt'>,

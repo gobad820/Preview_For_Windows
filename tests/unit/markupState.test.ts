@@ -82,6 +82,22 @@ describe('MarkupState', () => {
     expect(yellow).not.toBe('#8ee07a');
   });
 
+  it("sets one kind's color without changing the current kind, and remembers it", () => {
+    const storage = memoryStorage();
+    const s = new MarkupState(storage);
+    s.setMark('underline');
+    const cb = vi.fn();
+    s.onChange(cb);
+    s.setMarkColor('highlight', '#8AC4FF');
+    expect(s.styles.markKind).toBe('underline');
+    expect(s.markColorFor('highlight')).toBe('#8ac4ff');
+    expect(cb).toHaveBeenCalledTimes(1);
+    s.setMarkColor('highlight', '#8ac4ff');
+    s.setMarkColor('highlight', 'blue');
+    expect(cb).toHaveBeenCalledTimes(1);
+    expect(new MarkupState(storage).markColorFor('highlight')).toBe('#8ac4ff');
+  });
+
   it('notifies listeners only on effective changes and stops after unsubscribing', () => {
     const s = new MarkupState(memoryStorage());
     const cb = vi.fn();
